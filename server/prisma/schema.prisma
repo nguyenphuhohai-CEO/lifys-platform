@@ -1,0 +1,202 @@
+// Prisma schema for Lifys - the multi-category dating platform
+// Categories: AMICAL, AMOUREUX, SANS_LENDEMAIN, MARIAGE, PROFESSIONNEL
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum DatingCategory {
+  AMICAL
+  AMOUREUX
+  SANS_LENDEMAIN
+  MARIAGE
+  PROFESSIONNEL
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  EMAIL_VERIFIED
+  PHOTO_VERIFIED
+  ID_VERIFIED
+}
+
+enum MatchStatus {
+  PENDING
+  MATCHED
+  PASSED
+  BLOCKED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+model User {
+  id                 String              @id @default(uuid())
+  email              String              @unique
+  phone              String?             @unique
+  passwordHash       String
+  firstName          String
+  age                Int
+  gender             String?
+  bio                String?
+  interests          String[]            @default([])
+  location           String?
+  latitude           Float?
+  longitude          Float?
+  categories         DatingCategory[]    @default([])
+  verificationStatus VerificationStatus  @default(UNVERIFIED)
+  photos             Photo[]
+  categoryProfiles   CategoryProfile[]
+  sentLikes          Like[]              @relation("LikeSender")
+  receivedLikes      Like[]              @relation("LikeReceiver")
+  matchesAsUserOne   Match[]             @relation("MatchUserOne")
+  matchesAsUserTwo   Match[]             @relation("MatchUserTwo")
+  sentMessages       Message[]           @relation("MessageSender")
+  receivedMessages   Message[]           @relation("MessageReceiver")
+  blocksInitiated    Block[]             @relation("BlockBlocker")
+  blocksReceived     Block[]             @relation("BlockBlocked")
+  reportsFiled       Report[]            @relation("ReportReporter")
+  reportsReceived    Report[]            @relation("ReportReported")
+  eventsCreated      Event[]             @relation("EventCreator")
+  eventAttendances   EventAttendee[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([categories])
+}
+
+model Photo {
+  id        String   @id @default(uuid())
+  userId    String
+  url       String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model CategoryProfile {
+  id           String          @id @default(uuid())
+  userId       String
+  category     DatingCategory
+  bioSpecific  String?
+  preferences  Json?
+  rating       Float           @default(0)
+  reportsCount Int             @default(0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+}
+
+model Like {
+  id         String         @id @default(uuid())
+  senderId   String
+  receiverId String
+  category   DatingCategory
+  isSuperLike Boolean       @default(false)
+  createdAt  DateTime       @default(now())
+  sender     User           @relation("LikeSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User           @relation("LikeReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId, category])
+  @@index([receiverId, category])
+}
+
+model Match {
+  id         String         @id @default(uuid())
+  userOneId  String
+  userTwoId  String
+  category   DatingCategory
+  status     MatchStatus    @default(PENDING)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  userOne    User           @relation("MatchUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
+  userTwo    User           @relation("MatchUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
+  messages   Message[]
+
+  @@unique([userOneId, userTwoId, category])
+}
+
+model Message {
+  id         String      @id @default(uuid())
+  matchId    String?
+  senderId   String
+  receiverId String
+  content    String
+  type       MessageType @default(TEXT)
+  read       Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+  match      Match?      @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  sender     User        @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User        @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+}
+
+model Event {
+  id            String          @id @default(uuid())
+  creatorId     String
+  category      DatingCategory
+  title         String
+  description   String?
+  location      String?
+  dateTime      DateTime
+  maxAttendees  Int?
+  createdAt     DateTime        @default(now())
+  creator       User            @relation("EventCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  attendees     EventAttendee[]
+}
+
+model EventAttendee {
+  id      String   @id @default(uuid())
+  eventId String
+  userId  String
+  rsvpAt  DateTime @default(now())
+  event   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+}
+
+model Block {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  reason    String?
+  createdAt DateTime @default(now())
+  blocker   User     @relation("BlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+}
+
+model Report {
+  id             String       @id @default(uuid())
+  reporterId     String
+  reportedUserId String
+  reason         String
+  status         ReportStatus @default(OPEN)
+  resolution     String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  reporter       User         @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reported       User         @relation("ReportReported", fields: [reportedUserId], references: [id], onDelete: Cascade)
+}
