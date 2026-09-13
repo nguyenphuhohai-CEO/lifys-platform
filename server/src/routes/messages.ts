@@ -38,6 +38,10 @@ router.post('/:conversationId', requireAuth, async (req: AuthenticatedRequest, r
     return res.status(403).json({ error: 'Not part of this conversation' });
   }
 
+  if (match.status !== 'MATCHED') {
+    return res.status(409).json({ error: 'Conversation is not active' });
+  }
+
   const parsed = sendMessageSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });

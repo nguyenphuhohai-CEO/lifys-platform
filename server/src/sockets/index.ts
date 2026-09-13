@@ -42,6 +42,10 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
         socket.emit('error', { message: 'Not part of this conversation' });
         return;
       }
+      if (match.status !== 'MATCHED') {
+        socket.emit('error', { message: 'Conversation is not active' });
+        return;
+      }
 
       socket.to(`conversation:${conversationId}`).emit('typing', { userId, conversationId });
     });
@@ -50,6 +54,10 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
       const match = await getAuthorizedConversation(conversationId, userId);
       if (!match) {
         socket.emit('error', { message: 'Not part of this conversation' });
+        return;
+      }
+      if (match.status !== 'MATCHED') {
+        socket.emit('error', { message: 'Conversation is not active' });
         return;
       }
 
@@ -70,6 +78,10 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
         const match = await getAuthorizedConversation(conversationId, userId);
         if (!match) {
           socket.emit('error', { message: 'Not part of this conversation' });
+          return;
+        }
+        if (match.status !== 'MATCHED') {
+          socket.emit('error', { message: 'Conversation is not active' });
           return;
         }
 

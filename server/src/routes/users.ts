@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
+import { toPublicUser } from '../lib/publicUser';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { DATING_CATEGORIES } from '../lib/categories';
 
@@ -16,8 +17,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     return res.status(404).json({ error: 'User not found' });
   }
 
-  const { passwordHash, ...safeUser } = user;
-  return res.json(safeUser);
+  return res.json(toPublicUser(user));
 });
 
 const updateProfileSchema = z.object({
@@ -97,8 +97,12 @@ router.get('/:id/matches', requireAuth, async (req: AuthenticatedRequest, res) =
   return res.json(
     matches.map((match) => {
       const other = match.userOneId === req.params.id ? match.userTwo : match.userOne;
-      const { passwordHash, ...safeOther } = other;
-      return { id: match.id, category: match.category, createdAt: match.createdAt, user: safeOther };
+      return {
+        id: match.id,
+        category: match.category,
+        createdAt: match.createdAt,
+        user: toPublicUser(other),
+      };
     })
   );
 });

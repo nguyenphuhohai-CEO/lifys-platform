@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
+import { toPublicUser } from '../lib/publicUser';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { DATING_CATEGORIES, isValidCategory } from '../lib/categories';
 
@@ -53,9 +54,7 @@ router.get('/discover', requireAuth, async (req: AuthenticatedRequest, res) => {
     take: 20,
   });
 
-  return res.json(
-    candidates.map(({ passwordHash, ...safeUser }) => safeUser)
-  );
+  return res.json(candidates.map((user) => toPublicUser(user)));
 });
 
 async function createLikeAndMaybeMatch(
@@ -165,8 +164,12 @@ router.get('/matches', requireAuth, async (req: AuthenticatedRequest, res) => {
   return res.json(
     matches.map((match) => {
       const other = match.userOneId === req.userId ? match.userTwo : match.userOne;
-      const { passwordHash, ...safeOther } = other;
-      return { id: match.id, category: match.category, createdAt: match.createdAt, user: safeOther };
+      return {
+        id: match.id,
+        category: match.category,
+        createdAt: match.createdAt,
+        user: toPublicUser(other),
+      };
     })
   );
 });
