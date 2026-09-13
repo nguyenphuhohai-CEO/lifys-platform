@@ -1,7 +1,24 @@
 import jwt from 'jsonwebtoken';
 
-const ACCESS_TOKEN_SECRET = process.env.JWT_ACCESS_SECRET || 'dev-access-secret';
-const REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret';
+function getRequiredSecret(envName: 'JWT_ACCESS_SECRET' | 'JWT_REFRESH_SECRET', fallback: string) {
+  const configuredSecret = process.env[envName];
+  if (configuredSecret) {
+    return configuredSecret;
+  }
+
+  if (process.env.NODE_ENV === 'test') {
+    return fallback;
+  }
+
+  if (process.env.NODE_ENV === 'development' && process.env.ALLOW_INSECURE_DEV_SECRETS === 'true') {
+    return fallback;
+  }
+
+  throw new Error(`${envName} must be set. For local development only, set ALLOW_INSECURE_DEV_SECRETS=true.`);
+}
+
+const ACCESS_TOKEN_SECRET = getRequiredSecret('JWT_ACCESS_SECRET', 'dev-access-secret');
+const REFRESH_TOKEN_SECRET = getRequiredSecret('JWT_REFRESH_SECRET', 'dev-refresh-secret');
 const ACCESS_TOKEN_EXPIRES_IN = '15m';
 const REFRESH_TOKEN_EXPIRES_IN = '30d';
 

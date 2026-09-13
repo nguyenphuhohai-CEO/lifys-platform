@@ -157,4 +157,20 @@ describe('event routes', () => {
     expect(second.body.id).toBe(first.body.id);
     expect(attendees.size).toBe(1);
   });
+
+  it('treats zero-capacity events as full', async () => {
+    events.set('event-1', {
+      id: 'event-1',
+      creatorId: 'user-2',
+      category: 'AMICAL',
+      title: 'Atelier',
+      dateTime: new Date('2030-01-01T10:00:00.000Z'),
+      maxAttendees: 0,
+    });
+
+    const res = await request(app).post('/events/event-1/rsvp').set(authHeader).send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Event is full');
+  });
 });

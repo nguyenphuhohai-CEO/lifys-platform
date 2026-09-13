@@ -43,8 +43,7 @@ router.put('/:id/profile', requireAuth, async (req: AuthenticatedRequest, res) =
     data: parsed.data,
   });
 
-  const { passwordHash, ...safeUser } = user;
-  return res.json(safeUser);
+  return res.json(toPublicUser(user));
 });
 
 const addPhotoSchema = z.object({

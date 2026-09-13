@@ -87,7 +87,7 @@ router.post('/:id/rsvp', requireAuth, async (req: AuthenticatedRequest, res) => 
           return existingAttendee;
         }
 
-        if (event.maxAttendees) {
+        if (event.maxAttendees !== null && event.maxAttendees !== undefined) {
           const attendeeCount = await tx.eventAttendee.count({
             where: { eventId: req.params.id },
           });

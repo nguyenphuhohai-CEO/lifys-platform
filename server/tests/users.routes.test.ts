@@ -30,7 +30,26 @@ jest.mock('../src/lib/prisma', () => ({
           updatedAt: new Date('2030-01-01T10:00:00.000Z'),
         };
       }),
-      update: jest.fn(),
+      update: jest.fn(async () => ({
+        id: 'user-1',
+        email: 'alice@example.com',
+        phone: '+33999999999',
+        passwordHash: 'hash',
+        firstName: 'Alice',
+        age: 29,
+        gender: 'F',
+        bio: 'Nouvelle bio',
+        interests: ['music'],
+        location: 'Lyon',
+        latitude: 45.75,
+        longitude: 4.85,
+        categories: ['AMOUREUX'],
+        verificationStatus: 'EMAIL_VERIFIED',
+        photos: [],
+        categoryProfiles: [],
+        createdAt: new Date('2030-01-01T10:00:00.000Z'),
+        updatedAt: new Date('2030-01-01T11:00:00.000Z'),
+      })),
     },
     photo: {
       count: jest.fn(async () => 0),
@@ -60,6 +79,24 @@ describe('user routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.id).toBe('user-2');
     expect(res.body.firstName).toBe('Bob');
+    expect(res.body.email).toBeUndefined();
+    expect(res.body.phone).toBeUndefined();
+    expect(res.body.passwordHash).toBeUndefined();
+  });
+
+  it('returns a public projection after profile updates', async () => {
+    const ownAuthHeader = {
+      Authorization: ['Bearer', signAccessToken({ userId: 'user-1', email: 'alice@example.com' })].join(' '),
+    };
+
+    const res = await request(app).put('/users/user-1/profile').set(ownAuthHeader).send({
+      firstName: 'Alice',
+      bio: 'Nouvelle bio',
+      categories: ['AMOUREUX'],
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.firstName).toBe('Alice');
     expect(res.body.email).toBeUndefined();
     expect(res.body.phone).toBeUndefined();
     expect(res.body.passwordHash).toBeUndefined();
