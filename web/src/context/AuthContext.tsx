@@ -3,7 +3,6 @@ import { api } from '../lib/api';
 
 export interface AuthUser {
   id: string;
-  email: string;
   firstName: string;
   categories: string[];
 }

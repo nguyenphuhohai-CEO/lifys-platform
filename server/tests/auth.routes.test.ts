@@ -36,7 +36,8 @@ describe('POST /auth/register and /auth/login', () => {
     });
 
     expect(res.status).toBe(201);
-    expect(res.body.user.email).toBe('alice@example.com');
+    expect(res.body.user.firstName).toBe('Alice');
+    expect(res.body.user.email).toBeUndefined();
     expect(res.body.accessToken).toBeDefined();
     expect(res.body.refreshToken).toBeDefined();
   });

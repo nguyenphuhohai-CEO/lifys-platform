@@ -32,7 +32,7 @@ export default function MessagesPage() {
       if (message.matchId !== conversationId) {
         return;
       }
-      setMessages((prev) => [...prev, message]);
+      setMessages((prev) => (prev.some((existing) => existing.id === message.id) ? prev : [...prev, message]));
     });
 
     return () => {

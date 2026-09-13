@@ -7,6 +7,14 @@ import { DATING_CATEGORIES } from '../lib/categories';
 
 const router = Router();
 
+function toSessionUser(user: { id: string; firstName: string; categories: unknown[] }) {
+  return {
+    id: user.id,
+    firstName: user.firstName,
+    categories: user.categories,
+  };
+}
+
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
@@ -46,7 +54,7 @@ router.post('/register', async (req, res) => {
   const refreshToken = signRefreshToken({ userId: user.id, email: user.email });
 
   return res.status(201).json({
-    user: { id: user.id, email: user.email, firstName: user.firstName, categories: user.categories },
+    user: toSessionUser(user),
     accessToken,
     refreshToken,
   });
@@ -79,7 +87,7 @@ router.post('/login', async (req, res) => {
   const refreshToken = signRefreshToken({ userId: user.id, email: user.email });
 
   return res.json({
-    user: { id: user.id, email: user.email, firstName: user.firstName, categories: user.categories },
+    user: toSessionUser(user),
     accessToken,
     refreshToken,
   });

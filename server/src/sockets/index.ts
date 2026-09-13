@@ -85,14 +85,17 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
           return;
         }
 
-        const receiverId = match.userOneId === userId ? match.userTwoId : match.userOneId;
-
         const message = await prisma.message.create({
-          data: { matchId: conversationId, senderId: userId, receiverId, content, type },
+          data: {
+            matchId: conversationId,
+            senderId: userId,
+            receiverId: match.userOneId === userId ? match.userTwoId : match.userOneId,
+            content,
+            type,
+          },
         });
 
         io.to(`conversation:${conversationId}`).emit('new-message', message);
-        io.to(`user:${receiverId}`).emit('new-message', message);
       }
     );
 
