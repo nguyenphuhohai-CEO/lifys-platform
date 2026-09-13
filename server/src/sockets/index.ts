@@ -3,6 +3,16 @@ import { Server as SocketIOServer } from 'socket.io';
 import { verifyAccessToken } from '../lib/tokens';
 import { prisma } from '../lib/prisma';
 
+async function getAuthorizedConversation(conversationId: string, userId: string) {
+  const match = await prisma.match.findUnique({ where: { id: conversationId } });
+
+  if (!match || (match.userOneId !== userId && match.userTwoId !== userId)) {
+    return null;
+  }
+
+  return match;
+}
+
 export function initSocket(httpServer: HttpServer): SocketIOServer {
   const io = new SocketIOServer(httpServer, {
     cors: { origin: '*' },
@@ -26,11 +36,23 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
     const userId = socket.data.userId as string;
     socket.join(`user:${userId}`);
 
-    socket.on('typing', ({ conversationId }: { conversationId: string }) => {
+    socket.on('typing', async ({ conversationId }: { conversationId: string }) => {
+      const match = await getAuthorizedConversation(conversationId, userId);
+      if (!match) {
+        socket.emit('error', { message: 'Not part of this conversation' });
+        return;
+      }
+
       socket.to(`conversation:${conversationId}`).emit('typing', { userId, conversationId });
     });
 
-    socket.on('join-conversation', ({ conversationId }: { conversationId: string }) => {
+    socket.on('join-conversation', async ({ conversationId }: { conversationId: string }) => {
+      const match = await getAuthorizedConversation(conversationId, userId);
+      if (!match) {
+        socket.emit('error', { message: 'Not part of this conversation' });
+        return;
+      }
+
       socket.join(`conversation:${conversationId}`);
     });
 
@@ -45,8 +67,8 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
         content: string;
         type?: 'TEXT' | 'IMAGE' | 'VIDEO';
       }) => {
-        const match = await prisma.match.findUnique({ where: { id: conversationId } });
-        if (!match || (match.userOneId !== userId && match.userTwoId !== userId)) {
+        const match = await getAuthorizedConversation(conversationId, userId);
+        if (!match) {
           socket.emit('error', { message: 'Not part of this conversation' });
           return;
         }

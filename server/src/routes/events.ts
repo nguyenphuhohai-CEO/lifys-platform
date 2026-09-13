@@ -36,6 +36,15 @@ const createEventSchema = z.object({
   maxAttendees: z.number().int().positive().optional(),
 });
 
+class EventRouteError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly payload: Record<string, unknown>
+  ) {
+    super(typeof payload.error === 'string' ? payload.error : 'Event route error');
+  }
+}
+
 router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   const parsed = createEventSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -58,26 +67,51 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
 });
 
 router.post('/:id/rsvp', requireAuth, async (req: AuthenticatedRequest, res) => {
-  const event = await prisma.event.findUnique({
-    where: { id: req.params.id },
-    include: { attendees: true },
-  });
+  try {
+    const attendee = await prisma.$transaction(
+      async (tx) => {
+        const event = await tx.event.findUnique({
+          where: { id: req.params.id },
+          select: { id: true, maxAttendees: true },
+        });
 
-  if (!event) {
-    return res.status(404).json({ error: 'Event not found' });
+        if (!event) {
+          throw new EventRouteError(404, { error: 'Event not found' });
+        }
+
+        const existingAttendee = await tx.eventAttendee.findUnique({
+          where: { eventId_userId: { eventId: req.params.id, userId: req.userId as string } },
+        });
+
+        if (existingAttendee) {
+          return existingAttendee;
+        }
+
+        if (event.maxAttendees) {
+          const attendeeCount = await tx.eventAttendee.count({
+            where: { eventId: req.params.id },
+          });
+
+          if (attendeeCount >= event.maxAttendees) {
+            throw new EventRouteError(400, { error: 'Event is full' });
+          }
+        }
+
+        return tx.eventAttendee.create({
+          data: { eventId: req.params.id, userId: req.userId as string },
+        });
+      },
+      { isolationLevel: 'Serializable' }
+    );
+
+    return res.status(201).json(attendee);
+  } catch (error) {
+    if (error instanceof EventRouteError) {
+      return res.status(error.status).json(error.payload);
+    }
+
+    throw error;
   }
-
-  if (event.maxAttendees && event.attendees.length >= event.maxAttendees) {
-    return res.status(400).json({ error: 'Event is full' });
-  }
-
-  const attendee = await prisma.eventAttendee.upsert({
-    where: { eventId_userId: { eventId: req.params.id, userId: req.userId as string } },
-    update: {},
-    create: { eventId: req.params.id, userId: req.userId as string },
-  });
-
-  return res.status(201).json(attendee);
 });
 
 export default router;

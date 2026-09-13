@@ -6,6 +6,18 @@ import { DATING_CATEGORIES, isValidCategory } from '../lib/categories';
 
 const router = Router();
 
+async function findBlockBetweenUsers(userId: string, otherUserId: string) {
+  return prisma.block.findFirst({
+    where: {
+      OR: [
+        { blockerId: userId, blockedId: otherUserId },
+        { blockerId: otherUserId, blockedId: userId },
+      ],
+    },
+    select: { id: true },
+  });
+}
+
 router.get('/discover', requireAuth, async (req: AuthenticatedRequest, res) => {
   const category = req.query.category;
   if (!isValidCategory(category)) {
@@ -95,6 +107,11 @@ router.post('/likes/:userId', requireAuth, async (req: AuthenticatedRequest, res
     return res.status(400).json({ error: 'Cannot like yourself' });
   }
 
+  const block = await findBlockBetweenUsers(req.userId as string, req.params.userId);
+  if (block) {
+    return res.status(403).json({ error: 'Cannot interact with a blocked user' });
+  }
+
   const result = await createLikeAndMaybeMatch(
     req.userId as string,
     req.params.userId,
@@ -113,6 +130,11 @@ router.post('/super-likes/:userId', requireAuth, async (req: AuthenticatedReques
 
   if (req.userId === req.params.userId) {
     return res.status(400).json({ error: 'Cannot super-like yourself' });
+  }
+
+  const block = await findBlockBetweenUsers(req.userId as string, req.params.userId);
+  if (block) {
+    return res.status(403).json({ error: 'Cannot interact with a blocked user' });
   }
 
   const result = await createLikeAndMaybeMatch(

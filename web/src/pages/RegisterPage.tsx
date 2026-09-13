@@ -16,7 +16,11 @@ export default function RegisterPage() {
 
   function toggleCategory(category: DatingCategory) {
     setCategories((prev) =>
-      prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
+      prev.includes(category)
+        ? prev.filter((c) => c !== category)
+        : prev.length >= 5
+          ? prev
+          : [...prev, category]
     );
   }
 
