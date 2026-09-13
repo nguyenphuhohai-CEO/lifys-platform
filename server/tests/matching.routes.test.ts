@@ -134,6 +134,13 @@ describe('matching routes', () => {
     expect(res.body[0].id).toBe('user-2');
   });
 
+  it('rejects invalid numeric age filters', async () => {
+    const res = await request(app).get('/discover?category=AMOUREUX&minAge=abc').set(authHeader);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('minAge must be a valid number');
+  });
+
   it('blocks likes when either user has blocked the other', async () => {
     blocks.push({ blockerId: 'user-2', blockedId: 'user-1' });
 

@@ -15,6 +15,10 @@ router.get('/:conversationId', requireAuth, async (req: AuthenticatedRequest, re
     return res.status(403).json({ error: 'Not part of this conversation' });
   }
 
+  if (match.status !== 'MATCHED') {
+    return res.status(409).json({ error: 'Conversation is not active' });
+  }
+
   const messages = await prisma.message.findMany({
     where: { matchId: req.params.conversationId },
     orderBy: { createdAt: 'asc' },

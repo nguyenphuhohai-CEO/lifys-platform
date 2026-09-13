@@ -53,4 +53,18 @@ describe('message routes', () => {
     expect(res.body.error).toBe('Conversation is not active');
     expect(createdMessages).toHaveLength(0);
   });
+
+  it('rejects reading messages from an inactive conversation', async () => {
+    matches.set('match-1', {
+      id: 'match-1',
+      userOneId: 'user-1',
+      userTwoId: 'user-2',
+      status: 'PENDING',
+    });
+
+    const res = await request(app).get('/messages/match-1').set(authHeader);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('Conversation is not active');
+  });
 });

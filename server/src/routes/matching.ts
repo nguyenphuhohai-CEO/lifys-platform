@@ -19,14 +19,34 @@ async function findBlockBetweenUsers(userId: string, otherUserId: string) {
   });
 }
 
+function parseAgeQueryParam(value: unknown, paramName: 'minAge' | 'maxAge') {
+  if (value === undefined) {
+    return { success: true as const, value: undefined };
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return { success: false as const, error: `${paramName} must be a valid number` };
+  }
+
+  return { success: true as const, value: parsed };
+}
+
 router.get('/discover', requireAuth, async (req: AuthenticatedRequest, res) => {
   const category = req.query.category;
   if (!isValidCategory(category)) {
     return res.status(400).json({ error: `category must be one of ${DATING_CATEGORIES.join(', ')}` });
   }
 
-  const minAge = req.query.minAge ? Number(req.query.minAge) : undefined;
-  const maxAge = req.query.maxAge ? Number(req.query.maxAge) : undefined;
+  const minAge = parseAgeQueryParam(req.query.minAge, 'minAge');
+  if (!minAge.success) {
+    return res.status(400).json({ error: minAge.error });
+  }
+
+  const maxAge = parseAgeQueryParam(req.query.maxAge, 'maxAge');
+  if (!maxAge.success) {
+    return res.status(400).json({ error: maxAge.error });
+  }
 
   const [likedIds, blockedIds] = await Promise.all([
     prisma.like.findMany({ where: { senderId: req.userId, category }, select: { receiverId: true } }),
@@ -46,8 +66,8 @@ router.get('/discover', requireAuth, async (req: AuthenticatedRequest, res) => {
     where: {
       id: { notIn: Array.from(excludedIds) },
       categories: { has: category },
-      ...(minAge !== undefined || maxAge !== undefined
-        ? { age: { gte: minAge ?? 0, lte: maxAge ?? 200 } }
+      ...(minAge.value !== undefined || maxAge.value !== undefined
+        ? { age: { gte: minAge.value ?? 0, lte: maxAge.value ?? 200 } }
         : {}),
     },
     include: { photos: true },

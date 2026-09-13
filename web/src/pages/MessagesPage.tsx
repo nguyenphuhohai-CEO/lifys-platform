@@ -5,6 +5,7 @@ import { api, API_BASE_URL } from '../lib/api';
 
 interface Message {
   id: string;
+  matchId: string | null;
   senderId: string;
   content: string;
   type: 'TEXT' | 'IMAGE' | 'VIDEO';
@@ -28,6 +29,9 @@ export default function MessagesPage() {
 
     socket.emit('join-conversation', { conversationId });
     socket.on('new-message', (message: Message) => {
+      if (message.matchId !== conversationId) {
+        return;
+      }
       setMessages((prev) => [...prev, message]);
     });
 
