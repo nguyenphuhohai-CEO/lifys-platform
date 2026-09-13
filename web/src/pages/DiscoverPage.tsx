@@ -13,14 +13,16 @@ interface Candidate {
 
 export default function DiscoverPage() {
   const { user } = useAuth();
-  const defaultCategory = (user?.categories[0] as DatingCategory) || 'AMICAL';
-  const [category, setCategory] = useState<DatingCategory>(defaultCategory);
+  const [selectedCategory, setSelectedCategory] = useState<DatingCategory | null>(null);
+  const category = selectedCategory ?? ((user?.categories[0] as DatingCategory | undefined) ?? null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!category) return;
+
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -42,6 +44,8 @@ export default function DiscoverPage() {
 
   async function act(userId: string, action: 'like' | 'super-like' | 'pass') {
     setFeedback(null);
+    if (!category) return;
+
     if (action === 'pass') {
       setCandidates((prev) => prev.filter((c) => c.id !== userId));
       return;
@@ -65,7 +69,7 @@ export default function DiscoverPage() {
           <button
             type="button"
             key={c}
-            onClick={() => setCategory(c)}
+            onClick={() => setSelectedCategory(c)}
             className={`rounded-full border px-3 py-1 text-sm ${
               category === c ? 'border-purple-600 bg-purple-600 text-white' : 'border-gray-300 text-gray-700'
             }`}

@@ -141,6 +141,20 @@ describe('matching routes', () => {
     expect(res.body.error).toBe('minAge must be a valid number');
   });
 
+  it('rejects empty age filters', async () => {
+    const res = await request(app).get('/discover?category=AMOUREUX&minAge=').set(authHeader);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('minAge must be a valid number');
+  });
+
+  it('rejects inverted age ranges', async () => {
+    const res = await request(app).get('/discover?category=AMOUREUX&minAge=40&maxAge=20').set(authHeader);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('minAge must be less than or equal to maxAge');
+  });
+
   it('blocks likes when either user has blocked the other', async () => {
     blocks.push({ blockerId: 'user-2', blockedId: 'user-1' });
 

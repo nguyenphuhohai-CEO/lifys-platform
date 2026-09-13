@@ -24,6 +24,10 @@ function parseAgeQueryParam(value: unknown, paramName: 'minAge' | 'maxAge') {
     return { success: true as const, value: undefined };
   }
 
+  if (typeof value !== 'string' || value.trim() === '') {
+    return { success: false as const, error: `${paramName} must be a valid number` };
+  }
+
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
     return { success: false as const, error: `${paramName} must be a valid number` };
@@ -46,6 +50,10 @@ router.get('/discover', requireAuth, async (req: AuthenticatedRequest, res) => {
   const maxAge = parseAgeQueryParam(req.query.maxAge, 'maxAge');
   if (!maxAge.success) {
     return res.status(400).json({ error: maxAge.error });
+  }
+
+  if (minAge.value !== undefined && maxAge.value !== undefined && minAge.value > maxAge.value) {
+    return res.status(400).json({ error: 'minAge must be less than or equal to maxAge' });
   }
 
   const [likedIds, blockedIds] = await Promise.all([
