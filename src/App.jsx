@@ -2,21 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Avatar from './components/Avatar';
 import ToastRegion from './components/ToastRegion';
-import { DEFAULT_MESSAGES, DEMO_PROFILES, MODES, defaultProfile } from './data/demoData';
-import {
-  createConversation,
-  createMatch,
-  filterProfiles,
-  getConversationPreview,
-  getModeById,
-  loadInitialState,
-  sanitizeConversations,
-  sanitizeIdList,
-  sanitizeMatches,
-  sanitizeProfile,
-  serializeInterests,
-  shouldCreateMatch,
-} from './utils/app-utils';
+import { MODES, defaultProfile } from './data/demoData';
+import { api, ApiError } from './lib/api';
+import { getConversationPreview, getModeById, serializeInterests } from './utils/app-utils';
 import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './utils/storage';
 
 const NAV_ITEMS = [
@@ -26,6 +14,12 @@ const NAV_ITEMS = [
   { id: 'messages', label: 'Messages' },
   { id: 'profile', label: 'Profil' },
 ];
+
+const initialAuth = safeReadJSON(STORAGE_KEYS.auth, { token: '' }, {
+  sanitize: (value) => ({
+    token: typeof value?.token === 'string' ? value.token : '',
+  }),
+}).data;
 
 function EmptyState({ title, description, actionLabel, onAction }) {
   return (
@@ -51,29 +45,37 @@ function SectionHeader({ eyebrow, title, description, aside }) {
 }
 
 function App() {
-  const [bootState] = useState(() => loadInitialState({
-    profile: () => safeReadJSON(STORAGE_KEYS.profile, defaultProfile, { sanitize: sanitizeProfile }),
-    likes: () => safeReadJSON(STORAGE_KEYS.likes, [], { sanitize: sanitizeIdList }),
-    passed: () => safeReadJSON(STORAGE_KEYS.passed, [], { sanitize: sanitizeIdList }),
-    matches: () => safeReadJSON(STORAGE_KEYS.matches, [], { sanitize: sanitizeMatches }),
-    messages: () => safeReadJSON(STORAGE_KEYS.messages, DEFAULT_MESSAGES, { sanitize: sanitizeConversations }),
-  }));
+  const [token, setToken] = useState(initialAuth.token);
+  const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState('home');
   const [activeMode, setActiveMode] = useState('all');
-  const [profile, setProfile] = useState(bootState.profile);
-  const [profileDraft, setProfileDraft] = useState(bootState.profile);
+  const [profile, setProfile] = useState(defaultProfile);
+  const [profileDraft, setProfileDraft] = useState(defaultProfile);
   const [profileErrors, setProfileErrors] = useState({});
-  const [likes, setLikes] = useState(bootState.likes);
-  const [passed, setPassed] = useState(bootState.passed);
-  const [matches, setMatches] = useState(bootState.matches);
-  const [messages, setMessages] = useState(bootState.messages);
-  const [selectedConversation, setSelectedConversation] = useState(bootState.messages[0]?.id ?? null);
+  const [profiles, setProfiles] = useState([]);
+  const [matches, setMatches] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [selectedConversation, setSelectedConversation] = useState(null);
   const [draftMessage, setDraftMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [cityQuery, setCityQuery] = useState('');
   const [toasts, setToasts] = useState([]);
-  const [isReady, setIsReady] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [messageSending, setMessageSending] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [pageError, setPageError] = useState('');
+  const [authMode, setAuthMode] = useState('register');
+  const [authForm, setAuthForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    mode: 'amoureux',
+  });
 
   const showToast = useCallback((toast) => {
     const id = `${toast.type}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -83,88 +85,116 @@ function App() {
     }, 4200);
   }, []);
 
+  const handleApiError = useCallback((error, fallbackMessage) => {
+    const message = error instanceof ApiError ? error.message : fallbackMessage;
+    setPageError(message);
+    showToast({
+      type: 'warning',
+      title: 'Action interrompue',
+      message,
+    });
+  }, [showToast]);
+
   useEffect(() => {
-    setProfileDraft(profile);
+    if (token) {
+      safeWriteJSON(STORAGE_KEYS.auth, { token });
+    } else {
+      resetPrototypeStorage([STORAGE_KEYS.auth]);
+    }
+  }, [token]);
+
+  const loadDiscovery = useCallback(async (authToken) => {
+    setDiscoveryLoading(true);
+
+    try {
+      const response = await api.getDiscovery(authToken, {
+        activeMode,
+        query: searchQuery,
+        city: cityQuery,
+      });
+      setProfiles(response.profiles);
+      setPageError('');
+    } catch (error) {
+      handleApiError(error, 'Impossible de charger la découverte.');
+    } finally {
+      setDiscoveryLoading(false);
+    }
+  }, [activeMode, cityQuery, handleApiError, searchQuery]);
+
+  const loadDashboard = useCallback(async (authToken) => {
+    setDashboardLoading(true);
+
+    try {
+      const [sessionData, bootstrapData, discoveryData] = await Promise.all([
+        api.getSession(authToken),
+        api.getBootstrap(authToken),
+        api.getDiscovery(authToken, {
+          activeMode,
+          query: searchQuery,
+          city: cityQuery,
+        }),
+      ]);
+
+      setCurrentUser(sessionData.user);
+      setProfile(bootstrapData.profile);
+      setProfileDraft({
+        ...bootstrapData.profile,
+        interests: serializeInterests(bootstrapData.profile.interests),
+      });
+      setMatches(bootstrapData.matches);
+      setConversations(bootstrapData.conversations);
+      setProfiles(discoveryData.profiles);
+      setSelectedConversation((current) => (
+        bootstrapData.conversations.some((conversation) => conversation.id === current)
+          ? current
+          : bootstrapData.conversations[0]?.id ?? null
+      ));
+      setPageError('');
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setToken('');
+        setCurrentUser(null);
+      }
+      handleApiError(error, 'Impossible de charger votre espace Lifys.');
+    } finally {
+      setDashboardLoading(false);
+      setSessionLoading(false);
+    }
+  }, [activeMode, cityQuery, handleApiError, searchQuery]);
+
+  useEffect(() => {
+    if (!token) {
+      setSessionLoading(false);
+      setCurrentUser(null);
+      return;
+    }
+
+    loadDashboard(token);
+  }, [loadDashboard, token]);
+
+  useEffect(() => {
+    if (currentUser && token) {
+      loadDiscovery(token);
+    }
+  }, [activeMode, cityQuery, currentUser, loadDiscovery, searchQuery, token]);
+
+  useEffect(() => {
+    setProfileDraft((current) => ({
+      ...current,
+      ...profile,
+      interests: serializeInterests(profile.interests),
+    }));
   }, [profile]);
 
   useEffect(() => {
-    setIsReady(true);
-
-    if (bootState.recoveredKeys.length) {
-      showToast({
-        type: 'warning',
-        title: 'Données locales restaurées',
-        message: `Certaines données corrompues (${bootState.recoveredKeys.join(', ')}) ont été réinitialisées en toute sécurité.`,
-      });
+    if (!conversations.some((conversation) => conversation.id === selectedConversation)) {
+      setSelectedConversation(conversations[0]?.id ?? null);
     }
+  }, [conversations, selectedConversation]);
 
-    if (!bootState.storageAvailable) {
-      showToast({
-        type: 'warning',
-        title: 'Stockage indisponible',
-        message: 'Le navigateur ne permet pas la persistance locale. Le prototype reste utilisable sur la session courante.',
-      });
-    }
-  }, [bootState.recoveredKeys, bootState.storageAvailable, showToast]);
-
-  useEffect(() => {
-    if (isReady) {
-      safeWriteJSON(STORAGE_KEYS.profile, profile);
-    }
-  }, [isReady, profile]);
-
-  useEffect(() => {
-    if (isReady) {
-      safeWriteJSON(STORAGE_KEYS.likes, likes);
-    }
-  }, [isReady, likes]);
-
-  useEffect(() => {
-    if (isReady) {
-      safeWriteJSON(STORAGE_KEYS.passed, passed);
-    }
-  }, [isReady, passed]);
-
-  useEffect(() => {
-    if (isReady) {
-      safeWriteJSON(STORAGE_KEYS.matches, matches);
-    }
-  }, [isReady, matches]);
-
-  useEffect(() => {
-    if (isReady) {
-      safeWriteJSON(STORAGE_KEYS.messages, messages);
-    }
-  }, [isReady, messages]);
-
-  useEffect(() => {
-    if (!messages.some((conversation) => conversation.id === selectedConversation)) {
-      setSelectedConversation(messages[0]?.id ?? null);
-    }
-  }, [messages, selectedConversation]);
-
-  const activeProfileMode = profile.mode || defaultProfile.mode;
-  const selectedConversationData = messages.find((conversation) => conversation.id === selectedConversation) ?? null;
-  const visibleProfiles = useMemo(() => filterProfiles({
-    profiles: DEMO_PROFILES,
-    activeMode,
-    likes,
-    passed,
-    profileMode: activeProfileMode,
-    query: searchQuery,
-    city: cityQuery,
-  }), [activeMode, activeProfileMode, cityQuery, likes, passed, searchQuery]);
-  const availableCities = useMemo(() => [...new Set(DEMO_PROFILES.map((item) => item.city))].sort((a, b) => a.localeCompare(b)), []);
-  const totalProfilesForMode = useMemo(() => DEMO_PROFILES.filter((item) => activeMode === 'all' || item.mode === activeMode).length, [activeMode]);
-  const seenProfiles = likes.length + passed.length;
-  const completedProfile = Boolean(profile.name && profile.city && profile.bio && profile.age);
-
-  const updateProfileField = (field, value) => {
-    setProfileDraft((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  };
+  const selectedConversationData = conversations.find((conversation) => conversation.id === selectedConversation) ?? null;
+  const availableCities = useMemo(() => [...new Set(profiles.map((item) => item.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [profiles]);
+  const completedProfile = Boolean(profile.name && profile.age && profile.city && profile.bio);
 
   const validateProfile = () => {
     const errors = {};
@@ -172,19 +202,15 @@ function App() {
     if (!profileDraft.name.trim()) {
       errors.name = 'Ajoutez votre prénom.';
     }
-
     if (!profileDraft.age || Number(profileDraft.age) < 18 || Number(profileDraft.age) > 80) {
       errors.age = 'Indiquez un âge entre 18 et 80 ans.';
     }
-
     if (!profileDraft.city.trim()) {
       errors.city = 'Ajoutez une ville.';
     }
-
     if (profileDraft.bio.trim().length < 20) {
       errors.bio = 'Décrivez-vous en au moins 20 caractères.';
     }
-
     if (profileDraft.avatar && !/^https?:\/\//i.test(profileDraft.avatar.trim())) {
       errors.avatar = 'Utilisez une URL commençant par http:// ou https://.';
     }
@@ -192,9 +218,33 @@ function App() {
     return errors;
   };
 
-  const handleProfileSave = (event) => {
+  const handleAuthSubmit = async (event) => {
     event.preventDefault();
+    setAuthSubmitting(true);
 
+    try {
+      const response = authMode === 'register'
+        ? await api.register(authForm)
+        : await api.login({ email: authForm.email, password: authForm.password });
+
+      setToken(response.token);
+      setCurrentUser(response.user);
+      setView('profile');
+      showToast({
+        type: 'success',
+        title: authMode === 'register' ? 'Compte créé' : 'Connexion réussie',
+        message: 'Votre session Lifys est maintenant sécurisée par le backend.',
+      });
+      setPageError('');
+    } catch (error) {
+      handleApiError(error, 'Impossible de démarrer votre session.');
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleProfileSave = async (event) => {
+    event.preventDefault();
     const errors = validateProfile();
     setProfileErrors(errors);
 
@@ -202,124 +252,141 @@ function App() {
       showToast({
         type: 'warning',
         title: 'Profil incomplet',
-        message: 'Corrigez les champs signalés pour enregistrer votre profil local.',
+        message: 'Corrigez les champs signalés avant l’enregistrement.',
       });
       return;
     }
 
-    const nextProfile = sanitizeProfile(profileDraft);
-    setProfile(nextProfile);
-    setProfileDraft(nextProfile);
-    setProfileErrors({});
-    setView('discover');
-    showToast({
-      type: 'success',
-      title: 'Profil enregistré',
-      message: 'Vos informations sont sauvegardées uniquement dans ce navigateur.',
-    });
+    setProfileSaving(true);
+
+    try {
+      const response = await api.updateProfile(token, profileDraft);
+      setProfile(response.profile);
+      setProfileDraft({
+        ...response.profile,
+        interests: serializeInterests(response.profile.interests),
+      });
+      setProfileErrors({});
+      setView('discover');
+      setPageError('');
+      showToast({
+        type: 'success',
+        title: 'Profil synchronisé',
+        message: 'Votre profil est maintenant enregistré dans la base SQLite Lifys.',
+      });
+      await loadDiscovery(token);
+    } catch (error) {
+      handleApiError(error, 'Impossible de sauvegarder le profil.');
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
-  const ensureConversation = (profileTarget) => {
-    const existingConversation = messages.find((item) => item.profileId === profileTarget.id);
-    if (existingConversation) {
-      return existingConversation.id;
-    }
+  const handleLike = async (profileId) => {
+    try {
+      const response = await api.likeProfile(token, profileId);
+      await loadDashboard(token);
 
-    const nextConversation = createConversation(profileTarget);
-    setMessages((current) => [...current, nextConversation]);
-    return nextConversation.id;
-  };
-
-  const handleLike = (profileId) => {
-    if (likes.includes(profileId)) {
-      return;
-    }
-
-    const profileTarget = DEMO_PROFILES.find((item) => item.id === profileId);
-    if (!profileTarget) {
-      return;
-    }
-
-    setLikes((current) => [...current, profileId]);
-
-    if (shouldCreateMatch(profileTarget, profile)) {
-      const alreadyMatched = matches.some((item) => item.profileId === profileId);
-      if (!alreadyMatched) {
-        const newMatch = createMatch(profileTarget, profile);
-        setMatches((current) => [...current, newMatch]);
-        ensureConversation(profileTarget);
+      if (response.matched) {
+        setSelectedConversation(response.conversationId);
         showToast({
           type: 'success',
-          title: `Nouveau match avec ${profileTarget.name}`,
-          message: 'La conversation locale est prête dans l’onglet Messages.',
+          title: 'Match confirmé',
+          message: 'Le backend a créé votre match et ouvert une conversation persistante.',
+        });
+      } else {
+        showToast({
+          type: 'info',
+          title: 'Like enregistré',
+          message: 'Votre intérêt a été sauvegardé côté serveur.',
         });
       }
+    } catch (error) {
+      handleApiError(error, 'Impossible d’enregistrer ce like.');
+    }
+  };
+
+  const handlePass = async (profileId) => {
+    try {
+      await api.passProfile(token, profileId);
+      await loadDiscovery(token);
+    } catch (error) {
+      handleApiError(error, 'Impossible d’enregistrer ce pass.');
+    }
+  };
+
+  const handleSendMessage = async () => {
+    const text = draftMessage.trim();
+    if (!text || !selectedConversationData) {
       return;
     }
 
-    showToast({
-      type: 'info',
-      title: 'Like enregistré',
-      message: `${profileTarget.name} a été ajouté à vos affinités locales.`,
-    });
-  };
+    setMessageSending(true);
 
-  const handlePass = (profileId) => {
-    if (passed.includes(profileId)) {
-      return;
+    try {
+      const response = await api.sendMessage(token, selectedConversationData.id, text);
+      setConversations((current) => current.map((conversation) => (
+        conversation.id === response.conversation.id ? response.conversation : conversation
+      )));
+      setDraftMessage('');
+      setPageError('');
+    } catch (error) {
+      handleApiError(error, 'Impossible d’envoyer le message.');
+    } finally {
+      setMessageSending(false);
     }
-
-    setPassed((current) => [...current, profileId]);
   };
 
-  const handleOpenMatch = (match) => {
-    const profileTarget = DEMO_PROFILES.find((item) => item.id === match.profileId) ?? match;
-    const conversationId = ensureConversation(profileTarget);
-    setSelectedConversation(conversationId);
-    setView('messages');
-  };
+  const handleResetPrototype = async () => {
+    setResetting(true);
 
-  const handleSendMessage = () => {
-    const trimmedMessage = draftMessage.trim();
-    if (!trimmedMessage || !selectedConversationData) {
-      return;
+    try {
+      const response = await api.resetPrototype(token);
+      setProfile(response.profile);
+      setProfileDraft({
+        ...response.profile,
+        interests: serializeInterests(response.profile.interests),
+      });
+      setMatches(response.matches);
+      setConversations(response.conversations);
+      setSelectedConversation(response.conversations[0]?.id ?? null);
+      setSearchQuery('');
+      setCityQuery('');
+      setActiveMode('all');
+      setDraftMessage('');
+      await loadDiscovery(token);
+      showToast({
+        type: 'success',
+        title: 'Données de démonstration réinitialisées',
+        message: 'Le backend a effacé vos interactions et restauré un profil vierge.',
+      });
+    } catch (error) {
+      handleApiError(error, 'Impossible de réinitialiser le prototype.');
+    } finally {
+      setResetting(false);
     }
-
-    const nextMessage = {
-      id: `msg-${Date.now()}`,
-      sender: 'me',
-      text: trimmedMessage,
-    };
-
-    setMessages((current) => current.map((item) => (
-      item.id === selectedConversationData.id
-        ? { ...item, messages: [...item.messages, nextMessage] }
-        : item
-    )));
-    setDraftMessage('');
   };
 
-  const handleResetPrototype = () => {
-    resetPrototypeStorage();
-    const sanitizedDefaults = sanitizeConversations(DEFAULT_MESSAGES);
+  const handleLogout = () => {
+    setToken('');
+    setCurrentUser(null);
     setProfile(defaultProfile);
     setProfileDraft(defaultProfile);
-    setProfileErrors({});
-    setLikes([]);
-    setPassed([]);
+    setProfiles([]);
     setMatches([]);
-    setMessages(sanitizedDefaults);
-    setSelectedConversation(sanitizedDefaults[0]?.id ?? null);
+    setConversations([]);
+    setSelectedConversation(null);
     setDraftMessage('');
-    setSearchQuery('');
-    setCityQuery('');
-    setActiveMode('all');
-    setView('home');
+    setPageError('');
     showToast({
-      type: 'success',
-      title: 'Prototype réinitialisé',
-      message: 'Toutes les données locales ont été effacées et les profils de démonstration ont été restaurés.',
+      type: 'info',
+      title: 'Session fermée',
+      message: 'Votre jeton local a été supprimé du navigateur.',
     });
+  };
+
+  const updateProfileField = (field, value) => {
+    setProfileDraft((current) => ({ ...current, [field]: value }));
   };
 
   const setCurrentView = (nextView) => {
@@ -327,14 +394,94 @@ function App() {
     setIsMobileNavOpen(false);
   };
 
-  if (!isReady) {
+  if (sessionLoading) {
     return (
       <div className="app-shell app-loading">
         <div className="content-panel loading-panel" role="status" aria-live="polite">
           <p className="eyebrow">Chargement</p>
-          <h1>Lifys prépare votre prototype local…</h1>
-          <p className="section-description">Initialisation sécurisée des profils, matchs et conversations stockés dans le navigateur.</p>
+          <h1>Lifys établit la connexion sécurisée…</h1>
+          <p className="section-description">Initialisation du backend, de la base SQLite et de votre session.</p>
         </div>
+      </div>
+    );
+  }
+
+  if (!token || !currentUser) {
+    return (
+      <div className="app-shell">
+        <ToastRegion toasts={toasts} onDismiss={(toastId) => setToasts((current) => current.filter((item) => item.id !== toastId))} />
+        <main className="page-shell">
+          <section className="hero-panel auth-hero">
+            <div className="hero-copy">
+              <p className="eyebrow">Déploiement MVP · backend réel</p>
+              <h1>Lifys est prêt pour un vrai déploiement léger.</h1>
+              <p>
+                Ce MVP s’appuie désormais sur un backend Express, une base SQLite réelle, une authentification par mot de passe
+                et des profils/messages persistés côté serveur.
+              </p>
+              <div className="hero-metrics">
+                <article className="metric-card">
+                  <span>Backend</span>
+                  <strong>Express</strong>
+                  <small>API JSON sécurisée</small>
+                </article>
+                <article className="metric-card">
+                  <span>Base de données</span>
+                  <strong>SQLite</strong>
+                  <small>persistante et simple à déployer</small>
+                </article>
+                <article className="metric-card">
+                  <span>Auth</span>
+                  <strong>JWT</strong>
+                  <small>session stockée localement</small>
+                </article>
+              </div>
+            </div>
+
+            <div className="content-panel auth-card">
+              <SectionHeader
+                eyebrow={authMode === 'register' ? 'Créer un compte' : 'Connexion'}
+                title={authMode === 'register' ? 'Commencer sur Lifys' : 'Reprendre votre session'}
+                description="Les comptes sont réels pour ce MVP backend, mais les profils de découverte restent des démos."
+              />
+
+              {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
+
+              <form className="profile-form" onSubmit={handleAuthSubmit}>
+                {authMode === 'register' ? (
+                  <label>
+                    <span>Prénom</span>
+                    <input value={authForm.name} onChange={(event) => setAuthForm((current) => ({ ...current, name: event.target.value }))} />
+                  </label>
+                ) : null}
+                <label>
+                  <span>E-mail</span>
+                  <input type="email" value={authForm.email} onChange={(event) => setAuthForm((current) => ({ ...current, email: event.target.value }))} />
+                </label>
+                <label>
+                  <span>Mot de passe</span>
+                  <input type="password" value={authForm.password} onChange={(event) => setAuthForm((current) => ({ ...current, password: event.target.value }))} />
+                </label>
+                {authMode === 'register' ? (
+                  <label>
+                    <span>Catégorie principale</span>
+                    <select value={authForm.mode} onChange={(event) => setAuthForm((current) => ({ ...current, mode: event.target.value }))}>
+                      {MODES.map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+                    </select>
+                  </label>
+                ) : null}
+                <div className="form-actions">
+                  <button type="submit" className="primary-button" disabled={authSubmitting}>
+                    {authSubmitting ? 'Chargement…' : authMode === 'register' ? 'Créer mon compte' : 'Se connecter'}
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => setAuthMode((current) => current === 'register' ? 'login' : 'register')}>
+                    {authMode === 'register' ? 'J’ai déjà un compte' : 'Créer un nouveau compte'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </section>
+        </main>
       </div>
     );
   }
@@ -348,7 +495,7 @@ function App() {
           <span className="brand-icon">❤</span>
           <span>
             <strong>Lifys</strong>
-            <small>Prototype premium, local et simulé</small>
+            <small>Frontend React + backend Express + SQLite</small>
           </span>
         </button>
 
@@ -376,71 +523,76 @@ function App() {
         </nav>
 
         <div className="topbar-actions">
-          <span className="prototype-badge">Données 100% locales</span>
-          <button type="button" className="secondary-button" onClick={handleResetPrototype}>
-            Réinitialiser
+          <span className="prototype-badge">{currentUser.email}</span>
+          <button type="button" className="secondary-button" onClick={handleResetPrototype} disabled={resetting}>
+            {resetting ? 'Réinitialisation…' : 'Réinitialiser'}
+          </button>
+          <button type="button" className="secondary-button" onClick={handleLogout}>
+            Déconnexion
           </button>
         </div>
       </header>
 
       <main className="page-shell">
-        <section className="local-notice" aria-label="Avertissement prototype">
-          <strong>Prototype local</strong>
-          <span>Profils, matchs et messages sont fictifs, enregistrés uniquement dans votre navigateur et ne constituent ni backend réel, ni identité vérifiée.</span>
+        <section className="local-notice" aria-label="Avertissement MVP">
+          <strong>MVP déployable</strong>
+          <span>Les comptes et données utilisateur sont persistés dans SQLite. Les profils de découverte restent fictifs et ne constituent ni réseau social réel, ni identité vérifiée.</span>
         </section>
+
+        {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
 
         {view === 'home' && (
           <>
             <section className="hero-panel">
               <div className="hero-copy">
-                <span className="eyebrow">Expérience premium · responsive · locale</span>
-                <h1>Cinq façons de créer une rencontre, une seule expérience Lifys.</h1>
+                <span className="eyebrow">Expérience full-stack légère</span>
+                <h1>Une base Lifys prête à passer du prototype local à un MVP backend réel.</h1>
                 <p>
-                  Explorez des connexions amicales, amoureuses, sans lendemain, orientées mariage ou professionnelles dans un MVP chaleureux,
-                  sobre et prêt à évoluer sans changer inutilement la stack React + Vite.
+                  Vos profils, likes, matchs et messages sont maintenant gérés par un backend Express et une base SQLite,
+                  sans bouleverser l’expérience premium construite sur React + Vite.
                 </p>
 
                 <div className="cta-row">
                   <button type="button" className="primary-button" onClick={() => setCurrentView('discover')}>Découvrir les profils</button>
                   <button type="button" className="secondary-button" onClick={() => setCurrentView('profile')}>
-                    {completedProfile ? 'Modifier mon profil' : 'Créer mon profil'}
+                    {completedProfile ? 'Modifier mon profil' : 'Compléter mon profil'}
                   </button>
                 </div>
 
-                <div className="hero-metrics" aria-label="Résumé du prototype">
+                <div className="hero-metrics">
                   <article className="metric-card">
-                    <span>Profils visibles</span>
-                    <strong>{visibleProfiles.length}</strong>
-                    <small>sur {totalProfilesForMode}</small>
+                    <span>Profils</span>
+                    <strong>{profiles.length}</strong>
+                    <small>résultats backend filtrés</small>
                   </article>
                   <article className="metric-card">
-                    <span>Matchs locaux</span>
+                    <span>Matchs</span>
                     <strong>{matches.length}</strong>
-                    <small>générés dans le navigateur</small>
+                    <small>persistés en base</small>
                   </article>
                   <article className="metric-card">
-                    <span>Progression profil</span>
-                    <strong>{completedProfile ? 'Complet' : 'À finaliser'}</strong>
-                    <small>{completedProfile ? 'Prêt pour la découverte' : 'Nom, âge, ville, bio requis'}</small>
+                    <span>Messages</span>
+                    <strong>{conversations.reduce((count, conversation) => count + conversation.messages.length, 0)}</strong>
+                    <small>conservés côté serveur</small>
                   </article>
                 </div>
               </div>
 
               <div className="hero-visual">
                 <div className="mini-card large">
-                  <span className="mini-label">Catégorie principale</span>
-                  <h3>{getModeById(activeProfileMode).label}</h3>
-                  <p>{profile.city || 'Ville non renseignée'} · {profile.age || '18+'} ans</p>
+                  <span className="mini-label">Catégorie active</span>
+                  <h3>{getModeById(profile.mode || 'amoureux').label}</h3>
+                  <p>{profile.city || 'Ville à compléter'} · {profile.age || '18+'} ans</p>
                 </div>
                 <div className="mini-card">
-                  <span className="mini-label">Découverte</span>
-                  <strong>{seenProfiles}</strong>
-                  <p>profils déjà consultés</p>
+                  <span className="mini-label">Compte</span>
+                  <strong>{completedProfile ? 'Actif' : 'À compléter'}</strong>
+                  <p>{currentUser.email}</p>
                 </div>
                 <div className="mini-card">
-                  <span className="mini-label">Conversations</span>
-                  <strong>{messages.length}</strong>
-                  <p>fils locaux disponibles</p>
+                  <span className="mini-label">Stack</span>
+                  <strong>React + Express</strong>
+                  <p>JWT · SQLite · Docker</p>
                 </div>
               </div>
             </section>
@@ -470,11 +622,10 @@ function App() {
             <SectionHeader
               eyebrow="Découverte"
               title="Profils recommandés"
-              description="Filtrez par catégorie, texte ou ville. Les résultats tiennent compte de vos likes, passes et du mode principal de votre profil."
+              description="La découverte est maintenant alimentée par le backend et exclut automatiquement les profils déjà likés ou passés."
               aside={(
                 <div className="header-meta">
-                  <span className="counter-badge">{visibleProfiles.length} profil{visibleProfiles.length > 1 ? 's' : ''} visible{visibleProfiles.length > 1 ? 's' : ''}</span>
-                  <span className="counter-badge muted">{seenProfiles} déjà traités</span>
+                  <span className="counter-badge">{discoveryLoading ? 'Chargement…' : `${profiles.length} profil${profiles.length > 1 ? 's' : ''}`}</span>
                 </div>
               )}
             />
@@ -492,33 +643,24 @@ function App() {
               <div className="filter-grid">
                 <label>
                   <span>Recherche texte</span>
-                  <input
-                    type="search"
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Nom, bio, intérêt…"
-                  />
+                  <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Nom, bio, intérêt…" />
                 </label>
                 <label>
                   <span>Ville</span>
-                  <input
-                    type="search"
-                    list="lifys-cities"
-                    value={cityQuery}
-                    onChange={(event) => setCityQuery(event.target.value)}
-                    placeholder="Paris, Lyon…"
-                  />
-                  <datalist id="lifys-cities">
+                  <input type="search" list="lifys-city-options" value={cityQuery} onChange={(event) => setCityQuery(event.target.value)} placeholder="Paris, Lyon…" />
+                  <datalist id="lifys-city-options">
                     {availableCities.map((city) => <option key={city} value={city} />)}
                   </datalist>
                 </label>
               </div>
             </div>
 
-            {visibleProfiles.length === 0 ? (
+            {discoveryLoading ? (
+              <EmptyState title="Chargement des profils" description="Le backend prépare vos recommandations sécurisées." />
+            ) : profiles.length === 0 ? (
               <EmptyState
-                title="Aucun profil ne correspond à vos critères"
-                description="Essayez une autre catégorie, effacez vos filtres ou réinitialisez les données locales pour revoir tous les profils de démonstration."
+                title="Aucun profil disponible"
+                description="Essayez une autre catégorie, élargissez vos filtres ou réinitialisez vos interactions."
                 actionLabel="Effacer les filtres"
                 onAction={() => {
                   setSearchQuery('');
@@ -528,31 +670,27 @@ function App() {
               />
             ) : (
               <div className="discover-grid">
-                {visibleProfiles.slice(0, 6).map((person) => (
+                {profiles.map((person) => (
                   <article key={person.id} className="profile-card">
                     <Avatar className="profile-avatar" src={person.avatar} alt={person.name} fallback={person.name} />
                     <div className="profile-card-body">
                       <div className="identity-row">
                         <div>
-                          <h3>{person.name}, {person.age}</h3>
-                          <p className="city-line">📍 {person.city}</p>
+                          <h3>{person.name}, {person.age ?? '18+'}</h3>
+                          <p className="city-line">📍 {person.city || 'Ville non précisée'}</p>
                         </div>
                         <span className="tag">{getModeById(person.mode).label}</span>
                       </div>
-                      <p>{person.bio}</p>
+                      <p>{person.bio || 'Profil en cours de complétion.'}</p>
                       <div className="interest-row">
-                        {person.interests.map((item) => (
+                        {(person.interests.length ? person.interests : ['profil']).map((item) => (
                           <span key={`${person.id}-${item}`}>{item}</span>
                         ))}
                       </div>
                     </div>
                     <div className="card-actions">
-                      <button type="button" className="pass-button" aria-label={`Passer le profil de ${person.name}`} onClick={() => handlePass(person.id)}>
-                        Pass
-                      </button>
-                      <button type="button" className="like-button" aria-label={`Liker le profil de ${person.name}`} onClick={() => handleLike(person.id)}>
-                        Like
-                      </button>
+                      <button type="button" className="pass-button" onClick={() => handlePass(person.id)}>Pass</button>
+                      <button type="button" className="like-button" onClick={() => handleLike(person.id)}>Like</button>
                     </div>
                   </article>
                 ))}
@@ -566,16 +704,13 @@ function App() {
             <SectionHeader
               eyebrow="Matchs"
               title="Vos correspondances"
-              description="Chaque match reste local à ce navigateur. Utilisez la messagerie de démonstration pour visualiser l’expérience conversationnelle."
+              description="Les matchs sont persistés dans SQLite et peuvent être retrouvés après redémarrage du serveur."
             />
 
-            {matches.length === 0 ? (
-              <EmptyState
-                title="Aucun match pour l’instant"
-                description="Complétez votre profil puis likez des profils compatibles pour déclencher des correspondances locales."
-                actionLabel="Compléter mon profil"
-                onAction={() => setCurrentView('profile')}
-              />
+            {dashboardLoading ? (
+              <EmptyState title="Chargement des matchs" description="Lecture des correspondances depuis la base de données." />
+            ) : matches.length === 0 ? (
+              <EmptyState title="Aucun match pour l’instant" description="Commencez par liker des profils pour créer vos premières connexions." actionLabel="Voir la découverte" onAction={() => setCurrentView('discover')} />
             ) : (
               <div className="matches-list">
                 {matches.map((match) => (
@@ -583,10 +718,14 @@ function App() {
                     <Avatar className="match-avatar" src={match.avatar} alt={match.name} fallback={match.name} />
                     <div className="match-copy">
                       <h3>{match.name}</h3>
-                      <p>{match.city} · {getModeById(match.mode).label}</p>
+                      <p>{match.city || 'Ville non précisée'} · {getModeById(match.mode).label}</p>
                       <small>{match.reason}</small>
                     </div>
-                    <button type="button" className="secondary-button" onClick={() => handleOpenMatch(match)}>
+                    <button type="button" className="secondary-button" onClick={() => {
+                      const conversation = conversations.find((item) => item.profileId === match.profileId);
+                      setSelectedConversation(conversation?.id ?? null);
+                      setCurrentView('messages');
+                    }}>
                       Ouvrir la messagerie
                     </button>
                   </article>
@@ -599,22 +738,15 @@ function App() {
         {view === 'messages' && (
           <section className="messages-layout">
             <aside className="content-panel conversation-panel">
-              <SectionHeader
-                eyebrow="Messages"
-                title="Conversations"
-                description="Sélectionnez un échange pour consulter l’historique local ou envoyer un nouveau message avec la touche Entrée."
-              />
+              <SectionHeader eyebrow="Messages" title="Conversations" description="Historique persistant avec envoi par Entrée." />
 
-              {messages.length === 0 ? (
-                <EmptyState
-                  title="Aucune conversation"
-                  description="Créez d’abord un match local pour déverrouiller la messagerie de démonstration."
-                  actionLabel="Voir les profils"
-                  onAction={() => setCurrentView('discover')}
-                />
+              {dashboardLoading ? (
+                <EmptyState title="Chargement des conversations" description="Récupération de vos messages depuis le serveur." />
+              ) : conversations.length === 0 ? (
+                <EmptyState title="Aucune conversation" description="Un match backend ouvre automatiquement un canal de discussion." actionLabel="Trouver un match" onAction={() => setCurrentView('discover')} />
               ) : (
                 <div className="conversation-list">
-                  {messages.map((conversation) => (
+                  {conversations.map((conversation) => (
                     <button
                       key={conversation.id}
                       type="button"
@@ -654,7 +786,7 @@ function App() {
                   <div className="composer">
                     <input
                       type="text"
-                      placeholder="Écrire un message local…"
+                      placeholder="Écrire un message persistant…"
                       value={draftMessage}
                       onChange={(event) => setDraftMessage(event.target.value)}
                       onKeyDown={(event) => {
@@ -664,16 +796,13 @@ function App() {
                         }
                       }}
                     />
-                    <button type="button" className="primary-button" onClick={handleSendMessage} disabled={!draftMessage.trim()}>
-                      Envoyer
+                    <button type="button" className="primary-button" disabled={messageSending || !draftMessage.trim()} onClick={handleSendMessage}>
+                      {messageSending ? 'Envoi…' : 'Envoyer'}
                     </button>
                   </div>
                 </div>
               ) : (
-                <EmptyState
-                  title="Sélectionnez une conversation"
-                  description="Choisissez un échange dans la colonne de gauche pour afficher les messages du prototype local."
-                />
+                <EmptyState title="Sélectionnez une conversation" description="Choisissez un échange pour afficher les messages stockés en base." />
               )}
             </div>
           </section>
@@ -681,99 +810,51 @@ function App() {
 
         {view === 'profile' && (
           <section className="content-panel profile-panel">
-            <SectionHeader
-              eyebrow="Profil"
-              title="Complétez votre profil"
-              description="La validation est locale et accessible. Vos centres d’intérêt sont normalisés automatiquement pour améliorer le matching du prototype."
-            />
+            <SectionHeader eyebrow="Profil" title="Complétez votre profil" description="Les mises à jour sont validées puis synchronisées vers le backend." />
 
             <div className="profile-layout">
               <form className="profile-form" onSubmit={handleProfileSave} noValidate>
-                {Object.keys(profileErrors).length ? (
-                  <div className="form-alert" role="alert">
-                    Merci de corriger les champs indiqués avant l’enregistrement.
-                  </div>
-                ) : null}
+                {Object.keys(profileErrors).length ? <div className="form-alert" role="alert">Corrigez les champs signalés avant de sauvegarder.</div> : null}
 
                 <div className="form-grid">
                   <label>
                     <span>Prénom</span>
-                    <input
-                      name="name"
-                      value={profileDraft.name}
-                      onChange={(event) => updateProfileField('name', event.target.value)}
-                      placeholder="Sofia"
-                      aria-invalid={Boolean(profileErrors.name)}
-                    />
+                    <input value={profileDraft.name} onChange={(event) => updateProfileField('name', event.target.value)} aria-invalid={Boolean(profileErrors.name)} />
                     {profileErrors.name ? <small className="field-error">{profileErrors.name}</small> : null}
                   </label>
                   <label>
                     <span>Âge</span>
-                    <input
-                      name="age"
-                      type="number"
-                      min="18"
-                      max="80"
-                      value={profileDraft.age}
-                      onChange={(event) => updateProfileField('age', event.target.value)}
-                      aria-invalid={Boolean(profileErrors.age)}
-                    />
+                    <input type="number" min="18" max="80" value={profileDraft.age ?? ''} onChange={(event) => updateProfileField('age', event.target.value)} aria-invalid={Boolean(profileErrors.age)} />
                     {profileErrors.age ? <small className="field-error">{profileErrors.age}</small> : null}
                   </label>
                   <label>
                     <span>Ville</span>
-                    <input
-                      name="city"
-                      value={profileDraft.city}
-                      onChange={(event) => updateProfileField('city', event.target.value)}
-                      placeholder="Paris"
-                      aria-invalid={Boolean(profileErrors.city)}
-                    />
+                    <input value={profileDraft.city} onChange={(event) => updateProfileField('city', event.target.value)} aria-invalid={Boolean(profileErrors.city)} />
                     {profileErrors.city ? <small className="field-error">{profileErrors.city}</small> : null}
                   </label>
                   <label>
                     <span>Catégorie principale</span>
-                    <select
-                      name="mode"
-                      value={profileDraft.mode}
-                      onChange={(event) => updateProfileField('mode', event.target.value)}
-                    >
-                      {MODES.map((mode) => (
-                        <option key={mode.id} value={mode.id}>{mode.label}</option>
-                      ))}
+                    <select value={profileDraft.mode} onChange={(event) => updateProfileField('mode', event.target.value)}>
+                      {MODES.map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
                     </select>
                   </label>
                 </div>
 
                 <label>
                   <span>Avatar URL</span>
-                  <input
-                    name="avatar"
-                    value={profileDraft.avatar}
-                    onChange={(event) => updateProfileField('avatar', event.target.value)}
-                    placeholder="https://..."
-                    aria-invalid={Boolean(profileErrors.avatar)}
-                  />
+                  <input value={profileDraft.avatar} onChange={(event) => updateProfileField('avatar', event.target.value)} aria-invalid={Boolean(profileErrors.avatar)} />
                   {profileErrors.avatar ? <small className="field-error">{profileErrors.avatar}</small> : null}
                 </label>
 
                 <label>
                   <span>Bio</span>
-                  <textarea
-                    name="bio"
-                    rows="5"
-                    value={profileDraft.bio}
-                    onChange={(event) => updateProfileField('bio', event.target.value)}
-                    placeholder="Décrivez votre personnalité, vos attentes et l’énergie que vous souhaitez créer."
-                    aria-invalid={Boolean(profileErrors.bio)}
-                  />
+                  <textarea rows="5" value={profileDraft.bio} onChange={(event) => updateProfileField('bio', event.target.value)} aria-invalid={Boolean(profileErrors.bio)} />
                   {profileErrors.bio ? <small className="field-error">{profileErrors.bio}</small> : null}
                 </label>
 
                 <label>
                   <span>Centres d’intérêt</span>
                   <input
-                    name="interests"
                     value={profileDraft.interests}
                     onChange={(event) => updateProfileField('interests', event.target.value)}
                     onBlur={(event) => updateProfileField('interests', serializeInterests(event.target.value))}
@@ -782,7 +863,9 @@ function App() {
                 </label>
 
                 <div className="form-actions">
-                  <button type="submit" className="primary-button">Sauvegarder le profil</button>
+                  <button type="submit" className="primary-button" disabled={profileSaving}>
+                    {profileSaving ? 'Synchronisation…' : 'Sauvegarder le profil'}
+                  </button>
                 </div>
               </form>
 
@@ -792,7 +875,7 @@ function App() {
                 <h3>{profileDraft.name || 'Votre prénom'}</h3>
                 <p>{profileDraft.city || 'Ville'} · {profileDraft.age || '18+'} ans</p>
                 <span className="tag">{getModeById(profileDraft.mode).label}</span>
-                <p className="profile-preview-bio">{profileDraft.bio || 'Votre bio apparaîtra ici une fois renseignée.'}</p>
+                <p className="profile-preview-bio">{profileDraft.bio || 'Votre bio apparaîtra ici une fois complétée.'}</p>
                 <div className="interest-row">
                   {(profileDraft.interests ? profileDraft.interests.split(',').map((item) => item.trim()).filter(Boolean) : ['Ajoutez vos centres d’intérêt']).map((item) => (
                     <span key={item}>{item}</span>

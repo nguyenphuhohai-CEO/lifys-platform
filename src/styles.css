@@ -243,6 +243,10 @@ textarea:focus-visible {
   padding: 30px;
 }
 
+.auth-hero {
+  align-items: stretch;
+}
+
 .hero-copy {
   display: flex;
   flex-direction: column;
@@ -432,6 +436,10 @@ textarea:focus-visible {
 }
 
 .content-panel {
+  padding: 28px;
+}
+
+.auth-card {
   padding: 28px;
 }
 
@@ -818,6 +826,10 @@ textarea:focus-visible {
 
 .loading-panel {
   max-width: 760px;
+}
+
+.auth-card .panel-header {
+  margin-bottom: 18px;
 }
 
 .toast-region {

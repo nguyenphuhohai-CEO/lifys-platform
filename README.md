@@ -1,160 +1,239 @@
 # Lifys Platform
 
-Lifys est un MVP front-end local construit avec React + Vite pour démontrer une expérience de rencontres multi-catégories, premium et responsive. L’application couvre cinq univers : **Amical**, **Amoureux**, **Sans lendemain**, **Mariage** et **Professionnel**.
+Lifys est désormais un **MVP full-stack léger** pour une plateforme de rencontres multi-catégories.  
+Le frontend reste en **React + Vite**, et le déploiement repose maintenant sur un **backend Express**, une **base SQLite réelle** et une **authentification JWT**.
 
-> ⚠️ **Important**  
-> Ce dépôt ne contient **ni backend réel**, **ni authentification**, **ni paiement**, **ni vérification d’identité**, **ni base de données distante**, **ni messagerie temps réel**. Les profils, matchs et messages sont **fictifs**, **simulés** et stockés **uniquement dans le navigateur** via `localStorage`.
+Catégories disponibles :
+
+- Amical
+- Amoureux
+- Sans lendemain
+- Mariage
+- Professionnel
 
 ## Aperçu
 
-Le prototype fournit :
+Le dépôt livre :
 
-- une landing page professionnelle et chaleureuse ;
-- une navigation responsive desktop / tablette / mobile ;
-- un sélecteur de catégorie pour les cinq usages Lifys ;
-- une découverte de profils avec recherche texte, filtre par ville et compteur ;
-- des cartes profil avec like / pass, avatar fallback et intérêts formatés ;
-- des matchs simulés avec ouverture directe de la messagerie ;
-- une messagerie locale plus lisible avec sélection de conversation et envoi via `Enter` ;
-- un profil éditable avec validation accessible ;
-- une réinitialisation complète du prototype local ;
-- une récupération sécurisée des données corrompues dans `localStorage`.
+- une landing page premium et responsive ;
+- une navigation desktop / tablette / mobile ;
+- une authentification e-mail / mot de passe ;
+- un profil utilisateur persistant en base ;
+- une découverte de profils alimentée par API ;
+- des likes / passes stockés côté serveur ;
+- des matchs persistés ;
+- une messagerie persistante ;
+- une réinitialisation de l’espace de démonstration ;
+- un fallback robuste pour les quelques données encore stockées dans `localStorage` côté client (jeton/session).
 
 ## Stack
 
+### Frontend
+
 - React 18
 - Vite 5
-- JavaScript ES Modules
 - CSS personnalisé
-- Tests unitaires Node (`node --test`) sur les utilitaires métier/stockage
+
+### Backend
+
+- Node.js
+- Express 5
+- SQLite via `better-sqlite3`
+- `bcryptjs` pour le hash des mots de passe
+- `jsonwebtoken` pour les sessions JWT
+
+### Tests
+
+- `node --test`
 
 ## Installation
 
 ```bash
 npm install
+cp .env.example .env
+```
+
+## Variables d’environnement
+
+```env
+PORT=3001
+DATABASE_FILE=./data/lifys.sqlite
+JWT_SECRET=change-me-in-production
+JWT_EXPIRES_IN=7d
+NODE_ENV=development
 ```
 
 ## Scripts
 
 ```bash
-npm run dev -- --host
+# frontend Vite
+npm run dev
+
+# backend Express
+npm run dev:server
+
+# build frontend
 npm run build
-npm run preview
+
+# lancer le serveur backend (et servir dist si build présent)
+npm start
+
+# tests ciblés
 npm test
 ```
 
-## Fonctionnalités MVP
+## Fonctionnalités implémentées
 
-### Landing page & navigation
+### Authentification
 
-- Hero premium avec mise en avant des catégories
-- Navigation sticky
-- Menu mobile dédié
-- États hover / focus / active
-- Respect de `prefers-reduced-motion`
-
-### Découverte
-
-- Filtres par catégorie
-- Recherche texte
-- Filtre par ville
-- Compteur de profils visibles / traités
-- Like / Pass accessibles
-- États vides
-- Persistance locale des likes et passes
-
-### Matchs
-
-- Génération de matchs simulés selon :
-  - la catégorie principale
-  - la ville
-  - les centres d’intérêt communs
-- Présentation professionnelle
-- Action directe vers la messagerie locale
-
-### Messages
-
-- Liste de conversations
-- Sélection d’une conversation
-- État vide
-- Envoi avec `Enter`
-- Persistance locale
+- création de compte ;
+- connexion ;
+- session JWT persistée localement côté navigateur ;
+- routes backend protégées.
 
 ### Profil
 
-- Validation accessible (nom, âge, ville, bio, URL d’avatar)
-- Aperçu en direct
-- Avatar fallback
-- Centres d’intérêt normalisés automatiquement
+- édition avec validation accessible ;
+- avatar fallback ;
+- normalisation des centres d’intérêt ;
+- sauvegarde SQLite.
 
-### Stockage local
+### Découverte
 
-- Lecture JSON sécurisée avec fallback
-- Suppression automatique des données corrompues
-- Réinitialisation complète du prototype local
+- filtres par catégorie ;
+- recherche texte ;
+- filtre par ville ;
+- exclusion des profils déjà likés ou passés ;
+- alimentation par API backend.
+
+### Matchs
+
+- création de correspondances persistées ;
+- logique de matching légère basée sur :
+  - like mutuel ;
+  - catégorie commune ;
+  - ville commune ;
+  - centres d’intérêt communs ;
+  - profils démo pour conserver l’expérience MVP.
+
+### Messages
+
+- conversations persistées en base ;
+- envoi avec `Enter` ;
+- récupération après redémarrage du serveur.
 
 ## Architecture
 
 ```text
+server/
+  app.js              # routes API + middleware
+  auth.js             # validation auth, hash, JWT
+  config.js           # configuration environnement
+  db.js               # schéma SQLite, seed, accès données
+  index.js            # démarrage HTTP
+  app.test.js         # test d’intégration backend
+
 src/
-  App.jsx                    # orchestration UI + états
+  App.jsx             # UI principale connectée à l’API
   components/
-    Avatar.jsx              # avatar avec fallback
-    ToastRegion.jsx         # notifications non bloquantes
+    Avatar.jsx
+    ToastRegion.jsx
   data/
-    demoData.js             # modes, profils et conversations fictives
+    demoData.js       # profils/catégories de démonstration
+  lib/
+    api.js            # client fetch API
   utils/
-    app-utils.js            # filtrage, matching, sanitation
-    storage.js              # accès localStorage robustes
-    app-utils.test.js       # tests ciblés Node
-  styles.css                # design system + responsive
+    app-utils.js
+    app-utils.test.js
+    storage.js        # persistance locale robuste du jeton
+  styles.css
 ```
 
-## Limites du MVP local
+## Déploiement
 
-- aucune authentification réelle ;
-- aucune protection serveur ;
-- aucune synchronisation multi-appareils ;
-- aucune persistance distante ;
-- aucun chiffrement applicatif des données du navigateur ;
-- aucune modération ou vérification des profils ;
-- aucune promesse de disponibilité hors du navigateur courant.
+Le dépôt inclut :
+
+- `Dockerfile`
+- `.dockerignore`
+- backend capable de servir les fichiers statiques `dist/` après build
+
+### Déploiement simple
+
+```bash
+npm install
+npm run build
+npm start
+```
+
+### Déploiement Docker
+
+```bash
+docker build -t lifys-platform .
+docker run -p 3001:3001 \
+  -e JWT_SECRET=un-secret-fort \
+  -e DATABASE_FILE=/app/data/lifys.sqlite \
+  lifys-platform
+```
+
+## Limites actuelles
+
+Ce MVP reste volontairement limité :
+
+- pas de paiement ;
+- pas de vérification d’identité ;
+- pas de temps réel WebSocket ;
+- pas de modération ;
+- pas de rôles admin ;
+- SQLite adapté au MVP, pas à une très forte montée en charge ;
+- les profils de découverte restent des profils fictifs de démonstration.
 
 ## Roadmap recommandée
 
 ### Backend
 
-- API sécurisée pour profils, likes, matchs et conversations
-- persistance côté serveur
-- gestion de sessions
+- séparation services / repositories ;
+- rate limiting ;
+- validation centralisée ;
+- journalisation structurée.
 
-### Authentification
+### Auth
 
-- inscription / connexion
-- gestion des rôles et sessions
-- récupération de mot de passe
+- rotation / révocation des tokens ;
+- reset mot de passe ;
+- e-mail de vérification ;
+- sessions multiples.
 
 ### Base de données
 
-- stockage utilisateurs/profils/messages
-- contraintes d’intégrité
-- migrations et historique
+- migration vers PostgreSQL ;
+- migrations versionnées ;
+- index avancés ;
+- audit trail.
 
-### WebSocket / temps réel
+### Temps réel
 
-- notifications de nouveaux messages
-- statut en ligne
-- conversations temps réel
+- WebSocket ;
+- indicateur de présence ;
+- notifications push ;
+- lecture/non-lu.
 
 ## Avertissement sécurité
 
-Ce MVP est volontairement local et démonstratif. **Ne pas** le présenter comme une plateforme réelle de rencontres ou de paiement. **Ne pas** y stocker de données personnelles sensibles, mots de passe, documents officiels, secrets API ou informations réglementées.
+Même avec backend réel, ce projet reste un MVP.  
+Ne pas y stocker de données sensibles réelles sans :
 
-## Vérifications effectuées
+- secret JWT fort ;
+- HTTPS ;
+- sauvegardes ;
+- politique de rotation des secrets ;
+- validation/limitation de débit ;
+- conformité légale adaptée à un produit de rencontre réel.
 
-Les vérifications attendues pour la pull request sont :
+## Vérifications
+
+À documenter dans la pull request :
 
 - `npm test`
 - `npm run build`
-- scan des fichiers modifiés pour éviter l’ajout de secrets
-
+- scan des secrets sur les fichiers modifiés
+- test manuel du backend et du frontend connecté
