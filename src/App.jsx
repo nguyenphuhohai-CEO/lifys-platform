@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Header from './components/Header';
 import HomeView from './components/HomeView';
 import DiscoverView from './components/DiscoverView';
@@ -22,22 +22,20 @@ import {
 import { resetPrototypeStorage, safeReadJSON, writeJSON } from './lib/storage';
 
 function App() {
-  const initialProfile = useMemo(() => safeReadJSON(STORAGE_KEYS.profile, defaultProfile, isValidProfileShape), []);
-  const initialMessages = useMemo(() => safeReadJSON(STORAGE_KEYS.messages, DEFAULT_MESSAGES, isValidMessageList), []);
   const [view, setView] = useState('home');
   const [activeMode, setActiveMode] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [cityFilter, setCityFilter] = useState('');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-  const [profile, setProfile] = useState(initialProfile);
-  const [profileDraft, setProfileDraft] = useState(initialProfile);
+  const [profile, setProfile] = useState(() => safeReadJSON(STORAGE_KEYS.profile, defaultProfile, isValidProfileShape));
+  const [profileDraft, setProfileDraft] = useState(profile);
   const [profileErrors, setProfileErrors] = useState({});
   const [likes, setLikes] = useState(() => safeReadJSON(STORAGE_KEYS.likes, [], isStringArray));
   const [passed, setPassed] = useState(() => safeReadJSON(STORAGE_KEYS.passed, [], isStringArray));
   const [matches, setMatches] = useState(() => safeReadJSON(STORAGE_KEYS.matches, [], isValidMatchList));
-  const [messages, setMessages] = useState(initialMessages);
+  const [messages, setMessages] = useState(() => safeReadJSON(STORAGE_KEYS.messages, DEFAULT_MESSAGES, isValidMessageList));
   const [draftMessage, setDraftMessage] = useState('');
-  const [selectedConversation, setSelectedConversation] = useState(initialMessages[0]?.id || null);
+  const [selectedConversation, setSelectedConversation] = useState(messages[0]?.id || null);
   const [toasts, setToasts] = useState([]);
   const toastTimeoutsRef = useRef(new Map());
 

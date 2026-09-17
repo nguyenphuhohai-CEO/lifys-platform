@@ -573,6 +573,7 @@ button:disabled {
   padding: 7px 10px;
   min-width: fit-content;
   color: var(--tag-accent);
+  background: rgba(91, 124, 250, 0.12);
   background: color-mix(in srgb, var(--tag-accent) 13%, white);
   font-size: 0.76rem;
   font-weight: 800;
