@@ -39,11 +39,18 @@ const STORAGE_RECOVERY_LABELS = {
   profile: 'profil',
   likes: 'likes',
   passed: 'passes',
-  matches: 'matchs',
+  matches: 'correspondances',
   messages: 'messages',
 };
 
 const PERSISTENCE_ERROR_MESSAGE = 'Le navigateur n’a pas pu enregistrer les dernières données locales. Elles restent visibles pendant cette session uniquement.';
+
+function createProfileDraft(profileValue) {
+  return {
+    ...profileValue,
+    interests: serializeInterests(profileValue.interests),
+  };
+}
 
 function createInitialLocalState() {
   return loadInitialState({
@@ -87,10 +94,7 @@ function App() {
   const [view, setView] = useState('home');
   const [activeMode, setActiveMode] = useState('all');
   const [profile, setProfile] = useState(bootstrappedState.profile);
-  const [profileDraft, setProfileDraft] = useState({
-    ...bootstrappedState.profile,
-    interests: serializeInterests(bootstrappedState.profile.interests),
-  });
+  const [profileDraft, setProfileDraft] = useState(createProfileDraft(bootstrappedState.profile));
   const [profileErrors, setProfileErrors] = useState({});
   const [likes, setLikes] = useState(bootstrappedState.likes);
   const [passed, setPassed] = useState(bootstrappedState.passed);
@@ -270,10 +274,7 @@ function App() {
     try {
       const nextProfile = sanitizeProfile(profileDraft);
       setProfile(nextProfile);
-      setProfileDraft({
-        ...nextProfile,
-        interests: serializeInterests(nextProfile.interests),
-      });
+      setProfileDraft(createProfileDraft(nextProfile));
       setProfileErrors({});
       setView('discover');
       setPageError('');
@@ -368,7 +369,7 @@ function App() {
       const defaultConversations = sanitizeConversations(DEFAULT_MESSAGES);
 
       setProfile(defaultProfile);
-      setProfileDraft(defaultProfile);
+      setProfileDraft(createProfileDraft(defaultProfile));
       setProfileErrors({});
       setLikes([]);
       setPassed([]);
@@ -438,7 +439,7 @@ function App() {
               type="button"
               className={view === item.id ? 'nav-button active' : 'nav-button'}
               onClick={() => setCurrentView(item.id)}
-              aria-pressed={view === item.id}
+              aria-current={view === item.id ? 'page' : undefined}
             >
               {item.label}
             </button>
@@ -532,7 +533,7 @@ function App() {
                     setActiveMode(mode.id);
                     setCurrentView('discover');
                   }}
-                  aria-pressed={activeMode === mode.id}
+                  aria-current={activeMode === mode.id ? 'true' : undefined}
                 >
                   <span className="mode-icon" style={{ '--mode-accent': mode.accent }}>{mode.icon}</span>
                   <strong>{mode.label}</strong>
@@ -559,14 +560,14 @@ function App() {
 
             <div className="discover-toolbar">
               <div className="mode-pills" aria-label="Filtre par catégorie">
-                <button type="button" className={activeMode === 'all' ? 'pill active' : 'pill'} onClick={() => setActiveMode('all')} aria-pressed={activeMode === 'all'}>Tous</button>
+                <button type="button" className={activeMode === 'all' ? 'pill active' : 'pill'} onClick={() => setActiveMode('all')} aria-current={activeMode === 'all' ? 'true' : undefined}>Tous</button>
                 {MODES.map((mode) => (
                   <button
                     type="button"
                     key={mode.id}
                     className={activeMode === mode.id ? 'pill active' : 'pill'}
                     onClick={() => setActiveMode(mode.id)}
-                    aria-pressed={activeMode === mode.id}
+                    aria-current={activeMode === mode.id ? 'true' : undefined}
                   >
                     {mode.label}
                   </button>
@@ -679,7 +680,7 @@ function App() {
                       type="button"
                       className={selectedConversation === conversation.id ? 'conversation-item active' : 'conversation-item'}
                       onClick={() => setSelectedConversation(conversation.id)}
-                      aria-pressed={selectedConversation === conversation.id}
+                      aria-current={selectedConversation === conversation.id ? 'true' : undefined}
                     >
                       <Avatar className="conversation-avatar" src={conversation.avatar} alt={conversation.name} fallback={conversation.name} />
                       <div>
