@@ -206,6 +206,10 @@ function App() {
     query: searchQuery,
     city: cityQuery,
   }), [activeMode, cityQuery, likes, passed, profile.mode, searchQuery]);
+  const hasUnsavedProfileChanges = useMemo(
+    () => JSON.stringify(sanitizeProfile(profileDraft)) !== JSON.stringify(profile),
+    [profile, profileDraft],
+  );
   const completedProfile = Boolean(profile.name && profile.age && profile.city && profile.bio.trim().length >= 20);
   const hasActiveFilters = Boolean(searchQuery.trim() || cityQuery.trim() || activeMode !== 'all');
 
@@ -367,9 +371,10 @@ function App() {
     try {
       const storageReset = resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS);
       const defaultConversations = sanitizeConversations(DEFAULT_MESSAGES);
+      const resetProfile = sanitizeProfile(defaultProfile);
 
-      setProfile(defaultProfile);
-      setProfileDraft(createProfileDraft(defaultProfile));
+      setProfile(resetProfile);
+      setProfileDraft(createProfileDraft(resetProfile));
       setProfileErrors({});
       setLikes([]);
       setPassed([]);
@@ -558,6 +563,7 @@ function App() {
               aside={(
                 <div className="header-meta">
                   <span className="counter-badge" role="status">{filteredProfiles.length} profil{filteredProfiles.length > 1 ? 's' : ''}</span>
+                  {hasUnsavedProfileChanges ? <span className="counter-badge muted">Sauvegardez le profil pour liker</span> : null}
                   {hasActiveFilters ? <button type="button" className="secondary-button" onClick={clearFilters}>Effacer les filtres</button> : null}
                 </div>
               )}
@@ -635,8 +641,24 @@ function App() {
                       </div>
                     </div>
                     <div className="card-actions">
-                      <button type="button" className="pass-button" onClick={() => handlePass(person.id)} aria-label={`Passer le profil de ${person.name}`}>Pass</button>
-                      <button type="button" className="like-button" onClick={() => handleLike(person.id)} aria-label={`Liker le profil de ${person.name}`}>Like</button>
+                      <button
+                        type="button"
+                        className="pass-button"
+                        onClick={() => handlePass(person.id)}
+                        aria-label={`Passer le profil de ${person.name}`}
+                        disabled={hasUnsavedProfileChanges}
+                      >
+                        Pass
+                      </button>
+                      <button
+                        type="button"
+                        className="like-button"
+                        onClick={() => handleLike(person.id)}
+                        aria-label={`Liker le profil de ${person.name}`}
+                        disabled={hasUnsavedProfileChanges}
+                      >
+                        Like
+                      </button>
                     </div>
                   </article>
                 ))}

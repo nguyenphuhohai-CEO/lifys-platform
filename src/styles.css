@@ -367,6 +367,14 @@ textarea:focus-visible {
   box-shadow: none;
 }
 
+.secondary-button:disabled,
+.pass-button:disabled,
+.like-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 .secondary-button {
   background: rgba(255, 255, 255, 0.9);
   border-color: var(--line);
