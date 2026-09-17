@@ -119,3 +119,112 @@ test('register, update profile, like demo profile and send message', async () =>
     await server.close();
   }
 });
+
+test('discovery hides private identifiers and reset keeps real-user matches intact', async () => {
+  const server = await startTestServer();
+
+  try {
+    const registerA = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'a@example.com',
+        password: 'supersecret',
+        name: 'Ava',
+      }),
+    });
+    const registerB = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'b@example.com',
+        password: 'supersecret',
+        name: 'Noah',
+      }),
+    });
+
+    const authA = { authorization: 'Bearer ' + registerA.body.token };
+    const authB = { authorization: 'Bearer ' + registerB.body.token };
+
+    await request(server.baseUrl, '/api/profile', {
+      method: 'PUT',
+      headers: authA,
+      body: JSON.stringify({
+        name: 'Ava',
+        age: 30,
+        city: 'Paris',
+        bio: 'Profil complet pour valider la persistance et la sécurité du MVP.',
+        interests: ['design'],
+        mode: 'professionnel',
+        avatar: '',
+      }),
+    });
+    const profileB = await request(server.baseUrl, '/api/profile', {
+      method: 'PUT',
+      headers: authB,
+      body: JSON.stringify({
+        name: 'Noah',
+        age: 31,
+        city: 'Paris',
+        bio: 'Second profil complet pour vérifier les matchs entre comptes réels.',
+        interests: ['design'],
+        mode: 'professionnel',
+        avatar: '',
+      }),
+    });
+
+    const discoveryA = await request(server.baseUrl, '/api/discovery?mode=professionnel', {
+      headers: authA,
+    });
+
+    const discoveredRealProfile = discoveryA.body.profiles.find((profile) => profile.name === 'Noah');
+    assert.ok(discoveredRealProfile);
+    assert.equal('email' in discoveredRealProfile, false);
+    assert.equal('userId' in discoveredRealProfile, false);
+    assert.equal('userPublicId' in discoveredRealProfile, false);
+
+    await request(server.baseUrl, '/api/interactions/like', {
+      method: 'POST',
+      headers: authA,
+      body: JSON.stringify({ profileId: profileB.body.profile.id }),
+    });
+
+    const matchesBeforeReset = await request(server.baseUrl, '/api/matches', { headers: authA });
+    assert.equal(matchesBeforeReset.body.matches.length, 1);
+
+    await request(server.baseUrl, '/api/prototype/reset', {
+      method: 'POST',
+      headers: authA,
+    });
+
+    const matchesAfterReset = await request(server.baseUrl, '/api/matches', { headers: authA });
+    assert.equal(matchesAfterReset.body.matches.length, 1);
+  } finally {
+    await server.close();
+  }
+});
+
+test('login with missing password returns 401 instead of leaking an internal error', async () => {
+  const server = await startTestServer();
+
+  try {
+    await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'login-check@example.com',
+        password: 'supersecret',
+        name: 'Login Check',
+      }),
+    });
+
+    const response = await request(server.baseUrl, '/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'login-check@example.com',
+      }),
+    });
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.error, 'Identifiants invalides.');
+  } finally {
+    await server.close();
+  }
+});

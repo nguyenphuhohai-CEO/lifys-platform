@@ -113,7 +113,7 @@ export function createApp(config) {
       const password = req.body.password;
       const user = database.getUserByEmail(email);
 
-      if (!user || !comparePassword(password, user.password_hash)) {
+      if (typeof password !== 'string' || !password || !user || !comparePassword(password, user.password_hash)) {
         throw createHttpError(401, 'Identifiants invalides.');
       }
 

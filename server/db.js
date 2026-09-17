@@ -73,6 +73,20 @@ function serializeProfile(row) {
   };
 }
 
+function serializePublicProfile(row) {
+  return {
+    id: row.public_id,
+    name: row.name,
+    age: row.age,
+    city: row.city,
+    bio: row.bio,
+    interests: parseInterests(row.interests),
+    mode: row.mode,
+    avatar: row.avatar,
+    isDemo: Boolean(row.is_demo),
+  };
+}
+
 function serializeMatch(row) {
   return {
     id: row.match_public_id,
@@ -305,6 +319,46 @@ export function createDatabase(databaseFile) {
     deleteMatchesForUser: db.prepare(`DELETE FROM matches WHERE user_one_id = ? OR user_two_id = ?`),
     deleteLikesForUser: db.prepare(`DELETE FROM likes WHERE user_id = ?`),
     deletePassesForUser: db.prepare(`DELETE FROM passes WHERE user_id = ?`),
+    deleteDemoMessagesForUser: db.prepare(`
+      DELETE FROM messages
+      WHERE conversation_id IN (
+        SELECT conversations.id
+        FROM conversations
+        JOIN matches ON matches.id = conversations.match_id
+        JOIN users AS other_user ON other_user.id = CASE
+          WHEN matches.user_one_id = @user_id THEN matches.user_two_id
+          ELSE matches.user_one_id
+        END
+        WHERE (matches.user_one_id = @user_id OR matches.user_two_id = @user_id)
+          AND other_user.is_demo = 1
+      )
+    `),
+    deleteDemoConversationsForUser: db.prepare(`
+      DELETE FROM conversations
+      WHERE match_id IN (
+        SELECT matches.id
+        FROM matches
+        JOIN users AS other_user ON other_user.id = CASE
+          WHEN matches.user_one_id = @user_id THEN matches.user_two_id
+          ELSE matches.user_one_id
+        END
+        WHERE (matches.user_one_id = @user_id OR matches.user_two_id = @user_id)
+          AND other_user.is_demo = 1
+      )
+    `),
+    deleteDemoMatchesForUser: db.prepare(`
+      DELETE FROM matches
+      WHERE id IN (
+        SELECT matches.id
+        FROM matches
+        JOIN users AS other_user ON other_user.id = CASE
+          WHEN matches.user_one_id = @user_id THEN matches.user_two_id
+          ELSE matches.user_one_id
+        END
+        WHERE (matches.user_one_id = @user_id OR matches.user_two_id = @user_id)
+          AND other_user.is_demo = 1
+      )
+    `),
   };
 
   seedDemoData(db, statements);
@@ -376,8 +430,8 @@ export function createDatabase(databaseFile) {
     const city = `${filters.city ?? ''}`.trim().toLowerCase();
 
     return statements.listProfilesExcludingUser.all(userId)
-      .map(serializeProfile)
-      .filter((profile) => !hiddenUserIds.has(profile.userId))
+      .filter((row) => !hiddenUserIds.has(row.user_id))
+      .map(serializePublicProfile)
       .filter((profile) => activeMode === 'all' || profile.mode === activeMode)
       .filter((profile) => !city || profile.city.toLowerCase().includes(city))
       .filter((profile) => {
@@ -502,9 +556,9 @@ export function createDatabase(databaseFile) {
   }
 
   const resetUserData = db.transaction((userId) => {
-    statements.deleteMessagesForUser.run(userId, userId);
-    statements.deleteConversationsForUser.run(userId, userId);
-    statements.deleteMatchesForUser.run(userId, userId);
+    statements.deleteDemoMessagesForUser.run({ user_id: userId });
+    statements.deleteDemoConversationsForUser.run({ user_id: userId });
+    statements.deleteDemoMatchesForUser.run({ user_id: userId });
     statements.deleteLikesForUser.run(userId);
     statements.deletePassesForUser.run(userId);
     statements.updateProfile.run({
