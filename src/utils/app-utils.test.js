@@ -5,8 +5,11 @@ import { defaultProfile, DEMO_PROFILES } from '../data/demoData.js';
 import {
   createMatch,
   filterProfiles,
+  loadInitialState,
   normalizeInterests,
   sanitizeConversations,
+  sanitizeIdList,
+  sanitizeMatches,
   sanitizeProfile,
   serializeInterests,
   shouldCreateMatch,
@@ -94,4 +97,36 @@ test('sanitizeConversations restores defaults when conversations are invalid', (
 
   assert.ok(conversations.length >= 1);
   assert.ok(conversations.every((conversation) => conversation.messages.length >= 1));
+});
+
+test('loadInitialState reports recovered keys when local JSON is corrupted', () => {
+  const storage = createMockStorage();
+  storage.setItem('profile', '{oops');
+
+  const state = loadInitialState({
+    profile: () => safeReadJSON('profile', defaultProfile, { storage, sanitize: sanitizeProfile }),
+    likes: () => safeReadJSON('likes', [], { storage, sanitize: sanitizeIdList }),
+    passed: () => safeReadJSON('passed', [], { storage, sanitize: sanitizeIdList }),
+    matches: () => safeReadJSON('matches', [], { storage, sanitize: sanitizeMatches }),
+    messages: () => safeReadJSON('messages', [], { storage, sanitize: sanitizeConversations }),
+  });
+
+  assert.deepEqual(state.recoveredKeys, ['profile']);
+  assert.equal(state.storageAvailable, true);
+  assert.deepEqual(state.profile, defaultProfile);
+});
+
+test('loadInitialState reports storage unavailability when every reader falls back', () => {
+  const unavailableResult = { data: null, recovered: false, error: 'storage-unavailable' };
+
+  const state = loadInitialState({
+    profile: () => ({ ...unavailableResult, data: defaultProfile }),
+    likes: () => ({ ...unavailableResult, data: [] }),
+    passed: () => ({ ...unavailableResult, data: [] }),
+    matches: () => ({ ...unavailableResult, data: [] }),
+    messages: () => ({ ...unavailableResult, data: [] }),
+  });
+
+  assert.equal(state.storageAvailable, false);
+  assert.deepEqual(state.recoveredKeys, []);
 });
