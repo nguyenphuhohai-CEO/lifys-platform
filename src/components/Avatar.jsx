@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 function Avatar({ src, alt, fallback, className = '' }) {
   const [hasError, setHasError] = useState(false);
@@ -11,6 +11,10 @@ function Avatar({ src, alt, fallback, className = '' }) {
       .join('')
       || 'LF'
   ), [alt, fallback]);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [src]);
 
   if (!src || hasError) {
     return <div className={`avatar-fallback ${className}`.trim()} aria-label={alt}>{initials}</div>;

@@ -162,7 +162,7 @@ function App() {
   const updateProfileField = (field, value) => {
     setProfileDraft((current) => ({
       ...current,
-      [field]: field === 'interests' ? serializeInterests(value) : value,
+      [field]: value,
     }));
   };
 
@@ -776,6 +776,7 @@ function App() {
                     name="interests"
                     value={profileDraft.interests}
                     onChange={(event) => updateProfileField('interests', event.target.value)}
+                    onBlur={(event) => updateProfileField('interests', serializeInterests(event.target.value))}
                     placeholder="Voyage, Musique, Sport"
                   />
                 </label>
