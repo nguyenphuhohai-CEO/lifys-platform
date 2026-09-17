@@ -17,7 +17,7 @@ export default function MessagesView({
     if (chatBodyRef.current) {
       chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
     }
-  }, [selectedConversationData]);
+  }, [selectedConversation, selectedConversationData?.messages.length]);
 
   return (
     <section className="messages-layout content-panel">

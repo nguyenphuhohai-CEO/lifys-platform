@@ -31,7 +31,7 @@ export default function Header({ view, onViewChange, isMobileNavOpen, onToggleMo
             key={item.id}
             type="button"
             className={view === item.id ? 'nav-button active' : 'nav-button'}
-            aria-current={view === item.id ? 'page' : undefined}
+            aria-pressed={view === item.id}
             onClick={() => onViewChange(item.id)}
           >
             {item.label}

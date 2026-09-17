@@ -3,7 +3,14 @@ export function safeReadJSON(key, fallback, validate) {
     return fallback;
   }
 
-  const raw = window.localStorage.getItem(key);
+  let raw;
+
+  try {
+    raw = window.localStorage.getItem(key);
+  } catch {
+    return fallback;
+  }
+
   if (!raw) {
     return fallback;
   }
@@ -11,13 +18,23 @@ export function safeReadJSON(key, fallback, validate) {
   try {
     const parsed = JSON.parse(raw);
     if (typeof validate === 'function' && !validate(parsed)) {
-      window.localStorage.removeItem(key);
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        return fallback;
+      }
+
       return fallback;
     }
 
     return parsed;
   } catch {
-    window.localStorage.removeItem(key);
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      return fallback;
+    }
+
     return fallback;
   }
 }
@@ -27,7 +44,11 @@ export function writeJSON(key, value) {
     return;
   }
 
-  window.localStorage.setItem(key, JSON.stringify(value));
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore blocked or full storage in the local-only demo.
+  }
 }
 
 export function resetPrototypeStorage(keys) {
@@ -35,5 +56,11 @@ export function resetPrototypeStorage(keys) {
     return;
   }
 
-  keys.forEach((key) => window.localStorage.removeItem(key));
+  keys.forEach((key) => {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // Ignore blocked storage so reset stays non-blocking.
+    }
+  });
 }
