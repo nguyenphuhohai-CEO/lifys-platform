@@ -107,17 +107,20 @@ function App() {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   };
 
+  const profileModeFilter = profile.name ? profile.mode : 'all';
+  const hasUnsavedProfileChanges = JSON.stringify(profileDraft) !== JSON.stringify(profile);
+
   const filteredProfiles = useMemo(
     () =>
       filterProfiles(DEMO_PROFILES, {
         activeMode,
         likes,
         passed,
-        profileMode: profile.name ? profile.mode : 'all',
+        profileMode: profileModeFilter,
         searchTerm,
         cityFilter,
       }),
-    [activeMode, cityFilter, likes, passed, profile.mode, searchTerm],
+    [activeMode, cityFilter, likes, passed, profileModeFilter, searchTerm],
   );
 
   const selectedConversationData = messages.find((item) => item.id === selectedConversation) || null;
@@ -150,6 +153,11 @@ function App() {
   };
 
   const handleLike = (profileId) => {
+    if (hasUnsavedProfileChanges) {
+      addToast('Sauvegardez votre profil', 'Enregistrez vos modifications avant de créer de nouveaux matchs.', 'error');
+      return;
+    }
+
     if (likes.includes(profileId)) {
       return;
     }
@@ -302,6 +310,7 @@ function App() {
             cityFilter={cityFilter}
             filteredProfiles={filteredProfiles}
             remainingCount={filteredProfiles.length}
+            hasUnsavedProfileChanges={hasUnsavedProfileChanges}
             onModeChange={setActiveMode}
             onSearchChange={setSearchTerm}
             onCityChange={setCityFilter}

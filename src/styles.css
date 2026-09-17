@@ -485,6 +485,23 @@ textarea:focus-visible {
   outline: none;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+  box-shadow: none;
+}
+
+.inline-notice {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(217, 95, 143, 0.18);
+  background: rgba(217, 95, 143, 0.08);
+  color: var(--text);
+  font-weight: 600;
+}
+
 .discover-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));

@@ -8,6 +8,7 @@ export default function DiscoverView({
   cityFilter,
   filteredProfiles,
   remainingCount,
+  hasUnsavedProfileChanges,
   onModeChange,
   onSearchChange,
   onCityChange,
@@ -43,6 +44,12 @@ export default function DiscoverView({
         </label>
       </div>
 
+      {hasUnsavedProfileChanges ? (
+        <div className="inline-notice">
+          Sauvegardez votre profil avant de créer de nouveaux matchs afin d’utiliser vos préférences à jour.
+        </div>
+      ) : null}
+
       {filteredProfiles.length === 0 ? (
         <div className="empty-state">
           <h3>Aucun profil pour ces filtres</h3>
@@ -73,7 +80,15 @@ export default function DiscoverView({
                 </div>
                 <div className="card-actions">
                   <button type="button" className="pass-button" onClick={() => onPass(person.id)} aria-label={`Passer le profil de ${person.name}`}>Passer</button>
-                  <button type="button" className="like-button" onClick={() => onLike(person.id)} aria-label={`Liker le profil de ${person.name}`}>Like</button>
+                  <button
+                    type="button"
+                    className="like-button"
+                    onClick={() => onLike(person.id)}
+                    aria-label={`Liker le profil de ${person.name}`}
+                    disabled={hasUnsavedProfileChanges}
+                  >
+                    Like
+                  </button>
                 </div>
               </article>
             );
