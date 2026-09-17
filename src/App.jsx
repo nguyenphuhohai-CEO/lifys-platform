@@ -39,7 +39,7 @@ const STORAGE_RECOVERY_LABELS = {
   profile: 'profil',
   likes: 'likes',
   passed: 'passes',
-  matches: 'correspondances',
+  matches: 'matchs',
   messages: 'messages',
 };
 
@@ -50,6 +50,20 @@ function createProfileDraft(profileValue) {
   return {
     ...profileValue,
     interests: serializeInterests(profileValue.interests),
+  };
+}
+
+function normalizeEditableProfile(profileValue) {
+  const sanitized = sanitizeProfile(profileValue);
+
+  return {
+    name: sanitized.name,
+    age: sanitized.age,
+    city: sanitized.city,
+    bio: sanitized.bio,
+    interests: serializeInterests(sanitized.interests),
+    mode: sanitized.mode,
+    avatar: sanitized.avatar,
   };
 }
 
@@ -96,7 +110,6 @@ function App() {
   const [activeMode, setActiveMode] = useState('all');
   const [profile, setProfile] = useState(bootstrappedState.profile);
   const [profileDraft, setProfileDraft] = useState(createProfileDraft(bootstrappedState.profile));
-  const [hasUnsavedProfileChanges, setHasUnsavedProfileChanges] = useState(false);
   const [profileErrors, setProfileErrors] = useState({});
   const [likes, setLikes] = useState(bootstrappedState.likes);
   const [passed, setPassed] = useState(bootstrappedState.passed);
@@ -208,6 +221,17 @@ function App() {
     query: searchQuery,
     city: cityQuery,
   }), [activeMode, cityQuery, likes, passed, profile.mode, searchQuery]);
+  const savedProfileSnapshot = useMemo(() => normalizeEditableProfile(profile), [profile]);
+  const draftProfileSnapshot = useMemo(() => normalizeEditableProfile(profileDraft), [profileDraft]);
+  const hasUnsavedProfileChanges = useMemo(() => (
+    savedProfileSnapshot.name !== draftProfileSnapshot.name
+    || savedProfileSnapshot.age !== draftProfileSnapshot.age
+    || savedProfileSnapshot.city !== draftProfileSnapshot.city
+    || savedProfileSnapshot.bio !== draftProfileSnapshot.bio
+    || savedProfileSnapshot.interests !== draftProfileSnapshot.interests
+    || savedProfileSnapshot.mode !== draftProfileSnapshot.mode
+    || savedProfileSnapshot.avatar !== draftProfileSnapshot.avatar
+  ), [draftProfileSnapshot, savedProfileSnapshot]);
   const completedProfile = Boolean(profile.name && profile.age && profile.city && profile.bio.trim().length >= 20);
   const hasActiveFilters = Boolean(searchQuery.trim() || cityQuery.trim() || activeMode !== 'all');
 
@@ -234,11 +258,7 @@ function App() {
   };
 
   const updateProfileField = (field, value) => {
-    setProfileDraft((current) => {
-      const nextDraft = { ...current, [field]: value };
-      setHasUnsavedProfileChanges(JSON.stringify(sanitizeProfile(nextDraft)) !== JSON.stringify(profile));
-      return nextDraft;
-    });
+    setProfileDraft((current) => ({ ...current, [field]: value }));
     setProfileErrors((current) => {
       if (!current[field]) {
         return current;
@@ -281,7 +301,6 @@ function App() {
       const nextProfile = sanitizeProfile(profileDraft);
       setProfile(nextProfile);
       setProfileDraft(createProfileDraft(nextProfile));
-      setHasUnsavedProfileChanges(false);
       setProfileErrors({});
       setView('discover');
       setPageError('');
@@ -302,15 +321,16 @@ function App() {
     }
 
     const nextLikes = sanitizeIdList([...likes, profileId]);
+    const persistedProfile = sanitizeProfile(profile);
     setLikes(nextLikes);
     setPassed((current) => current.filter((item) => item !== profileId));
     setPageError('');
 
-    const matched = shouldCreateMatch(targetProfile, profile);
+    const matched = shouldCreateMatch(targetProfile, persistedProfile);
     const existingConversation = conversations.find((conversation) => conversation.profileId === targetProfile.id);
 
     if (matched && !matches.some((item) => item.profileId === targetProfile.id)) {
-      const nextMatch = createMatch(targetProfile, profile);
+      const nextMatch = createMatch(targetProfile, persistedProfile);
       const nextConversation = existingConversation ?? createConversation(targetProfile);
 
       setMatches((current) => [nextMatch, ...current]);
@@ -390,7 +410,6 @@ function App() {
 
       setProfile(resetProfile);
       setProfileDraft(createProfileDraft(resetProfile));
-      setHasUnsavedProfileChanges(false);
       setProfileErrors({});
       setLikes([]);
       setPassed([]);

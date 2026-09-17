@@ -102,7 +102,7 @@ npm start
 
 ### Matchs
 
-- présentation claire des correspondances ;
+- présentation claire des matchs ;
 - logique de compatibilité légère basée sur :
   - la catégorie ;
   - la ville ;
