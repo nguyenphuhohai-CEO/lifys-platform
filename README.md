@@ -1,55 +1,105 @@
-# lifys-platform
+# Lifys Platform
 
-Lifys est un prototype local d’une plateforme de rencontre multi-catégories. Ce MVP web permet :
+Lifys est un MVP web **frontend-only** de plateforme de rencontres multi-catégories, repensé pour une démonstration professionnelle : design premium, UX plus fluide, architecture React découpée et données locales robustes.
 
-- de gérer un profil utilisateur dans `localStorage`
-- de parcourir des profils de démonstration par mode de rencontre
-- d’ajouter des likes / passes
-- de générer des matchs simulés
-- de consulter des conversations de démonstration
-- de naviguer entre les sections Accueil, Découvrir, Matchs, Messages et Profil
+> ⚠️ **Important** : ce projet reste un prototype local. Les données sont simulées et stockées dans le navigateur (`localStorage`). Aucune authentification réelle, base distante, paiement ou vérification d’identité n’est implémentée.
 
-## Stack
+## Aperçu produit
 
-- React + Vite
-- JavaScript
-- CSS moderne
+L’application couvre 5 catégories conservées dans le MVP :
 
-## Démarrage
+- 💙 Amical
+- 💜 Amoureux
+- 🔥 Sans lendemain
+- 💍 Mariage
+- 💼 Professionnel
+
+Écrans principaux :
+
+- Landing page avec sélection de catégorie
+- Découverte de profils (filtres, like/pass, compteur restant)
+- Matchs (statut + action vers messagerie)
+- Messagerie locale (conversations, envoi par Enter)
+- Profil (édition + validation accessible)
+
+## Stack technique
+
+- React 18 + Vite 5
+- JavaScript (sans backend)
+- CSS custom (responsive + accessibilité)
+
+## Installation
 
 ```bash
 npm install
-npm run dev -- --host
 ```
 
-Puis ouvrir l’URL affichée par Vite dans le navigateur.
+## Scripts disponibles
 
-## Fonctionnalités du MVP
+```bash
+npm run dev -- --host
+npm run build
+npm run preview
+```
 
-- Landing page avec les 5 catégories : Amical, Amoureux, Sans lendemain, Mariage, Professionnel
-- Profil utilisateur avec sauvegarde locale
-- Découverte de profils de démonstration
-- Likes et passes
-- Matchs simulés avec persistance locale
-- Messages et conversations de démonstration
-- Navigation responsive dédiée au prototype
+## Fonctionnalités disponibles (MVP local)
 
-## Limites
+- Navigation claire avec état actif et menu mobile
+- Refonte visuelle premium (typographie, hiérarchie, états interactifs)
+- Filtres découverte : catégorie, recherche texte, ville
+- Profil utilisateur avec validation non bloquante (toasts + erreurs accessibles)
+- Avatar fallback automatique en cas d’URL invalide
+- Intérêts formatés automatiquement
+- Matching simulé avec statut/date locale
+- Messagerie locale lisible avec état vide
+- Persistance robuste avec fallback si JSON corrompu
+- Bouton de réinitialisation du prototype (`localStorage`)
+- Indication explicite du caractère local/simulé des données
 
-Ce projet est un prototype front-end local. Il ne contient pas :
+## Architecture du projet
 
-- authentification backend réelle
-- base de données distante
-- messagerie temps réel authentique
-- paiements ou abonnements
-- vérification d’identité
-- appel vidéo
-- IA de recommandation
+```text
+src/
+  App.jsx
+  constants.js
+  components/
+    Header.jsx
+    HomeView.jsx
+    DiscoverView.jsx
+    MatchesView.jsx
+    MessagesView.jsx
+    ProfileView.jsx
+    Toast.jsx
+    AvatarImage.jsx
+  lib/
+    storage.js
+    matching.js
+  styles.css
+```
 
-## Prochaines étapes
+## Limites actuelles
 
-1. Ajouter un backend Node/Express
-2. Rendre les profils utilisateurs persistants en base de données
-3. Ajouter une vraie messagerie temps réel via WebSockets
-4. Introduire les catégories et filtres avancés
-5. Préparer un version mobile et un tableau de bord admin
+Ce MVP ne fournit pas une plateforme de production :
+
+- pas d’authentification sécurisée
+- pas de backend API
+- pas de base de données distante
+- pas de WebSocket réel
+- pas de modération serveur
+- pas de sécurité applicative côté serveur
+
+## Roadmap réaliste vers une version production
+
+1. **Backend API** (Node/Express ou Nest) + schéma métier clair
+2. **Authentification** (sessions/JWT, gestion des rôles, durcissement sécurité)
+3. **Base de données** (PostgreSQL + migrations)
+4. **Messagerie temps réel** (WebSocket + présence + historique)
+5. **Média & conformité** (upload, modération, RGPD, journalisation)
+6. **Observabilité & CI/CD** (tests, monitoring, alerting)
+
+## Sécurité & données de démonstration
+
+- Utiliser uniquement des profils fictifs / de démonstration
+- Ne jamais considérer les données locales comme sûres
+- Ne pas exposer de secrets dans le frontend
+- Ne pas présenter ce MVP comme un service vérifié ou certifié
