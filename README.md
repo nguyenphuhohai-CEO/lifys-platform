@@ -1,55 +1,99 @@
-# lifys-platform
+# Lifys Platform (MVP local)
 
-Lifys est un prototype local d’une plateforme de rencontre multi-catégories. Ce MVP web permet :
+Lifys est un MVP **front-end local** (React + Vite) qui simule une application de rencontres/networking pour 5 catégories : **Amical, Amoureux, Sans lendemain, Mariage, Professionnel**.
 
-- de gérer un profil utilisateur dans `localStorage`
-- de parcourir des profils de démonstration par mode de rencontre
-- d’ajouter des likes / passes
-- de générer des matchs simulés
-- de consulter des conversations de démonstration
-- de naviguer entre les sections Accueil, Découvrir, Matchs, Messages et Profil
+## Aperçu
 
-## Stack
+Le produit propose une expérience premium, sobre et responsive avec :
 
-- React + Vite
-- JavaScript
-- CSS moderne
+- landing page + navigation multi-sections
+- sélecteur de catégorie et filtres de découverte
+- cartes profils avec actions Like/Pass accessibles
+- matchs simulés et passerelle vers la messagerie
+- messagerie locale avec sélection de conversation et envoi via Entrée
+- édition de profil avec validation accessible
+- notifications non bloquantes (sans `alert()`)
+- persistance locale robuste via `localStorage` (fallback si JSON corrompu)
+- réinitialisation complète du prototype
 
-## Démarrage
+## Avertissement MVP local
+
+- Données **locales/simulées** uniquement (navigateur + `localStorage`)
+- Aucun backend réel
+- Aucune authentification réelle
+- Aucune base de données distante
+- Aucune messagerie temps réel WebSocket en production
+- Aucun paiement ni vérification d’identité
+
+Ne pas utiliser ce MVP pour des données sensibles.
+
+## Installation
 
 ```bash
 npm install
 npm run dev -- --host
 ```
 
-Puis ouvrir l’URL affichée par Vite dans le navigateur.
+## Scripts
 
-## Fonctionnalités du MVP
+- `npm run dev` : lance l’app en développement
+- `npm run build` : build de production Vite
+- `npm run preview` : prévisualise le build
+- `npm run test` : exécute les tests unitaires Vitest
 
-- Landing page avec les 5 catégories : Amical, Amoureux, Sans lendemain, Mariage, Professionnel
-- Profil utilisateur avec sauvegarde locale
-- Découverte de profils de démonstration
-- Likes et passes
-- Matchs simulés avec persistance locale
-- Messages et conversations de démonstration
-- Navigation responsive dédiée au prototype
+## Fonctionnalités
 
-## Limites
+### Landing / Navigation
+- Navigation desktop + mobile (menu)
+- États hover/active/focus et navigation clavier
+- Respect de `prefers-reduced-motion`
 
-Ce projet est un prototype front-end local. Il ne contient pas :
+### Découverte
+- Filtres par catégorie
+- Recherche texte (nom/bio/intérêts)
+- Filtre ville
+- Compteur de profils
+- États loading / empty / error
 
-- authentification backend réelle
-- base de données distante
-- messagerie temps réel authentique
-- paiements ou abonnements
-- vérification d’identité
-- appel vidéo
-- IA de recommandation
+### Profil
+- Formulaire contrôlé
+- Validation accessible (messages d’erreur par champ)
+- Formatage des intérêts
+- Fallback avatar (initiales)
 
-## Prochaines étapes
+### Matchs
+- Liste des correspondances simulées
+- Action directe vers la messagerie
 
-1. Ajouter un backend Node/Express
-2. Rendre les profils utilisateurs persistants en base de données
-3. Ajouter une vraie messagerie temps réel via WebSockets
-4. Introduire les catégories et filtres avancés
-5. Préparer un version mobile et un tableau de bord admin
+### Messages
+- Sélection de conversation
+- État vide explicite
+- Envoi avec la touche Entrée
+- Persistance locale
+
+## Architecture (front-end)
+
+- `src/App.jsx` : orchestration des vues, états et UX
+- `src/styles.css` : thème UI responsive et accessibilité visuelle
+- `src/utils/storage.js` : lecture/écriture locale sécurisée
+- `src/utils/matching.js` : logique de filtrage et matching
+- `src/utils/format.js` : formatage intérêts + fallback avatar
+- `src/utils/*.test.js` : tests unitaires ciblés
+
+## Limites actuelles
+
+Ce dépôt reste un prototype local orienté démonstration UX. Les données sont fictives et non vérifiées.
+
+## Roadmap recommandée (phase production)
+
+1. **Backend/API** : Node.js/Express (ou équivalent), validation serveur
+2. **Auth** : comptes utilisateurs, gestion session/token
+3. **Base de données** : persistance profils/likes/matchs/messages
+4. **WebSocket** : messagerie temps réel fiable
+5. **Sécurité** : chiffrement, protections anti-abus, conformité RGPD
+
+## Vérifications réalisées
+
+- `npm run test`
+- `npm run build`
+
