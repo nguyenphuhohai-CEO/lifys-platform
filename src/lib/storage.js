@@ -1,6 +1,18 @@
+function getStorage() {
+  if (typeof globalThis === 'undefined' || !globalThis.localStorage) {
+    return null;
+  }
+  return globalThis.localStorage;
+}
+
 export function safeReadJSON(key, fallbackValue, options = {}) {
   const { validate } = options;
-  const raw = localStorage.getItem(key);
+  const storage = getStorage();
+  if (!storage) {
+    return { value: fallbackValue, recovered: false };
+  }
+
+  const raw = storage.getItem(key);
 
   if (raw === null) {
     return { value: fallbackValue, recovered: false };
@@ -13,15 +25,30 @@ export function safeReadJSON(key, fallbackValue, options = {}) {
     }
     return { value: parsed, recovered: false };
   } catch {
-    localStorage.removeItem(key);
+    try {
+      storage.removeItem(key);
+    } catch {}
     return { value: fallbackValue, recovered: true };
   }
 }
 
 export function writeJSON(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    const storage = getStorage();
+    if (!storage) return false;
+    storage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function resetPrototypeStorage(keys) {
-  keys.forEach((key) => localStorage.removeItem(key));
+  const storage = getStorage();
+  if (!storage) return;
+  keys.forEach((key) => {
+    try {
+      storage.removeItem(key);
+    } catch {}
+  });
 }

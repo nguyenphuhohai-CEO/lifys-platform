@@ -1,5 +1,7 @@
 export const FALLBACK_AVATAR = 'https://via.placeholder.com/400x400.png?text=Lifys';
 
+const SUPPORTED_MODE_IDS = new Set(['amical', 'amoureux', 'sans-lendemain', 'mariage', 'professionnel']);
+
 export function normalizeInterests(input) {
   const values = Array.isArray(input) ? input : `${input || ''}`.split(',');
   const normalized = values
@@ -19,13 +21,16 @@ export function sanitizeProfile(raw, defaultProfile) {
     return defaultProfile;
   }
 
+  const parsedAge = Number(raw.age);
+  const nextMode = typeof raw.mode === 'string' && SUPPORTED_MODE_IDS.has(raw.mode) ? raw.mode : defaultProfile.mode;
+
   return {
     name: typeof raw.name === 'string' ? raw.name : defaultProfile.name,
-    age: Number(raw.age) > 0 ? Number(raw.age) : defaultProfile.age,
+    age: parsedAge >= 18 && parsedAge <= 80 ? parsedAge : defaultProfile.age,
     city: typeof raw.city === 'string' ? raw.city : defaultProfile.city,
     bio: typeof raw.bio === 'string' ? raw.bio : defaultProfile.bio,
     interests: normalizeInterests(raw.interests),
-    mode: typeof raw.mode === 'string' ? raw.mode : defaultProfile.mode,
+    mode: nextMode,
     avatar: typeof raw.avatar === 'string' ? raw.avatar : defaultProfile.avatar,
   };
 }
@@ -83,6 +88,7 @@ export function filterProfiles({
   });
 }
 
+/** Match local if at least one compatibility signal is present (mode, city, or shared interest). */
 export function shouldCreateMatch(profileTarget, profile) {
   if (!profileTarget || !profile) return false;
 

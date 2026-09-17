@@ -1,6 +1,6 @@
 # lifys-platform
 
-Lifys est un MVP **100% local** (React + Vite) d’application de rencontre multi-catégories.
+Lifys est un MVP **100% local** (React + Vite) d'une application de rencontre multi-catégories.
 Le produit couvre cinq catégories : **Amical**, **Amoureux**, **Sans lendemain**, **Mariage** et **Professionnel**.
 
 ## Aperçu
@@ -27,7 +27,7 @@ npm run dev -- --host
 - `npm run dev` : démarrage en développement
 - `npm run build` : build de production Vite
 - `npm run preview` : prévisualisation du build
-- `npm run test` : tests unitaires (Vitest)
+- `npm run test` : tests unitaires (Node test runner)
 
 ## Fonctionnalités MVP
 

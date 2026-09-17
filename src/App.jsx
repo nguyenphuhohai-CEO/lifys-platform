@@ -76,6 +76,10 @@ const defaultProfile = {
   avatar: '',
 };
 
+function createDefaultProfile() {
+  return { ...defaultProfile, interests: [...defaultProfile.interests] };
+}
+
 const NAV_ITEMS = [
   { id: 'home', label: 'Accueil' },
   { id: 'discover', label: 'Découvrir' },
@@ -84,8 +88,15 @@ const NAV_ITEMS = [
   { id: 'profile', label: 'Profil' },
 ];
 
+let toastCounter = 0;
+
+function createToastId() {
+  toastCounter += 1;
+  return `toast-${toastCounter}`;
+}
+
 function readInitialState() {
-  const profileRead = safeReadJSON(STORAGE_KEYS.profile, defaultProfile, {
+  const profileRead = safeReadJSON(STORAGE_KEYS.profile, createDefaultProfile(), {
     validate: (value) => value && typeof value === 'object',
   });
   const likesRead = safeReadJSON(STORAGE_KEYS.likes, [], { validate: Array.isArray });
@@ -96,7 +107,7 @@ function readInitialState() {
   const recovered = [profileRead, likesRead, passedRead, matchesRead, messagesRead].some((item) => item.recovered);
 
   return {
-    profile: sanitizeProfile(profileRead.value, defaultProfile),
+    profile: sanitizeProfile(profileRead.value, createDefaultProfile()),
     likes: likesRead.value.filter((value) => typeof value === 'string'),
     passed: passedRead.value.filter((value) => typeof value === 'string'),
     matches: matchesRead.value.filter((value) => value && typeof value.profileId === 'string'),
@@ -118,7 +129,7 @@ function App() {
   const [messages, setMessages] = useState(initialState.messages);
   const [draftMessage, setDraftMessage] = useState('');
   const [selectedConversation, setSelectedConversation] = useState(initialState.messages[0]?.id || null);
-  const [toasts, setToasts] = useState(() => (initialState.recovered ? [{ id: Date.now(), text: 'Certaines données locales étaient corrompues et ont été réinitialisées.', type: 'warning' }] : []));
+  const [toasts, setToasts] = useState(() => (initialState.recovered ? [{ id: createToastId(), text: 'Certaines données locales étaient corrompues et ont été réinitialisées.', type: 'warning' }] : []));
   const [searchText, setSearchText] = useState('');
   const [cityFilter, setCityFilter] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -173,8 +184,13 @@ function App() {
   }, [toasts]);
 
   const pushToast = (text, type = 'info') => {
-    setToasts((current) => [...current, { id: Date.now() + Math.random(), text, type }]);
+    setToasts((current) => [...current, { id: createToastId(), text, type }]);
   };
+
+  const hasProfileContext = Boolean(
+    profile.name || profile.city || profile.bio || profile.avatar || profile.interests?.length
+  );
+  const activeProfileMode = hasProfileContext ? (profile.mode || 'amoureux') : 'all';
 
   const filteredProfiles = useMemo(() => {
     return filterProfiles({
@@ -182,11 +198,11 @@ function App() {
       likes,
       passed,
       activeMode,
-      profileMode: 'all',
+      profileMode: activeProfileMode,
       searchText,
       cityFilter,
     });
-  }, [activeMode, cityFilter, likes, passed, searchText]);
+  }, [activeMode, activeProfileMode, cityFilter, likes, passed, searchText]);
 
   const selectedConversationData = useMemo(
     () => messages.find((item) => item.id === selectedConversation) || null,
@@ -194,7 +210,10 @@ function App() {
   );
 
   const availableCount = filteredProfiles.length;
-  const totalInMode = DEMO_PROFILES.filter((item) => activeMode === 'all' || item.mode === activeMode).length;
+  const totalInMode = useMemo(() => DEMO_PROFILES.filter((item) =>
+    (activeMode === 'all' || item.mode === activeMode) &&
+    (activeProfileMode === 'all' || item.mode === activeProfileMode)
+  ).length, [activeMode, activeProfileMode]);
   const modeLabel = MODES.find((item) => item.id === profile.mode)?.label || 'Amoureux';
 
   const handleProfileSave = async (event) => {
@@ -209,20 +228,23 @@ function App() {
 
     setIsSavingProfile(true);
 
-    const nextProfile = {
-      ...profileDraft,
-      name: profileDraft.name.trim(),
-      city: profileDraft.city.trim(),
-      bio: profileDraft.bio.trim(),
-      interests: normalizeInterests(profileDraft.interests),
-    };
+    try {
+      const nextProfile = {
+        ...profileDraft,
+        name: profileDraft.name.trim(),
+        city: profileDraft.city.trim(),
+        bio: profileDraft.bio.trim(),
+        interests: normalizeInterests(profileDraft.interests),
+      };
 
-    await Promise.resolve();
-    setProfile(nextProfile);
-    setProfileDraft(nextProfile);
-    setView('discover');
-    pushToast('Profil sauvegardé localement.', 'success');
-    setIsSavingProfile(false);
+      await Promise.resolve();
+      setProfile(nextProfile);
+      setProfileDraft(nextProfile);
+      setView('discover');
+      pushToast('Profil sauvegardé localement.', 'success');
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const handleLike = (profileId) => {
@@ -314,8 +336,9 @@ function App() {
 
   const handleResetPrototype = () => {
     resetPrototypeStorage(Object.values(STORAGE_KEYS));
-    setProfile(defaultProfile);
-    setProfileDraft(defaultProfile);
+    const resetProfile = createDefaultProfile();
+    setProfile(resetProfile);
+    setProfileDraft({ ...resetProfile, interests: [...resetProfile.interests] });
     setProfileErrors({});
     setLikes([]);
     setPassed([]);
@@ -332,6 +355,11 @@ function App() {
   const updateProfileDraft = (field, value) => {
     setProfileDraft((current) => ({ ...current, [field]: value }));
     setProfileErrors((current) => ({ ...current, [field]: undefined }));
+  };
+
+  const handleAvatarError = (event) => {
+    event.currentTarget.onerror = null;
+    event.currentTarget.src = FALLBACK_AVATAR;
   };
 
   return (
@@ -432,7 +460,7 @@ function App() {
               <div>
                 <p className="eyebrow">Découverte</p>
                 <h2>Profils recommandés</h2>
-                <p className="helper-text">{availableCount} profil(s) disponible(s) sur {totalInMode} dans ce filtre.</p>
+                <p className="helper-text">{availableCount} profil(s) disponible(s) sur {totalInMode} dans cette catégorie.</p>
               </div>
               <div className="mode-pills" aria-label="Filtre de mode">
                 <button className={activeMode === 'all' ? 'pill active' : 'pill'} onClick={() => setActiveMode('all')}>Tous</button>
@@ -471,10 +499,7 @@ function App() {
                     <img
                       src={person.avatar || FALLBACK_AVATAR}
                       alt={person.name}
-                      onError={(event) => {
-                        event.currentTarget.onerror = null;
-                        event.currentTarget.src = FALLBACK_AVATAR;
-                      }}
+                      onError={handleAvatarError}
                     />
                     <div className="profile-card-body">
                       <div className="identity-row">
@@ -521,10 +546,7 @@ function App() {
                     <img
                       src={match.avatar || FALLBACK_AVATAR}
                       alt={match.name}
-                      onError={(event) => {
-                        event.currentTarget.onerror = null;
-                        event.currentTarget.src = FALLBACK_AVATAR;
-                      }}
+                      onError={handleAvatarError}
                     />
                     <div>
                       <h3>{match.name}</h3>
@@ -558,10 +580,7 @@ function App() {
                   <img
                     src={conversation.avatar || FALLBACK_AVATAR}
                     alt={conversation.name}
-                    onError={(event) => {
-                      event.currentTarget.onerror = null;
-                      event.currentTarget.src = FALLBACK_AVATAR;
-                    }}
+                    onError={handleAvatarError}
                   />
                   <div>
                     <strong>{conversation.name}</strong>
@@ -578,10 +597,7 @@ function App() {
                     <img
                       src={selectedConversationData.avatar || FALLBACK_AVATAR}
                       alt={selectedConversationData.name}
-                      onError={(event) => {
-                        event.currentTarget.onerror = null;
-                        event.currentTarget.src = FALLBACK_AVATAR;
-                      }}
+                      onError={handleAvatarError}
                     />
                     <div>
                       <strong>{selectedConversationData.name}</strong>
@@ -644,10 +660,7 @@ function App() {
                 <img
                   src={profileDraft.avatar || FALLBACK_AVATAR}
                   alt="Aperçu avatar"
-                  onError={(event) => {
-                    event.currentTarget.onerror = null;
-                    event.currentTarget.src = FALLBACK_AVATAR;
-                  }}
+                  onError={handleAvatarError}
                 />
               </div>
 
@@ -748,13 +761,15 @@ function App() {
         )}
       </main>
 
-      <div className="toast-stack" aria-live="polite" aria-atomic="true">
-        {toasts.map((toast) => (
-          <div key={toast.id} className={`toast ${toast.type}`} role="status">
-            {toast.text}
-          </div>
-        ))}
-      </div>
+      {toasts.length > 0 ? (
+        <div className="toast-stack">
+          {toasts.map((toast) => (
+            <div key={toast.id} className={`toast ${toast.type}`} role="status" aria-live="polite" aria-atomic="true">
+              {toast.text}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
