@@ -1,55 +1,78 @@
 # lifys-platform
 
-Lifys est un prototype local d’une plateforme de rencontre multi-catégories. Ce MVP web permet :
+Lifys est un MVP **100% local** (React + Vite) d'une application de rencontre multi-catégories.
+Le produit couvre cinq catégories : **Amical**, **Amoureux**, **Sans lendemain**, **Mariage** et **Professionnel**.
 
-- de gérer un profil utilisateur dans `localStorage`
-- de parcourir des profils de démonstration par mode de rencontre
-- d’ajouter des likes / passes
-- de générer des matchs simulés
-- de consulter des conversations de démonstration
-- de naviguer entre les sections Accueil, Découvrir, Matchs, Messages et Profil
+## Aperçu
 
-## Stack
+- Landing page premium et sobre
+- Navigation responsive (desktop/tablette/mobile) avec menu mobile
+- Profil local éditable avec validation accessible
+- Découverte avec filtres (catégorie, recherche texte, ville)
+- Like / Pass, génération de matchs simulés
+- Messagerie locale persistante avec envoi via Enter
+- Notifications non bloquantes
+- Réinitialisation du prototype local
+- Protection contre les JSON corrompus dans `localStorage`
 
-- React + Vite
-- JavaScript
-- CSS moderne
-
-## Démarrage
+## Installation
 
 ```bash
 npm install
 npm run dev -- --host
 ```
 
-Puis ouvrir l’URL affichée par Vite dans le navigateur.
+## Scripts
 
-## Fonctionnalités du MVP
+- `npm run dev` : démarrage en développement
+- `npm run build` : build de production Vite
+- `npm run preview` : prévisualisation du build
+- `npm run test` : tests unitaires (Node test runner)
 
-- Landing page avec les 5 catégories : Amical, Amoureux, Sans lendemain, Mariage, Professionnel
-- Profil utilisateur avec sauvegarde locale
-- Découverte de profils de démonstration
-- Likes et passes
-- Matchs simulés avec persistance locale
-- Messages et conversations de démonstration
-- Navigation responsive dédiée au prototype
+## Fonctionnalités MVP
 
-## Limites
+- Expérience locale simulée avec persistance navigateur
+- Compteur de profils disponibles en découverte
+- États UX : loading, empty, validation error
+- Avatar fallback si URL invalide
+- Formatage et normalisation des intérêts
+- Action directe depuis Matchs vers Messages
 
-Ce projet est un prototype front-end local. Il ne contient pas :
+## Limites du MVP local
 
-- authentification backend réelle
-- base de données distante
-- messagerie temps réel authentique
-- paiements ou abonnements
-- vérification d’identité
-- appel vidéo
-- IA de recommandation
+Ce prototype **ne contient pas** de backend réel :
 
-## Prochaines étapes
+- pas d’authentification serveur
+- pas de base de données distante
+- pas de WebSocket temps réel
+- pas de paiement/abonnement
+- pas de vérification d’identité réelle
 
-1. Ajouter un backend Node/Express
-2. Rendre les profils utilisateurs persistants en base de données
-3. Ajouter une vraie messagerie temps réel via WebSockets
-4. Introduire les catégories et filtres avancés
-5. Préparer un version mobile et un tableau de bord admin
+Toutes les données sont locales au navigateur de démonstration.
+
+## Architecture
+
+- `src/App.jsx` : orchestration UI (landing, découverte, matchs, messages, profil)
+- `src/styles.css` : design system local + responsive + accessibilité visuelle
+- `src/lib/storage.js` : lecture/écriture locale sécurisée et reset
+- `src/lib/app-utils.js` : utilitaires de filtrage, matching, validation et sanitation
+- `src/lib/*.test.js` : tests unitaires ciblés
+
+## Roadmap (version produit)
+
+1. Backend API (Node/Express ou équivalent)
+2. Authentification sécurisée (session/JWT + gestion des rôles)
+3. Base de données relationnelle (profils, likes, matchs, messages)
+4. Messagerie temps réel WebSocket
+5. Modération, conformité et observabilité
+
+## Avertissement sécurité
+
+- Ne pas stocker de secrets dans le frontend ni dans `localStorage`.
+- Ce MVP n’est pas conçu pour des données personnelles réelles.
+- Utiliser uniquement des profils fictifs de démonstration.
+
+## Vérifications effectuées
+
+- `npm run test`
+- `npm run build`
