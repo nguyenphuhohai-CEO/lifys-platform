@@ -1,7 +1,7 @@
 # Lifys Platform
 
-Lifys est désormais un **MVP full-stack léger** pour une plateforme de rencontres multi-catégories.  
-Le frontend reste en **React + Vite**, et le déploiement repose maintenant sur un **backend Express**, une **base SQLite réelle** et une **authentification JWT**.
+Lifys est désormais un **MVP full-stack local** pour une plateforme de rencontres multi-catégories.  
+Le frontend reste en **React + Vite**, avec un backend **Express + SQLite + JWT** exécuté localement ; la découverte utilise des profils fictifs de démonstration.
 
 Catégories disponibles :
 
@@ -24,7 +24,8 @@ Le dépôt livre :
 - des matchs persistés ;
 - une messagerie persistante ;
 - une réinitialisation de l’espace de démonstration ;
-- un fallback robuste pour les quelques données encore stockées dans `localStorage` côté client (jeton/session).
+- un fallback robuste pour les données stockées dans `localStorage` côté client (jeton/session) ;
+- une séparation claire entre données locales de compte et profils fictifs de découverte.
 
 ## Stack
 
@@ -90,6 +91,9 @@ npm test
 - connexion ;
 - session JWT persistée localement côté navigateur ;
 - routes backend protégées.
+
+> ⚠️ Les profils de découverte sont des profils fictifs de démonstration.  
+> Le produit ne réalise ni vérification d’identité réelle, ni mise en relation avec des personnes réelles.
 
 ### Profil
 
