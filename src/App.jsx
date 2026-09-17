@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { formatInterests, getInitials } from './utils/format';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { getInitials } from './utils/format';
 import { filterProfiles, shouldCreateMatch } from './utils/matching';
+import { normalizeProfileDraft } from './utils/profile';
 import { resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './utils/storage';
 
 const MODES = [
@@ -86,7 +87,32 @@ function isMessagesShape(value) {
     && typeof conversation.id === 'string'
     && typeof conversation.name === 'string'
     && Array.isArray(conversation.messages)
+    && conversation.messages.every((message) =>
+      message
+      && typeof message.id === 'string'
+      && (message.sender === 'me' || message.sender === 'them')
+      && typeof message.text === 'string'
+    )
   );
+}
+
+function isStoredProfileShape(value) {
+  if (!value || typeof value !== 'object') return false;
+  const hasValidName = typeof value.name === 'string';
+  const hasValidCity = typeof value.city === 'string';
+  const hasValidBio = typeof value.bio === 'string';
+  const hasValidInterests = typeof value.interests === 'string';
+  const hasValidMode = typeof value.mode === 'string';
+  const hasValidAvatar = typeof value.avatar === 'string';
+  const hasValidAge = value.age === '' || typeof value.age === 'number' || typeof value.age === 'string';
+
+  return hasValidName
+    && hasValidCity
+    && hasValidBio
+    && hasValidInterests
+    && hasValidMode
+    && hasValidAvatar
+    && hasValidAge;
 }
 
 function modeLabel(modeId) {
@@ -95,6 +121,9 @@ function modeLabel(modeId) {
 
 function Avatar({ src, name, className }) {
   const [hasError, setHasError] = useState(!src);
+  useEffect(() => {
+    setHasError(!src);
+  }, [src]);
 
   if (hasError) {
     return <div className={`avatar-fallback ${className}`}>{getInitials(name)}</div>;
@@ -123,44 +152,56 @@ function App() {
   const [matches, setMatches] = useState([]);
   const [messages, setMessages] = useState(DEFAULT_MESSAGES);
   const [selectedConversation, setSelectedConversation] = useState(DEFAULT_MESSAGES[0]?.id || null);
+  const notificationTimeoutsRef = useRef([]);
+  const [isCompactNav, setIsCompactNav] = useState(false);
 
   const pushNotification = (text, type = 'info') => {
     const id = `n-${Date.now()}-${Math.random()}`;
     setNotifications((current) => [...current, { id, text, type }]);
-    window.setTimeout(() => {
+    const timeoutId = window.setTimeout(() => {
       setNotifications((current) => current.filter((item) => item.id !== id));
+      notificationTimeoutsRef.current = notificationTimeoutsRef.current.filter((savedId) => savedId !== timeoutId);
     }, 3500);
+    notificationTimeoutsRef.current.push(timeoutId);
   };
+
+  useEffect(() => () => {
+    notificationTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+  }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 760px)');
+    const applyMode = () => setIsCompactNav(mediaQuery.matches);
+    applyMode();
+    mediaQuery.addEventListener('change', applyMode);
+    return () => mediaQuery.removeEventListener('change', applyMode);
+  }, []);
 
   useEffect(() => {
     setIsBooting(true);
     setStorageError('');
     const bootTimer = window.setTimeout(() => {
+      let hasNotifiedRecovery = false;
       const notifyStorageFallback = (key) => {
         setStorageError('Certaines données locales étaient corrompues et ont été réinitialisées.');
-        pushNotification(`Données locales réinitialisées pour ${key} (format invalide).`, 'warning');
+        if (hasNotifiedRecovery) return;
+        hasNotifiedRecovery = true;
+        pushNotification(`Données locales réinitialisées (format invalide détecté : ${key}).`, 'warning');
       };
 
-      const profileFromStorage = safeReadJSON(STORAGE_KEYS.profile, DEFAULT_PROFILE, {
-        validate: (value) => value && typeof value === 'object' && typeof value.mode === 'string',
-        onError: notifyStorageFallback,
-      });
-      const likesFromStorage = safeReadJSON(STORAGE_KEYS.likes, [], {
-        validate: isStringArray,
-        onError: notifyStorageFallback,
-      });
-      const passedFromStorage = safeReadJSON(STORAGE_KEYS.passed, [], {
-        validate: isStringArray,
-        onError: notifyStorageFallback,
-      });
-      const matchesFromStorage = safeReadJSON(STORAGE_KEYS.matches, [], {
-        validate: Array.isArray,
-        onError: notifyStorageFallback,
-      });
-      const messagesFromStorage = safeReadJSON(STORAGE_KEYS.messages, DEFAULT_MESSAGES, {
-        validate: isMessagesShape,
-        onError: notifyStorageFallback,
-      });
+      const bootConfig = [
+        ['profile', DEFAULT_PROFILE, isStoredProfileShape],
+        ['likes', [], isStringArray],
+        ['passed', [], isStringArray],
+        ['matches', [], Array.isArray],
+        ['messages', DEFAULT_MESSAGES, isMessagesShape],
+      ];
+
+      const [profileFromStorage, likesFromStorage, passedFromStorage, matchesFromStorage, messagesFromStorage] = bootConfig
+        .map(([key, fallbackValue, validate]) => safeReadJSON(STORAGE_KEYS[key], fallbackValue, {
+          validate,
+          onError: notifyStorageFallback,
+        }));
 
       setProfile({ ...DEFAULT_PROFILE, ...profileFromStorage });
       setProfileForm({ ...DEFAULT_PROFILE, ...profileFromStorage });
@@ -185,22 +226,34 @@ function App() {
 
   useEffect(() => {
     if (isBooting) return;
-    safeWriteJSON(STORAGE_KEYS.likes, likes);
+    if (!safeWriteJSON(STORAGE_KEYS.likes, likes)) {
+      setStorageError('Impossible d’écrire certaines données locales.');
+      pushNotification('Impossible d’enregistrer les likes localement.', 'error');
+    }
   }, [likes, isBooting]);
 
   useEffect(() => {
     if (isBooting) return;
-    safeWriteJSON(STORAGE_KEYS.passed, passed);
+    if (!safeWriteJSON(STORAGE_KEYS.passed, passed)) {
+      setStorageError('Impossible d’écrire certaines données locales.');
+      pushNotification('Impossible d’enregistrer les profils passés.', 'error');
+    }
   }, [passed, isBooting]);
 
   useEffect(() => {
     if (isBooting) return;
-    safeWriteJSON(STORAGE_KEYS.matches, matches);
+    if (!safeWriteJSON(STORAGE_KEYS.matches, matches)) {
+      setStorageError('Impossible d’écrire certaines données locales.');
+      pushNotification('Impossible d’enregistrer les matchs localement.', 'error');
+    }
   }, [matches, isBooting]);
 
   useEffect(() => {
     if (isBooting) return;
-    safeWriteJSON(STORAGE_KEYS.messages, messages);
+    if (!safeWriteJSON(STORAGE_KEYS.messages, messages)) {
+      setStorageError('Impossible d’écrire certaines données locales.');
+      pushNotification('Impossible d’enregistrer les messages localement.', 'error');
+    }
   }, [messages, isBooting]);
 
   useEffect(() => {
@@ -208,7 +261,7 @@ function App() {
     setDiscoverLoading(true);
     const timer = window.setTimeout(() => setDiscoverLoading(false), 180);
     return () => window.clearTimeout(timer);
-  }, [view, activeMode, searchText, cityFilter, likes, passed]);
+  }, [view, activeMode, searchText, cityFilter, likes, passed, profile.mode]);
 
   const filteredProfiles = useMemo(() => {
     const profileMode = profile.mode || 'all';
@@ -231,24 +284,7 @@ function App() {
 
   const handleProfileSave = (event) => {
     event.preventDefault();
-
-    const nextProfile = {
-      ...profileForm,
-      name: profileForm.name.trim(),
-      city: profileForm.city.trim(),
-      bio: profileForm.bio.trim(),
-      interests: formatInterests(profileForm.interests).join(', '),
-      avatar: profileForm.avatar.trim(),
-      age: Number(profileForm.age),
-    };
-
-    const errors = {};
-    if (!nextProfile.name) errors.name = 'Le prénom est requis.';
-    if (!nextProfile.city) errors.city = 'La ville est requise.';
-    if (!nextProfile.bio) errors.bio = 'La bio est requise.';
-    if (!nextProfile.age || Number.isNaN(nextProfile.age) || nextProfile.age < 18 || nextProfile.age > 80) {
-      errors.age = 'L’âge doit être compris entre 18 et 80 ans.';
-    }
+    const { profile: nextProfile, errors } = normalizeProfileDraft(profileForm);
 
     setProfileErrors(errors);
     if (Object.keys(errors).length > 0) {
@@ -270,9 +306,12 @@ function App() {
     if (!profileTarget) return;
 
     if (shouldCreateMatch(profileTarget, profile)) {
-      const exists = matches.some((match) => match.profileId === profileId);
-      if (!exists) {
-        setMatches((current) => [
+      setMatches((current) => {
+        const exists = current.some((match) => match.profileId === profileId);
+        if (exists) return current;
+
+        pushNotification(`Nouveau match avec ${profileTarget.name} !`, 'success');
+        return [
           ...current,
           {
             id: `match-${profileId}`,
@@ -283,9 +322,8 @@ function App() {
             avatar: profileTarget.avatar,
             lastMessage: 'Vous avez un nouveau match ✨',
           }
-        ]);
-        pushNotification(`Nouveau match avec ${profileTarget.name} !`, 'success');
-      }
+        ];
+      });
     }
   };
 
@@ -295,25 +333,25 @@ function App() {
   };
 
   const ensureConversation = (matchProfile) => {
-    const existing = messages.find((item) => item.profileId === matchProfile.profileId);
-    if (existing) {
-      setSelectedConversation(existing.id);
-      setView('messages');
-      return;
-    }
-
-    const newConversation = {
-      id: `conv-${matchProfile.profileId}`,
-      profileId: matchProfile.profileId,
-      name: matchProfile.name,
-      mode: matchProfile.mode,
-      avatar: matchProfile.avatar,
-      messages: [{ id: `intro-${Date.now()}`, sender: 'them', text: 'Heureux(se) de matcher avec toi ! 👋' }],
-    };
-
-    setMessages((current) => [newConversation, ...current]);
-    setSelectedConversation(newConversation.id);
     setView('messages');
+    setMessages((current) => {
+      const existing = current.find((item) => item.profileId === matchProfile.profileId);
+      if (existing) {
+        setSelectedConversation(existing.id);
+        return current;
+      }
+
+      const newConversation = {
+        id: `conv-${matchProfile.profileId}`,
+        profileId: matchProfile.profileId,
+        name: matchProfile.name,
+        mode: matchProfile.mode,
+        avatar: matchProfile.avatar,
+        messages: [{ id: `intro-${Date.now()}`, sender: 'them', text: 'Heureux(se) de matcher avec toi ! 👋' }],
+      };
+      setSelectedConversation(newConversation.id);
+      return [newConversation, ...current];
+    });
   };
 
   const handleSendMessage = () => {
@@ -351,7 +389,11 @@ function App() {
     <div className="app-shell">
       <div className="notifications" aria-live="polite" aria-atomic="true">
         {notifications.map((notification) => (
-          <div key={notification.id} className={`notice ${notification.type}`}>
+          <div
+            key={notification.id}
+            className={`notice ${notification.type}`}
+            role={notification.type === 'error' ? 'alert' : 'status'}
+          >
             {notification.text}
           </div>
         ))}
@@ -376,7 +418,13 @@ function App() {
           Menu
         </button>
 
-        <nav id="main-nav" className={`nav ${isMenuOpen ? 'open' : ''}`} aria-label="Navigation principale">
+        <nav
+          id="main-nav"
+          className={`nav ${isMenuOpen ? 'open' : ''}`}
+          aria-label="Navigation principale"
+          aria-hidden={isCompactNav && !isMenuOpen}
+          hidden={isCompactNav && !isMenuOpen}
+        >
           {VIEW_ITEMS.map((item) => (
             <button
               key={item.id}
@@ -493,7 +541,7 @@ function App() {
               </div>
             ) : null}
 
-            {!discoverLoading && filteredProfiles.length > 0 ? (
+            {!discoverLoading && !storageError && filteredProfiles.length > 0 ? (
               <div className="discover-grid">
                 {filteredProfiles.slice(0, 6).map((person) => (
                   <article key={person.id} className="profile-card">
@@ -581,7 +629,12 @@ function App() {
             </aside>
 
             <div className="chat-panel">
-              {!selectedConversationData ? (
+              {messages.length === 0 ? (
+                <div className="empty-state">
+                  <h3>Aucune conversation</h3>
+                  <p>Vos discussions apparaîtront ici après un match.</p>
+                </div>
+              ) : !selectedConversationData ? (
                 <div className="empty-state">
                   <h3>Sélectionnez une conversation</h3>
                 </div>
@@ -648,9 +701,10 @@ function App() {
                     value={profileForm.name}
                     onChange={handleProfileFieldChange}
                     aria-invalid={Boolean(profileErrors.name)}
+                    aria-describedby={profileErrors.name ? 'error-name' : undefined}
                     required
                   />
-                  {profileErrors.name ? <small className="field-error">{profileErrors.name}</small> : null}
+                  {profileErrors.name ? <small id="error-name" className="field-error">{profileErrors.name}</small> : null}
                 </label>
                 <label>
                   <span>Âge</span>
@@ -662,9 +716,10 @@ function App() {
                     value={profileForm.age}
                     onChange={handleProfileFieldChange}
                     aria-invalid={Boolean(profileErrors.age)}
+                    aria-describedby={profileErrors.age ? 'error-age' : undefined}
                     required
                   />
-                  {profileErrors.age ? <small className="field-error">{profileErrors.age}</small> : null}
+                  {profileErrors.age ? <small id="error-age" className="field-error">{profileErrors.age}</small> : null}
                 </label>
                 <label>
                   <span>Ville</span>
@@ -673,9 +728,10 @@ function App() {
                     value={profileForm.city}
                     onChange={handleProfileFieldChange}
                     aria-invalid={Boolean(profileErrors.city)}
+                    aria-describedby={profileErrors.city ? 'error-city' : undefined}
                     required
                   />
-                  {profileErrors.city ? <small className="field-error">{profileErrors.city}</small> : null}
+                  {profileErrors.city ? <small id="error-city" className="field-error">{profileErrors.city}</small> : null}
                 </label>
                 <label>
                   <span>Catégorie principale</span>
@@ -705,9 +761,10 @@ function App() {
                   value={profileForm.bio}
                   onChange={handleProfileFieldChange}
                   aria-invalid={Boolean(profileErrors.bio)}
+                  aria-describedby={profileErrors.bio ? 'error-bio' : undefined}
                   required
                 />
-                {profileErrors.bio ? <small className="field-error">{profileErrors.bio}</small> : null}
+                {profileErrors.bio ? <small id="error-bio" className="field-error">{profileErrors.bio}</small> : null}
               </label>
 
               <label>

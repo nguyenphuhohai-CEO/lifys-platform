@@ -37,6 +37,13 @@ describe('filterProfiles', () => {
 });
 
 describe('shouldCreateMatch', () => {
+  it('retourne true si les modes correspondent', () => {
+    expect(shouldCreateMatch(
+      { mode: 'amical', city: 'Lille', interests: ['lecture'] },
+      { mode: 'amical', city: 'Paris', interests: 'sport, musique' }
+    )).toBe(true);
+  });
+
   it('retourne true avec ville ou intérêts compatibles', () => {
     expect(shouldCreateMatch(
       { mode: 'amical', city: 'Paris', interests: ['musique'] },
