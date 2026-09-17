@@ -233,7 +233,7 @@ function App() {
       showToast({
         type: 'success',
         title: authMode === 'register' ? 'Compte créé' : 'Connexion réussie',
-        message: 'Votre session Lifys est maintenant sécurisée par le backend.',
+        message: 'Votre session Lifys locale est prête.',
       });
       setPageError('');
     } catch (error) {
@@ -272,7 +272,7 @@ function App() {
       showToast({
         type: 'success',
         title: 'Profil synchronisé',
-        message: 'Votre profil est maintenant enregistré dans la base SQLite Lifys.',
+        message: 'Votre profil est maintenant enregistré localement.',
       });
       await loadDiscovery(token);
     } catch (error) {
@@ -292,13 +292,13 @@ function App() {
         showToast({
           type: 'success',
           title: 'Match confirmé',
-          message: 'Le backend a créé votre match et ouvert une conversation persistante.',
+          message: 'Un match a été créé et une conversation locale a été ouverte.',
         });
       } else {
         showToast({
           type: 'info',
           title: 'Like enregistré',
-          message: 'Votre intérêt a été sauvegardé côté serveur.',
+          message: 'Votre intérêt a été sauvegardé localement.',
         });
       }
     } catch (error) {
@@ -354,11 +354,13 @@ function App() {
       setCityQuery('');
       setActiveMode('all');
       setDraftMessage('');
+      resetPrototypeStorage(Object.values(STORAGE_KEYS));
+      safeWriteJSON(STORAGE_KEYS.auth, { token });
       await loadDiscovery(token);
       showToast({
         type: 'success',
         title: 'Données de démonstration réinitialisées',
-        message: 'Le backend a effacé vos interactions et restauré un profil vierge.',
+        message: 'Vos interactions locales ont été effacées et un profil vierge a été restauré.',
       });
     } catch (error) {
       handleApiError(error, 'Impossible de réinitialiser le prototype.');
@@ -400,7 +402,7 @@ function App() {
         <div className="content-panel loading-panel" role="status" aria-live="polite">
           <p className="eyebrow">Chargement</p>
           <h1>Lifys établit la connexion sécurisée…</h1>
-          <p className="section-description">Initialisation du backend, de la base SQLite et de votre session.</p>
+          <p className="section-description">Initialisation de votre session locale et de vos données de démonstration.</p>
         </div>
       </div>
     );
@@ -413,27 +415,27 @@ function App() {
         <main className="page-shell">
           <section className="hero-panel auth-hero">
             <div className="hero-copy">
-              <p className="eyebrow">Déploiement MVP · backend réel</p>
-              <h1>Lifys est prêt pour un vrai déploiement léger.</h1>
+              <p className="eyebrow">MVP local · données simulées</p>
+              <h1>Lifys propose une expérience premium prête à itérer.</h1>
               <p>
-                Ce MVP s’appuie désormais sur un backend Express, une base SQLite réelle, une authentification par mot de passe
-                et des profils/messages persistés côté serveur.
+                Ce MVP reste volontairement local : profils fictifs de démonstration, interactions stockées dans votre instance
+                Lifys et expérience optimisée pour valider le produit avant industrialisation backend.
               </p>
               <div className="hero-metrics">
                 <article className="metric-card">
-                  <span>Backend</span>
-                  <strong>Express</strong>
-                  <small>API JSON sécurisée</small>
+                  <span>Prototype</span>
+                  <strong>Local</strong>
+                  <small>sans dépendance cloud</small>
                 </article>
                 <article className="metric-card">
-                  <span>Base de données</span>
-                  <strong>SQLite</strong>
-                  <small>persistante et simple à déployer</small>
+                  <span>Persistance</span>
+                  <strong>SQLite + localStorage</strong>
+                  <small>données locales et fallback</small>
                 </article>
                 <article className="metric-card">
-                  <span>Auth</span>
-                  <strong>JWT</strong>
-                  <small>session stockée localement</small>
+                  <span>Catégories</span>
+                  <strong>5 modes</strong>
+                  <small>amical à professionnel</small>
                 </article>
               </div>
             </div>
@@ -442,7 +444,7 @@ function App() {
               <SectionHeader
                 eyebrow={authMode === 'register' ? 'Créer un compte' : 'Connexion'}
                 title={authMode === 'register' ? 'Commencer sur Lifys' : 'Reprendre votre session'}
-                description="Les comptes sont réels pour ce MVP backend, mais les profils de découverte restent des démos."
+                description="Ce MVP fonctionne en local : les données restent dans votre environnement Lifys et les profils de découverte sont fictifs."
               />
 
               {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
@@ -495,7 +497,7 @@ function App() {
           <span className="brand-icon">❤</span>
           <span>
             <strong>Lifys</strong>
-            <small>Frontend React + backend Express + SQLite</small>
+            <small>Prototype React + Vite · données locales</small>
           </span>
         </button>
 
@@ -535,8 +537,8 @@ function App() {
 
       <main className="page-shell">
         <section className="local-notice" aria-label="Avertissement MVP">
-          <strong>MVP déployable</strong>
-          <span>Les comptes et données utilisateur sont persistés dans SQLite. Les profils de découverte restent fictifs et ne constituent ni réseau social réel, ni identité vérifiée.</span>
+          <strong>MVP local et simulé</strong>
+          <span>Les interactions sont stockées localement sur cet appareil et les profils de découverte sont fictifs. Aucune identité réelle n’est vérifiée.</span>
         </section>
 
         {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
@@ -545,11 +547,11 @@ function App() {
           <>
             <section className="hero-panel">
               <div className="hero-copy">
-                <span className="eyebrow">Expérience full-stack légère</span>
-                <h1>Une base Lifys prête à passer du prototype local à un MVP backend réel.</h1>
+                <span className="eyebrow">Expérience produit locale</span>
+                <h1>Une base Lifys premium pour valider rapidement la proposition de valeur.</h1>
                 <p>
-                  Vos profils, likes, matchs et messages sont maintenant gérés par un backend Express et une base SQLite,
-                  sans bouleverser l’expérience premium construite sur React + Vite.
+                  Votre profil, vos likes, vos matchs et vos messages restent dans votre environnement local Lifys. Vous testez ainsi
+                  le produit dans un cadre local, sobre et fiable, sans dépendance à un backend distant.
                 </p>
 
                 <div className="cta-row">
@@ -563,17 +565,17 @@ function App() {
                   <article className="metric-card">
                     <span>Profils</span>
                     <strong>{profiles.length}</strong>
-                    <small>résultats backend filtrés</small>
+                    <small>résultats locaux filtrés</small>
                   </article>
                   <article className="metric-card">
                     <span>Matchs</span>
                     <strong>{matches.length}</strong>
-                    <small>persistés en base</small>
+                    <small>persistés localement</small>
                   </article>
                   <article className="metric-card">
                     <span>Messages</span>
                     <strong>{conversations.reduce((count, conversation) => count + conversation.messages.length, 0)}</strong>
-                    <small>conservés côté serveur</small>
+                    <small>conservés localement</small>
                   </article>
                 </div>
               </div>
@@ -592,7 +594,7 @@ function App() {
                 <div className="mini-card">
                   <span className="mini-label">Stack</span>
                   <strong>React + Express</strong>
-                  <p>JWT · SQLite · Docker</p>
+                  <p>SQLite · JWT · UX premium</p>
                 </div>
               </div>
             </section>
@@ -622,7 +624,7 @@ function App() {
             <SectionHeader
               eyebrow="Découverte"
               title="Profils recommandés"
-              description="La découverte est maintenant alimentée par le backend et exclut automatiquement les profils déjà likés ou passés."
+              description="La découverte exclut automatiquement les profils déjà likés ou passés et applique vos filtres locaux."
               aside={(
                 <div className="header-meta">
                   <span className="counter-badge">{discoveryLoading ? 'Chargement…' : `${profiles.length} profil${profiles.length > 1 ? 's' : ''}`}</span>
@@ -656,7 +658,7 @@ function App() {
             </div>
 
             {discoveryLoading ? (
-              <EmptyState title="Chargement des profils" description="Le backend prépare vos recommandations sécurisées." />
+              <EmptyState title="Chargement des profils" description="Préparation de vos recommandations locales…" />
             ) : profiles.length === 0 ? (
               <EmptyState
                 title="Aucun profil disponible"
@@ -704,11 +706,11 @@ function App() {
             <SectionHeader
               eyebrow="Matchs"
               title="Vos correspondances"
-              description="Les matchs sont persistés dans SQLite et peuvent être retrouvés après redémarrage du serveur."
+              description="Les matchs sont persistés localement et restent disponibles au prochain lancement."
             />
 
             {dashboardLoading ? (
-              <EmptyState title="Chargement des matchs" description="Lecture des correspondances depuis la base de données." />
+              <EmptyState title="Chargement des matchs" description="Lecture de vos correspondances locales." />
             ) : matches.length === 0 ? (
               <EmptyState title="Aucun match pour l’instant" description="Commencez par liker des profils pour créer vos premières connexions." actionLabel="Voir la découverte" onAction={() => setCurrentView('discover')} />
             ) : (
@@ -738,12 +740,12 @@ function App() {
         {view === 'messages' && (
           <section className="messages-layout">
             <aside className="content-panel conversation-panel">
-              <SectionHeader eyebrow="Messages" title="Conversations" description="Historique persistant avec envoi par Entrée." />
+              <SectionHeader eyebrow="Messages" title="Conversations" description="Historique local persistant avec envoi par Entrée." />
 
               {dashboardLoading ? (
-                <EmptyState title="Chargement des conversations" description="Récupération de vos messages depuis le serveur." />
+                <EmptyState title="Chargement des conversations" description="Récupération de vos messages locaux." />
               ) : conversations.length === 0 ? (
-                <EmptyState title="Aucune conversation" description="Un match backend ouvre automatiquement un canal de discussion." actionLabel="Trouver un match" onAction={() => setCurrentView('discover')} />
+                <EmptyState title="Aucune conversation" description="Un match local ouvre automatiquement un canal de discussion." actionLabel="Trouver un match" onAction={() => setCurrentView('discover')} />
               ) : (
                 <div className="conversation-list">
                   {conversations.map((conversation) => (
@@ -776,7 +778,9 @@ function App() {
                   </div>
 
                   <div className="chat-body" aria-live="polite">
-                    {selectedConversationData.messages.map((message) => (
+                    {selectedConversationData.messages.length === 0 ? (
+                      <EmptyState title="Aucun message" description="Envoyez le premier message pour démarrer cet échange local." />
+                    ) : selectedConversationData.messages.map((message) => (
                       <div key={message.id} className={message.sender === 'me' ? 'bubble me' : 'bubble them'}>
                         {message.text}
                       </div>
@@ -802,7 +806,7 @@ function App() {
                   </div>
                 </div>
               ) : (
-                <EmptyState title="Sélectionnez une conversation" description="Choisissez un échange pour afficher les messages stockés en base." />
+                <EmptyState title="Sélectionnez une conversation" description="Choisissez un échange pour afficher les messages stockés localement." />
               )}
             </div>
           </section>
@@ -810,7 +814,7 @@ function App() {
 
         {view === 'profile' && (
           <section className="content-panel profile-panel">
-            <SectionHeader eyebrow="Profil" title="Complétez votre profil" description="Les mises à jour sont validées puis synchronisées vers le backend." />
+            <SectionHeader eyebrow="Profil" title="Complétez votre profil" description="Les mises à jour sont validées puis sauvegardées localement." />
 
             <div className="profile-layout">
               <form className="profile-form" onSubmit={handleProfileSave} noValidate>
@@ -877,8 +881,8 @@ function App() {
                 <span className="tag">{getModeById(profileDraft.mode).label}</span>
                 <p className="profile-preview-bio">{profileDraft.bio || 'Votre bio apparaîtra ici une fois complétée.'}</p>
                 <div className="interest-row">
-                  {(profileDraft.interests ? profileDraft.interests.split(',').map((item) => item.trim()).filter(Boolean) : ['Ajoutez vos centres d’intérêt']).map((item) => (
-                    <span key={item}>{item}</span>
+                  {(profileDraft.interests ? profileDraft.interests.split(',').map((item) => item.trim()).filter(Boolean) : ['Ajoutez vos centres d’intérêt']).map((item, index) => (
+                    <span key={`${item}-${index}`}>{item}</span>
                   ))}
                 </div>
               </aside>
