@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 function Avatar({ src, alt, fallback, className = '' }) {
   const [hasError, setHasError] = useState(false);

@@ -49,6 +49,7 @@ Le dépôt contient aussi un dossier `server/` (Express + SQLite + JWT) utile po
 ### Tests
 
 - `node --test`
+- Vitest + jsdom pour les vérifications UI ciblées
 
 ## Installation
 

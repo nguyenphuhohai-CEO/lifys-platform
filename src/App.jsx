@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Avatar from './components/Avatar';
 import ToastRegion from './components/ToastRegion';
@@ -392,7 +392,7 @@ function App() {
     setResetting(true);
 
     try {
-      const storageReset = resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS);
+      const storageReset = storageAvailable ? resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS) : true;
       const canApplyReset = storageReset || !storageAvailable;
 
       if (!canApplyReset) {

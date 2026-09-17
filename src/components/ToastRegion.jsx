@@ -1,3 +1,5 @@
+import React from 'react';
+
 function ToastRegion({ toasts, onDismiss }) {
   if (!toasts.length) {
     return null;
