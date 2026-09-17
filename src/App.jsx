@@ -39,7 +39,7 @@ function App() {
   const [draftMessage, setDraftMessage] = useState('');
   const [selectedConversation, setSelectedConversation] = useState(initialMessages[0]?.id || null);
   const [toasts, setToasts] = useState([]);
-  const toastTimeoutsRef = useRef(new Set());
+  const toastTimeoutsRef = useRef(new Map());
 
   useEffect(
     () => () => {
@@ -90,10 +90,21 @@ function App() {
 
     const timeoutId = window.setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id));
-      toastTimeoutsRef.current.delete(timeoutId);
+      toastTimeoutsRef.current.delete(id);
     }, 4200);
 
-    toastTimeoutsRef.current.add(timeoutId);
+    toastTimeoutsRef.current.set(id, timeoutId);
+  };
+
+  const dismissToast = (id) => {
+    const timeoutId = toastTimeoutsRef.current.get(id);
+
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+      toastTimeoutsRef.current.delete(id);
+    }
+
+    setToasts((current) => current.filter((toast) => toast.id !== id));
   };
 
   const filteredProfiles = useMemo(
@@ -151,6 +162,9 @@ function App() {
     setLikes((current) => [...current, profileId]);
 
     if (isCompatibleMatch(profile, profileTarget)) {
+      const existingConversationId = messages.find((conversation) => conversation.profileId === profileId)?.id || null;
+      const nextConversation = existingConversationId ? null : createConversation(profileTarget);
+
       setMatches((current) => {
         if (current.some((match) => match.profileId === profileId)) {
           return current;
@@ -159,15 +173,12 @@ function App() {
         return [...current, createMatch(profileTarget)];
       });
 
-      setMessages((current) => {
-        if (current.some((conversation) => conversation.profileId === profileId)) {
-          return current;
-        }
-
-        const nextConversation = createConversation(profileTarget);
+      if (nextConversation) {
+        setMessages((current) => [nextConversation, ...current]);
         setSelectedConversation(nextConversation.id);
-        return [nextConversation, ...current];
-      });
+      } else {
+        setSelectedConversation(existingConversationId);
+      }
 
       addToast('Nouveau match', `${profileTarget.name} peut maintenant vous écrire dans la messagerie locale.`, 'success');
       return;
@@ -318,7 +329,7 @@ function App() {
         ) : null}
       </main>
 
-      <Toast toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
