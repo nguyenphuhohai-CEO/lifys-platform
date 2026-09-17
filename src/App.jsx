@@ -1,330 +1,558 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-const MODES = [
-  { id: 'amical', label: 'Amical', accent: '#9a7cff', icon: '💙' },
-  { id: 'amoureux', label: 'Amoureux', accent: '#ff6bb5', icon: '💜' },
-  { id: 'sans-lendemain', label: 'Sans lendemain', accent: '#ff8c42', icon: '🔥' },
-  { id: 'mariage', label: 'Mariage', accent: '#f7c948', icon: '💍' },
-  { id: 'professionnel', label: 'Professionnel', accent: '#52c7c0', icon: '💼' },
+import Avatar from './components/Avatar';
+import ToastRegion from './components/ToastRegion';
+import { DEFAULT_MESSAGES, DEMO_PROFILES, MODES, defaultProfile } from './data/demoData';
+import {
+  createConversation,
+  createMatch,
+  filterProfiles,
+  getConversationPreview,
+  getModeById,
+  loadInitialState,
+  sanitizeConversations,
+  sanitizeIdList,
+  sanitizeMatches,
+  sanitizeProfile,
+  serializeInterests,
+  shouldCreateMatch,
+} from './utils/app-utils';
+import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './utils/storage';
+
+const NAV_ITEMS = [
+  { id: 'home', label: 'Accueil' },
+  { id: 'discover', label: 'Découvrir' },
+  { id: 'matches', label: 'Matchs' },
+  { id: 'messages', label: 'Messages' },
+  { id: 'profile', label: 'Profil' },
 ];
 
-const DEMO_PROFILES = [
-  { id: 'p1', name: 'Mila', age: 28, city: 'Paris', bio: 'Passionnée par les balades nocturnes et les bons plans culturels.', interests: ['cinéma', 'voyage', 'sport'], mode: 'amoureux', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80' },
-  { id: 'p2', name: 'Lucas', age: 31, city: 'Lyon', bio: 'Tombé amoureux de la cuisine italienne et des conversations profondes.', interests: ['cuisine', 'musique', 'lecture'], mode: 'amoureux', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80' },
-  { id: 'p3', name: 'Nora', age: 26, city: 'Paris', bio: 'Je cherche des rencontres joyeuses et des aventures spontanées.', interests: ['danse', 'art', 'soirées'], mode: 'sans-lendemain', avatar: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=400&q=80' },
-  { id: 'p4', name: 'Yanis', age: 34, city: 'Marseille', bio: 'Fan de roadtrip, cafés insolites et sorties en groupe.', interests: ['roadtrip', 'café', 'sport'], mode: 'amical', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=400&q=80' },
-  { id: 'p5', name: 'Sophie', age: 29, city: 'Paris', bio: 'Je veux rencontrer quelqu’un pour construire une vie pleine de sens.', interests: ['famille', 'nature', 'yoga'], mode: 'mariage', avatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80' },
-  { id: 'p6', name: 'Omar', age: 37, city: 'Lille', bio: 'Product designer, amateur de projets ambitieux et d’échanges inspirants.', interests: ['design', 'startups', 'marketing'], mode: 'professionnel', avatar: 'https://images.unsplash.com/photo-1504593811423-6dd665756598?auto=format&fit=crop&w=400&q=80' },
-  { id: 'p7', name: 'Claire', age: 27, city: 'Bordeaux', bio: 'Amatrice d’apéros, de musique live et de rencontres authentiques.', interests: ['musique', 'café', 'voyage'], mode: 'amical', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80' },
-  { id: 'p8', name: 'Theo', age: 32, city: 'Paris', bio: 'Entretiens des projets de vie simples et un goût prononcé pour la culture.', interests: ['lecture', 'nature', 'art'], mode: 'mariage', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=400&q=80' },
-  { id: 'p9', name: 'Lea', age: 30, city: 'Nantes', bio: 'Consultante, curieuse, drôle et ouverte à des rencontres profondes.', interests: ['travail', 'sport', 'cinéma'], mode: 'professionnel', avatar: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=400&q=80' },
-  { id: 'p10', name: 'Hugo', age: 25, city: 'Paris', bio: 'J’aime les soirées spontanées, les bonnes discussions et la joie de vivre.', interests: ['danse', 'nuit', 'amis'], mode: 'sans-lendemain', avatar: 'https://images.unsplash.com/photo-1504593811423-6dd665756598?auto=format&fit=crop&w=400&q=80' }
-];
+function EmptyState({ title, description, actionLabel, onAction }) {
+  return (
+    <div className="empty-state">
+      <h3>{title}</h3>
+      <p>{description}</p>
+      {actionLabel && onAction ? <button type="button" className="secondary-button" onClick={onAction}>{actionLabel}</button> : null}
+    </div>
+  );
+}
 
-const DEFAULT_MESSAGES = [
-  {
-    id: 'conv1',
-    profileId: 'p2',
-    name: 'Lucas',
-    mode: 'amoureux',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
-    messages: [
-      { id: 'm1', sender: 'them', text: 'Salut ! J’aime ton profil, on a beaucoup de points communs.' },
-      { id: 'm2', sender: 'me', text: 'Merci ! J’adore les beaux restaurants et les conversations longues.' },
-      { id: 'm3', sender: 'them', text: 'Top, on devrait parler de voyage et de musique.' },
-    ]
-  },
-  {
-    id: 'conv2',
-    profileId: 'p6',
-    name: 'Omar',
-    mode: 'professionnel',
-    avatar: 'https://images.unsplash.com/photo-1504593811423-6dd665756598?auto=format&fit=crop&w=400&q=80',
-    messages: [
-      { id: 'm4', sender: 'them', text: 'Bonjour, je suis intéressé par ton profil pro et tes valeurs.' },
-      { id: 'm5', sender: 'me', text: 'Super, j’ai déjà envie d’échanger sur les projets créatifs.' },
-    ]
-  }
-];
-
-const STORAGE_KEYS = {
-  profile: 'lifys-profile',
-  likes: 'lifys-likes',
-  matches: 'lifys-matches',
-  messages: 'lifys-messages',
-  passed: 'lifys-passed',
-};
-
-const defaultProfile = {
-  name: '',
-  age: '',
-  city: '',
-  bio: '',
-  interests: '',
-  mode: 'amoureux',
-  avatar: '',
-};
+function SectionHeader({ eyebrow, title, description, aside }) {
+  return (
+    <div className="panel-header">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h2>{title}</h2>
+        {description ? <p className="section-description">{description}</p> : null}
+      </div>
+      {aside}
+    </div>
+  );
+}
 
 function App() {
+  const [bootState] = useState(() => loadInitialState({
+    profile: () => safeReadJSON(STORAGE_KEYS.profile, defaultProfile, { sanitize: sanitizeProfile }),
+    likes: () => safeReadJSON(STORAGE_KEYS.likes, [], { sanitize: sanitizeIdList }),
+    passed: () => safeReadJSON(STORAGE_KEYS.passed, [], { sanitize: sanitizeIdList }),
+    matches: () => safeReadJSON(STORAGE_KEYS.matches, [], { sanitize: sanitizeMatches }),
+    messages: () => safeReadJSON(STORAGE_KEYS.messages, DEFAULT_MESSAGES, { sanitize: sanitizeConversations }),
+  }));
   const [view, setView] = useState('home');
   const [activeMode, setActiveMode] = useState('all');
-  const [profile, setProfile] = useState(() => {
-    const raw = localStorage.getItem(STORAGE_KEYS.profile);
-    return raw ? JSON.parse(raw) : defaultProfile;
-  });
-  const [likes, setLikes] = useState(() => {
-    const raw = localStorage.getItem(STORAGE_KEYS.likes);
-    return raw ? JSON.parse(raw) : [];
-  });
-  const [passed, setPassed] = useState(() => {
-    const raw = localStorage.getItem(STORAGE_KEYS.passed);
-    return raw ? JSON.parse(raw) : [];
-  });
-  const [matches, setMatches] = useState(() => {
-    const raw = localStorage.getItem(STORAGE_KEYS.matches);
-    return raw ? JSON.parse(raw) : [];
-  });
-  const [messages, setMessages] = useState(() => {
-    const raw = localStorage.getItem(STORAGE_KEYS.messages);
-    return raw ? JSON.parse(raw) : DEFAULT_MESSAGES;
-  });
+  const [profile, setProfile] = useState(bootState.profile);
+  const [profileDraft, setProfileDraft] = useState(bootState.profile);
+  const [profileErrors, setProfileErrors] = useState({});
+  const [likes, setLikes] = useState(bootState.likes);
+  const [passed, setPassed] = useState(bootState.passed);
+  const [matches, setMatches] = useState(bootState.matches);
+  const [messages, setMessages] = useState(bootState.messages);
+  const [selectedConversation, setSelectedConversation] = useState(bootState.messages[0]?.id ?? null);
   const [draftMessage, setDraftMessage] = useState('');
-  const [selectedConversation, setSelectedConversation] = useState(DEFAULT_MESSAGES[0]?.id || null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [cityQuery, setCityQuery] = useState('');
+  const [toasts, setToasts] = useState([]);
+  const [isReady, setIsReady] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  const showToast = useCallback((toast) => {
+    const id = `${toast.type}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    setToasts((current) => [...current, { id, ...toast }]);
+    window.setTimeout(() => {
+      setToasts((current) => current.filter((item) => item.id !== id));
+    }, 4200);
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profile));
+    setProfileDraft(profile);
   }, [profile]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.likes, JSON.stringify(likes));
-  }, [likes]);
+    setIsReady(true);
+
+    if (bootState.recoveredKeys.length) {
+      showToast({
+        type: 'warning',
+        title: 'Données locales restaurées',
+        message: `Certaines données corrompues (${bootState.recoveredKeys.join(', ')}) ont été réinitialisées en toute sécurité.`,
+      });
+    }
+
+    if (!bootState.storageAvailable) {
+      showToast({
+        type: 'warning',
+        title: 'Stockage indisponible',
+        message: 'Le navigateur ne permet pas la persistance locale. Le prototype reste utilisable sur la session courante.',
+      });
+    }
+  }, [bootState.recoveredKeys, bootState.storageAvailable, showToast]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.passed, JSON.stringify(passed));
-  }, [passed]);
+    if (isReady) {
+      safeWriteJSON(STORAGE_KEYS.profile, profile);
+    }
+  }, [isReady, profile]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.matches, JSON.stringify(matches));
-  }, [matches]);
+    if (isReady) {
+      safeWriteJSON(STORAGE_KEYS.likes, likes);
+    }
+  }, [isReady, likes]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.messages, JSON.stringify(messages));
-  }, [messages]);
+    if (isReady) {
+      safeWriteJSON(STORAGE_KEYS.passed, passed);
+    }
+  }, [isReady, passed]);
 
-  const activeProfileMode = profile?.mode || 'amoureux';
+  useEffect(() => {
+    if (isReady) {
+      safeWriteJSON(STORAGE_KEYS.matches, matches);
+    }
+  }, [isReady, matches]);
 
-  const filteredProfiles = useMemo(() => {
-    return DEMO_PROFILES.filter((profileItem) => {
-      const isNotSaved = !likes.includes(profileItem.id) && !passed.includes(profileItem.id);
-      const modeMatch = activeMode === 'all' ? true : profileItem.mode === activeMode;
-      const sameModeBanner = profileItem.mode === activeProfileMode || activeProfileMode === 'amoureux';
-      return isNotSaved && modeMatch && sameModeBanner;
-    });
-  }, [activeMode, likes, passed, activeProfileMode]);
+  useEffect(() => {
+    if (isReady) {
+      safeWriteJSON(STORAGE_KEYS.messages, messages);
+    }
+  }, [isReady, messages]);
+
+  useEffect(() => {
+    if (!messages.some((conversation) => conversation.id === selectedConversation)) {
+      setSelectedConversation(messages[0]?.id ?? null);
+    }
+  }, [messages, selectedConversation]);
+
+  const activeProfileMode = profile.mode || defaultProfile.mode;
+  const selectedConversationData = messages.find((conversation) => conversation.id === selectedConversation) ?? null;
+  const visibleProfiles = useMemo(() => filterProfiles({
+    profiles: DEMO_PROFILES,
+    activeMode,
+    likes,
+    passed,
+    profileMode: activeProfileMode,
+    query: searchQuery,
+    city: cityQuery,
+  }), [activeMode, activeProfileMode, cityQuery, likes, passed, searchQuery]);
+  const availableCities = useMemo(() => [...new Set(DEMO_PROFILES.map((item) => item.city))].sort((a, b) => a.localeCompare(b)), []);
+  const totalProfilesForMode = useMemo(() => DEMO_PROFILES.filter((item) => activeMode === 'all' || item.mode === activeMode).length, [activeMode]);
+  const seenProfiles = likes.length + passed.length;
+  const completedProfile = Boolean(profile.name && profile.city && profile.bio && profile.age);
+
+  const updateProfileField = (field, value) => {
+    setProfileDraft((current) => ({
+      ...current,
+      [field]: field === 'interests' ? serializeInterests(value) : value,
+    }));
+  };
+
+  const validateProfile = () => {
+    const errors = {};
+
+    if (!profileDraft.name.trim()) {
+      errors.name = 'Ajoutez votre prénom.';
+    }
+
+    if (!profileDraft.age || Number(profileDraft.age) < 18 || Number(profileDraft.age) > 80) {
+      errors.age = 'Indiquez un âge entre 18 et 80 ans.';
+    }
+
+    if (!profileDraft.city.trim()) {
+      errors.city = 'Ajoutez une ville.';
+    }
+
+    if (profileDraft.bio.trim().length < 20) {
+      errors.bio = 'Décrivez-vous en au moins 20 caractères.';
+    }
+
+    if (profileDraft.avatar && !/^https?:\/\//i.test(profileDraft.avatar.trim())) {
+      errors.avatar = 'Utilisez une URL commençant par http:// ou https://.';
+    }
+
+    return errors;
+  };
 
   const handleProfileSave = (event) => {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const nextProfile = {
-      name: formData.get('name')?.toString().trim() || '',
-      age: Number(formData.get('age') || 0),
-      city: formData.get('city')?.toString().trim() || '',
-      bio: formData.get('bio')?.toString().trim() || '',
-      interests: formData.get('interests')?.toString().trim() || '',
-      mode: formData.get('mode')?.toString() || 'amoureux',
-      avatar: formData.get('avatar')?.toString().trim() || '',
-    };
 
-    if (!nextProfile.name || !nextProfile.city || !nextProfile.bio) {
-      alert('Merci de remplir votre nom, ville et bio pour continuer.');
+    const errors = validateProfile();
+    setProfileErrors(errors);
+
+    if (Object.keys(errors).length) {
+      showToast({
+        type: 'warning',
+        title: 'Profil incomplet',
+        message: 'Corrigez les champs signalés pour enregistrer votre profil local.',
+      });
       return;
     }
 
+    const nextProfile = sanitizeProfile(profileDraft);
     setProfile(nextProfile);
+    setProfileDraft(nextProfile);
+    setProfileErrors({});
     setView('discover');
+    showToast({
+      type: 'success',
+      title: 'Profil enregistré',
+      message: 'Vos informations sont sauvegardées uniquement dans ce navigateur.',
+    });
+  };
+
+  const ensureConversation = (profileTarget) => {
+    const existingConversation = messages.find((item) => item.profileId === profileTarget.id);
+    if (existingConversation) {
+      return existingConversation.id;
+    }
+
+    const nextConversation = createConversation(profileTarget);
+    setMessages((current) => [...current, nextConversation]);
+    return nextConversation.id;
   };
 
   const handleLike = (profileId) => {
-    if (likes.includes(profileId)) return;
-    const nextLikes = [...likes, profileId];
-    setLikes(nextLikes);
+    if (likes.includes(profileId)) {
+      return;
+    }
 
     const profileTarget = DEMO_PROFILES.find((item) => item.id === profileId);
-    if (!profileTarget) return;
-
-    const modeCompatible = profileTarget.mode === (profile?.mode || 'amoureux');
-    const cityCompatible = profileTarget.city === profile?.city;
-    const interestOverlap = profile?.interests
-      ?.split(',')
-      .map((value) => value.trim().toLowerCase())
-      .filter(Boolean)
-      .some((value) => profileTarget.interests.some((interest) => interest.toLowerCase() === value));
-
-    if (modeCompatible || cityCompatible || interestOverlap) {
-      const existing = matches.find((match) => match.profileId === profileId);
-      if (!existing) {
-        setMatches((current) => [
-          ...current,
-          {
-            id: `match-${profileId}`,
-            profileId: profileId,
-            name: profileTarget.name,
-            city: profileTarget.city,
-            mode: profileTarget.mode,
-            avatar: profileTarget.avatar,
-            lastMessage: 'Vous avez un match !',
-          },
-        ]);
-      }
+    if (!profileTarget) {
+      return;
     }
+
+    setLikes((current) => [...current, profileId]);
+
+    if (shouldCreateMatch(profileTarget, profile)) {
+      const alreadyMatched = matches.some((item) => item.profileId === profileId);
+      if (!alreadyMatched) {
+        const newMatch = createMatch(profileTarget, profile);
+        setMatches((current) => [...current, newMatch]);
+        ensureConversation(profileTarget);
+        showToast({
+          type: 'success',
+          title: `Nouveau match avec ${profileTarget.name}`,
+          message: 'La conversation locale est prête dans l’onglet Messages.',
+        });
+      }
+      return;
+    }
+
+    showToast({
+      type: 'info',
+      title: 'Like enregistré',
+      message: `${profileTarget.name} a été ajouté à vos affinités locales.`,
+    });
   };
 
   const handlePass = (profileId) => {
-    if (passed.includes(profileId)) return;
+    if (passed.includes(profileId)) {
+      return;
+    }
+
     setPassed((current) => [...current, profileId]);
   };
 
-  const handleSendMessage = () => {
-    if (!draftMessage.trim() || !selectedConversation) return;
+  const handleOpenMatch = (match) => {
+    const profileTarget = DEMO_PROFILES.find((item) => item.id === match.profileId) ?? match;
+    const conversationId = ensureConversation(profileTarget);
+    setSelectedConversation(conversationId);
+    setView('messages');
+  };
 
-    const conversation = messages.find((item) => item.id === selectedConversation);
-    if (!conversation) return;
+  const handleSendMessage = () => {
+    const trimmedMessage = draftMessage.trim();
+    if (!trimmedMessage || !selectedConversationData) {
+      return;
+    }
 
     const nextMessage = {
       id: `msg-${Date.now()}`,
       sender: 'me',
-      text: draftMessage.trim(),
+      text: trimmedMessage,
     };
 
-    setMessages((current) => current.map((item) =>
-      item.id === selectedConversation
-        ? { ...item, messages: [...item.messages, nextMessage], lastMessage: draftMessage.trim() }
+    setMessages((current) => current.map((item) => (
+      item.id === selectedConversationData.id
+        ? { ...item, messages: [...item.messages, nextMessage] }
         : item
-    ));
+    )));
     setDraftMessage('');
   };
 
-  const selectedConversationData = messages.find((item) => item.id === selectedConversation) || messages[0];
+  const handleResetPrototype = () => {
+    resetPrototypeStorage();
+    const sanitizedDefaults = sanitizeConversations(DEFAULT_MESSAGES);
+    setProfile(defaultProfile);
+    setProfileDraft(defaultProfile);
+    setProfileErrors({});
+    setLikes([]);
+    setPassed([]);
+    setMatches([]);
+    setMessages(sanitizedDefaults);
+    setSelectedConversation(sanitizedDefaults[0]?.id ?? null);
+    setDraftMessage('');
+    setSearchQuery('');
+    setCityQuery('');
+    setActiveMode('all');
+    setView('home');
+    showToast({
+      type: 'success',
+      title: 'Prototype réinitialisé',
+      message: 'Toutes les données locales ont été effacées et les profils de démonstration ont été restaurés.',
+    });
+  };
 
-  const matchCount = matches.length;
+  const setCurrentView = (nextView) => {
+    setView(nextView);
+    setIsMobileNavOpen(false);
+  };
+
+  if (!isReady) {
+    return (
+      <div className="app-shell app-loading">
+        <div className="content-panel loading-panel" role="status" aria-live="polite">
+          <p className="eyebrow">Chargement</p>
+          <h1>Lifys prépare votre prototype local…</h1>
+          <p className="section-description">Initialisation sécurisée des profils, matchs et conversations stockés dans le navigateur.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="brand-block" onClick={() => setView('home')} role="button" tabIndex={0}>
-          <span className="brand-icon">❤</span>
-          <div>
-            <strong>Lifys</strong>
-            <small>Rencontres qui comptent</small>
-          </div>
-        </div>
+      <ToastRegion toasts={toasts} onDismiss={(toastId) => setToasts((current) => current.filter((item) => item.id !== toastId))} />
 
-        <nav className="nav" aria-label="Navigation principale">
-          {['home', 'discover', 'matches', 'messages', 'profile'].map((item) => (
+      <header className="topbar">
+        <button type="button" className="brand-block" onClick={() => setCurrentView('home')}>
+          <span className="brand-icon">❤</span>
+          <span>
+            <strong>Lifys</strong>
+            <small>Prototype premium, local et simulé</small>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          className="mobile-nav-toggle"
+          aria-expanded={isMobileNavOpen}
+          aria-controls="lifys-main-nav"
+          onClick={() => setIsMobileNavOpen((current) => !current)}
+        >
+          Menu
+        </button>
+
+        <nav id="lifys-main-nav" className={isMobileNavOpen ? 'nav nav-open' : 'nav'} aria-label="Navigation principale">
+          {NAV_ITEMS.map((item) => (
             <button
-              key={item}
-              className={view === item ? 'nav-button active' : 'nav-button'}
-              onClick={() => setView(item)}
+              key={item.id}
+              type="button"
+              className={view === item.id ? 'nav-button active' : 'nav-button'}
+              onClick={() => setCurrentView(item.id)}
             >
-              {item === 'home' && 'Accueil'}
-              {item === 'discover' && 'Découvrir'}
-              {item === 'matches' && 'Matchs'}
-              {item === 'messages' && 'Messages'}
-              {item === 'profile' && 'Profil'}
+              {item.label}
             </button>
           ))}
         </nav>
+
+        <div className="topbar-actions">
+          <span className="prototype-badge">Données 100% locales</span>
+          <button type="button" className="secondary-button" onClick={handleResetPrototype}>
+            Réinitialiser
+          </button>
+        </div>
       </header>
 
       <main className="page-shell">
-        {view === 'home' && (
-          <section className="hero-panel">
-            <div className="hero-copy">
-              <span className="eyebrow">MVP local · prototype</span>
-              <h1>Rencontrez les bonnes personnes, selon le type de relation que vous cherchez.</h1>
-              <p>
-                Lifys rassemble les rencontres amicales, romantiques, sans lendemain, de mariage et professionnelles dans une seule expérience pensée pour le web mobile.
-              </p>
-              <div className="cta-row">
-                <button className="primary-button" onClick={() => setView('discover')}>Découvrir</button>
-                <button className="secondary-button" onClick={() => setView('profile')}>Créer mon profil</button>
-              </div>
-            </div>
-
-            <div className="hero-visual">
-              <div className="mini-card large">
-                <span className="mini-label">Mode actif</span>
-                <h3>{profile?.mode ? MODES.find((mode) => mode.id === profile.mode)?.label : 'Amoureux'}</h3>
-                <p>{profile?.city || 'Paris'}, {profile?.age || '25'} ans</p>
-              </div>
-              <div className="mini-card small">
-                <span>Matchs</span>
-                <strong>{matchCount}</strong>
-              </div>
-            </div>
-          </section>
-        )}
+        <section className="local-notice" aria-label="Avertissement prototype">
+          <strong>Prototype local</strong>
+          <span>Profils, matchs et messages sont fictifs, enregistrés uniquement dans votre navigateur et ne constituent ni backend réel, ni identité vérifiée.</span>
+        </section>
 
         {view === 'home' && (
-          <section className="mode-grid">
-            {MODES.map((mode) => (
-              <button
-                key={mode.id}
-                className={activeMode === mode.id ? 'mode-card active' : 'mode-card'}
-                onClick={() => {
-                  setActiveMode(mode.id);
-                  setView('discover');
-                }}
-              >
-                <span className="mode-icon">{mode.icon}</span>
-                <strong>{mode.label}</strong>
-                <small>Rencontres {mode.label.toLowerCase()}</small>
-              </button>
-            ))}
-          </section>
+          <>
+            <section className="hero-panel">
+              <div className="hero-copy">
+                <span className="eyebrow">Expérience premium · responsive · locale</span>
+                <h1>Cinq façons de créer une rencontre, une seule expérience Lifys.</h1>
+                <p>
+                  Explorez des connexions amicales, amoureuses, sans lendemain, orientées mariage ou professionnelles dans un MVP chaleureux,
+                  sobre et prêt à évoluer sans changer inutilement la stack React + Vite.
+                </p>
+
+                <div className="cta-row">
+                  <button type="button" className="primary-button" onClick={() => setCurrentView('discover')}>Découvrir les profils</button>
+                  <button type="button" className="secondary-button" onClick={() => setCurrentView('profile')}>
+                    {completedProfile ? 'Modifier mon profil' : 'Créer mon profil'}
+                  </button>
+                </div>
+
+                <div className="hero-metrics" aria-label="Résumé du prototype">
+                  <article className="metric-card">
+                    <span>Profils visibles</span>
+                    <strong>{visibleProfiles.length}</strong>
+                    <small>sur {totalProfilesForMode}</small>
+                  </article>
+                  <article className="metric-card">
+                    <span>Matchs locaux</span>
+                    <strong>{matches.length}</strong>
+                    <small>générés dans le navigateur</small>
+                  </article>
+                  <article className="metric-card">
+                    <span>Progression profil</span>
+                    <strong>{completedProfile ? 'Complet' : 'À finaliser'}</strong>
+                    <small>{completedProfile ? 'Prêt pour la découverte' : 'Nom, âge, ville, bio requis'}</small>
+                  </article>
+                </div>
+              </div>
+
+              <div className="hero-visual">
+                <div className="mini-card large">
+                  <span className="mini-label">Catégorie principale</span>
+                  <h3>{getModeById(activeProfileMode).label}</h3>
+                  <p>{profile.city || 'Ville non renseignée'} · {profile.age || '18+'} ans</p>
+                </div>
+                <div className="mini-card">
+                  <span className="mini-label">Découverte</span>
+                  <strong>{seenProfiles}</strong>
+                  <p>profils déjà consultés</p>
+                </div>
+                <div className="mini-card">
+                  <span className="mini-label">Conversations</span>
+                  <strong>{messages.length}</strong>
+                  <p>fils locaux disponibles</p>
+                </div>
+              </div>
+            </section>
+
+            <section className="mode-grid" aria-label="Choix de catégorie">
+              {MODES.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  className={activeMode === mode.id ? 'mode-card active' : 'mode-card'}
+                  onClick={() => {
+                    setActiveMode(mode.id);
+                    setCurrentView('discover');
+                  }}
+                >
+                  <span className="mode-icon" style={{ '--mode-accent': mode.accent }}>{mode.icon}</span>
+                  <strong>{mode.label}</strong>
+                  <small>{mode.description}</small>
+                </button>
+              ))}
+            </section>
+          </>
         )}
 
         {view === 'discover' && (
           <section className="content-panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Découverte</p>
-                <h2>Profils recommandés</h2>
-              </div>
-              <div className="mode-pills" aria-label="Filtre de mode">
-                <button className={activeMode === 'all' ? 'pill active' : 'pill'} onClick={() => setActiveMode('all')}>Tous</button>
+            <SectionHeader
+              eyebrow="Découverte"
+              title="Profils recommandés"
+              description="Filtrez par catégorie, texte ou ville. Les résultats tiennent compte de vos likes, passes et du mode principal de votre profil."
+              aside={(
+                <div className="header-meta">
+                  <span className="counter-badge">{visibleProfiles.length} profil{visibleProfiles.length > 1 ? 's' : ''} visible{visibleProfiles.length > 1 ? 's' : ''}</span>
+                  <span className="counter-badge muted">{seenProfiles} déjà traités</span>
+                </div>
+              )}
+            />
+
+            <div className="discover-toolbar">
+              <div className="mode-pills" aria-label="Filtre par catégorie">
+                <button type="button" className={activeMode === 'all' ? 'pill active' : 'pill'} onClick={() => setActiveMode('all')}>Tous</button>
                 {MODES.map((mode) => (
-                  <button key={mode.id} className={activeMode === mode.id ? 'pill active' : 'pill'} onClick={() => setActiveMode(mode.id)}>{mode.label}</button>
+                  <button type="button" key={mode.id} className={activeMode === mode.id ? 'pill active' : 'pill'} onClick={() => setActiveMode(mode.id)}>
+                    {mode.label}
+                  </button>
                 ))}
+              </div>
+
+              <div className="filter-grid">
+                <label>
+                  <span>Recherche texte</span>
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Nom, bio, intérêt…"
+                  />
+                </label>
+                <label>
+                  <span>Ville</span>
+                  <input
+                    type="search"
+                    list="lifys-cities"
+                    value={cityQuery}
+                    onChange={(event) => setCityQuery(event.target.value)}
+                    placeholder="Paris, Lyon…"
+                  />
+                  <datalist id="lifys-cities">
+                    {availableCities.map((city) => <option key={city} value={city} />)}
+                  </datalist>
+                </label>
               </div>
             </div>
 
-            {filteredProfiles.length === 0 ? (
-              <div className="empty-state">
-                <h3>Plus de profils pour le moment</h3>
-                <p>Vous avez vu tous les profils disponibles pour ce mode. Essayez une autre catégorie ou mettez votre profil à jour.</p>
-              </div>
+            {visibleProfiles.length === 0 ? (
+              <EmptyState
+                title="Aucun profil ne correspond à vos critères"
+                description="Essayez une autre catégorie, effacez vos filtres ou réinitialisez les données locales pour revoir tous les profils de démonstration."
+                actionLabel="Effacer les filtres"
+                onAction={() => {
+                  setSearchQuery('');
+                  setCityQuery('');
+                  setActiveMode('all');
+                }}
+              />
             ) : (
               <div className="discover-grid">
-                {filteredProfiles.slice(0, 4).map((person) => (
+                {visibleProfiles.slice(0, 6).map((person) => (
                   <article key={person.id} className="profile-card">
-                    <img src={person.avatar} alt={person.name} />
+                    <Avatar className="profile-avatar" src={person.avatar} alt={person.name} fallback={person.name} />
                     <div className="profile-card-body">
                       <div className="identity-row">
-                        <h3>{person.name}, {person.age}</h3>
-                        <span className="tag">{MODES.find((mode) => mode.id === person.mode)?.label}</span>
+                        <div>
+                          <h3>{person.name}, {person.age}</h3>
+                          <p className="city-line">📍 {person.city}</p>
+                        </div>
+                        <span className="tag">{getModeById(person.mode).label}</span>
                       </div>
-                      <p className="city-line">📍 {person.city}</p>
                       <p>{person.bio}</p>
                       <div className="interest-row">
                         {person.interests.map((item) => (
-                          <span key={item}>{item}</span>
+                          <span key={`${person.id}-${item}`}>{item}</span>
                         ))}
                       </div>
                     </div>
                     <div className="card-actions">
-                      <button className="pass-button" onClick={() => handlePass(person.id)}>Pass</button>
-                      <button className="like-button" onClick={() => handleLike(person.id)}>Like</button>
+                      <button type="button" className="pass-button" aria-label={`Passer le profil de ${person.name}`} onClick={() => handlePass(person.id)}>
+                        Pass
+                      </button>
+                      <button type="button" className="like-button" aria-label={`Liker le profil de ${person.name}`} onClick={() => handleLike(person.id)}>
+                        Like
+                      </button>
                     </div>
                   </article>
                 ))}
@@ -335,32 +563,32 @@ function App() {
 
         {view === 'matches' && (
           <section className="content-panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Matchs</p>
-                <h2>Vos correspondances</h2>
-              </div>
-            </div>
+            <SectionHeader
+              eyebrow="Matchs"
+              title="Vos correspondances"
+              description="Chaque match reste local à ce navigateur. Utilisez la messagerie de démonstration pour visualiser l’expérience conversationnelle."
+            />
 
             {matches.length === 0 ? (
-              <div className="empty-state">
-                <h3>Aucun match pour l’instant</h3>
-                <p>Commencez à liker des profils compatibles pour créer une première connexion.</p>
-              </div>
+              <EmptyState
+                title="Aucun match pour l’instant"
+                description="Complétez votre profil puis likez des profils compatibles pour déclencher des correspondances locales."
+                actionLabel="Compléter mon profil"
+                onAction={() => setCurrentView('profile')}
+              />
             ) : (
               <div className="matches-list">
                 {matches.map((match) => (
                   <article key={match.id} className="match-item">
-                    <img src={match.avatar} alt={match.name} />
-                    <div>
+                    <Avatar className="match-avatar" src={match.avatar} alt={match.name} fallback={match.name} />
+                    <div className="match-copy">
                       <h3>{match.name}</h3>
-                      <p>{match.city} · {MODES.find((mode) => mode.id === match.mode)?.label}</p>
-                      <small>{match.lastMessage}</small>
+                      <p>{match.city} · {getModeById(match.mode).label}</p>
+                      <small>{match.reason}</small>
                     </div>
-                    <button className="secondary-button" onClick={() => {
-                      setSelectedConversation(messages.find((item) => item.profileId === match.profileId)?.id || null);
-                      setView('messages');
-                    }}>Envoyer un message</button>
+                    <button type="button" className="secondary-button" onClick={() => handleOpenMatch(match)}>
+                      Ouvrir la messagerie
+                    </button>
                   </article>
                 ))}
               </div>
@@ -369,35 +597,53 @@ function App() {
         )}
 
         {view === 'messages' && (
-          <section className="messages-layout content-panel">
-            <aside className="conversation-list">
-              {messages.map((conversation) => (
-                <button
-                  key={conversation.id}
-                  className={selectedConversation === conversation.id ? 'conversation-item active' : 'conversation-item'}
-                  onClick={() => setSelectedConversation(conversation.id)}
-                >
-                  <img src={conversation.avatar} alt={conversation.name} />
-                  <div>
-                    <strong>{conversation.name}</strong>
-                    <small>{conversation.messages[conversation.messages.length - 1]?.text || 'Aucun message'}</small>
-                  </div>
-                </button>
-              ))}
+          <section className="messages-layout">
+            <aside className="content-panel conversation-panel">
+              <SectionHeader
+                eyebrow="Messages"
+                title="Conversations"
+                description="Sélectionnez un échange pour consulter l’historique local ou envoyer un nouveau message avec la touche Entrée."
+              />
+
+              {messages.length === 0 ? (
+                <EmptyState
+                  title="Aucune conversation"
+                  description="Créez d’abord un match local pour déverrouiller la messagerie de démonstration."
+                  actionLabel="Voir les profils"
+                  onAction={() => setCurrentView('discover')}
+                />
+              ) : (
+                <div className="conversation-list">
+                  {messages.map((conversation) => (
+                    <button
+                      key={conversation.id}
+                      type="button"
+                      className={selectedConversation === conversation.id ? 'conversation-item active' : 'conversation-item'}
+                      onClick={() => setSelectedConversation(conversation.id)}
+                    >
+                      <Avatar className="conversation-avatar" src={conversation.avatar} alt={conversation.name} fallback={conversation.name} />
+                      <div>
+                        <strong>{conversation.name}</strong>
+                        <small>{getConversationPreview(conversation)}</small>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </aside>
 
-            <div className="chat-panel">
+            <div className="content-panel chat-shell">
               {selectedConversationData ? (
-                <>
+                <div className="chat-panel">
                   <div className="chat-header">
-                    <img src={selectedConversationData.avatar} alt={selectedConversationData.name} />
+                    <Avatar className="conversation-avatar" src={selectedConversationData.avatar} alt={selectedConversationData.name} fallback={selectedConversationData.name} />
                     <div>
                       <strong>{selectedConversationData.name}</strong>
-                      <small>{MODES.find((mode) => mode.id === selectedConversationData.mode)?.label}</small>
+                      <small>{getModeById(selectedConversationData.mode).label}</small>
                     </div>
                   </div>
 
-                  <div className="chat-body">
+                  <div className="chat-body" aria-live="polite">
                     {selectedConversationData.messages.map((message) => (
                       <div key={message.id} className={message.sender === 'me' ? 'bubble me' : 'bubble them'}>
                         {message.text}
@@ -408,22 +654,26 @@ function App() {
                   <div className="composer">
                     <input
                       type="text"
-                      placeholder="Écrire un message..."
+                      placeholder="Écrire un message local…"
                       value={draftMessage}
                       onChange={(event) => setDraftMessage(event.target.value)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') {
+                          event.preventDefault();
                           handleSendMessage();
                         }
                       }}
                     />
-                    <button className="primary-button" onClick={handleSendMessage}>Envoyer</button>
+                    <button type="button" className="primary-button" onClick={handleSendMessage} disabled={!draftMessage.trim()}>
+                      Envoyer
+                    </button>
                   </div>
-                </>
-              ) : (
-                <div className="empty-state">
-                  <h3>Aucune conversation</h3>
                 </div>
+              ) : (
+                <EmptyState
+                  title="Sélectionnez une conversation"
+                  description="Choisissez un échange dans la colonne de gauche pour afficher les messages du prototype local."
+                />
               )}
             </div>
           </section>
@@ -431,56 +681,124 @@ function App() {
 
         {view === 'profile' && (
           <section className="content-panel profile-panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Profil</p>
-                <h2>Complétez votre profil</h2>
-              </div>
+            <SectionHeader
+              eyebrow="Profil"
+              title="Complétez votre profil"
+              description="La validation est locale et accessible. Vos centres d’intérêt sont normalisés automatiquement pour améliorer le matching du prototype."
+            />
+
+            <div className="profile-layout">
+              <form className="profile-form" onSubmit={handleProfileSave} noValidate>
+                {Object.keys(profileErrors).length ? (
+                  <div className="form-alert" role="alert">
+                    Merci de corriger les champs indiqués avant l’enregistrement.
+                  </div>
+                ) : null}
+
+                <div className="form-grid">
+                  <label>
+                    <span>Prénom</span>
+                    <input
+                      name="name"
+                      value={profileDraft.name}
+                      onChange={(event) => updateProfileField('name', event.target.value)}
+                      placeholder="Sofia"
+                      aria-invalid={Boolean(profileErrors.name)}
+                    />
+                    {profileErrors.name ? <small className="field-error">{profileErrors.name}</small> : null}
+                  </label>
+                  <label>
+                    <span>Âge</span>
+                    <input
+                      name="age"
+                      type="number"
+                      min="18"
+                      max="80"
+                      value={profileDraft.age}
+                      onChange={(event) => updateProfileField('age', event.target.value)}
+                      aria-invalid={Boolean(profileErrors.age)}
+                    />
+                    {profileErrors.age ? <small className="field-error">{profileErrors.age}</small> : null}
+                  </label>
+                  <label>
+                    <span>Ville</span>
+                    <input
+                      name="city"
+                      value={profileDraft.city}
+                      onChange={(event) => updateProfileField('city', event.target.value)}
+                      placeholder="Paris"
+                      aria-invalid={Boolean(profileErrors.city)}
+                    />
+                    {profileErrors.city ? <small className="field-error">{profileErrors.city}</small> : null}
+                  </label>
+                  <label>
+                    <span>Catégorie principale</span>
+                    <select
+                      name="mode"
+                      value={profileDraft.mode}
+                      onChange={(event) => updateProfileField('mode', event.target.value)}
+                    >
+                      {MODES.map((mode) => (
+                        <option key={mode.id} value={mode.id}>{mode.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <label>
+                  <span>Avatar URL</span>
+                  <input
+                    name="avatar"
+                    value={profileDraft.avatar}
+                    onChange={(event) => updateProfileField('avatar', event.target.value)}
+                    placeholder="https://..."
+                    aria-invalid={Boolean(profileErrors.avatar)}
+                  />
+                  {profileErrors.avatar ? <small className="field-error">{profileErrors.avatar}</small> : null}
+                </label>
+
+                <label>
+                  <span>Bio</span>
+                  <textarea
+                    name="bio"
+                    rows="5"
+                    value={profileDraft.bio}
+                    onChange={(event) => updateProfileField('bio', event.target.value)}
+                    placeholder="Décrivez votre personnalité, vos attentes et l’énergie que vous souhaitez créer."
+                    aria-invalid={Boolean(profileErrors.bio)}
+                  />
+                  {profileErrors.bio ? <small className="field-error">{profileErrors.bio}</small> : null}
+                </label>
+
+                <label>
+                  <span>Centres d’intérêt</span>
+                  <input
+                    name="interests"
+                    value={profileDraft.interests}
+                    onChange={(event) => updateProfileField('interests', event.target.value)}
+                    placeholder="Voyage, Musique, Sport"
+                  />
+                </label>
+
+                <div className="form-actions">
+                  <button type="submit" className="primary-button">Sauvegarder le profil</button>
+                </div>
+              </form>
+
+              <aside className="profile-preview">
+                <p className="eyebrow">Aperçu</p>
+                <Avatar className="profile-preview-avatar" src={profileDraft.avatar} alt={profileDraft.name || 'Votre profil'} fallback={profileDraft.name || 'Lifys'} />
+                <h3>{profileDraft.name || 'Votre prénom'}</h3>
+                <p>{profileDraft.city || 'Ville'} · {profileDraft.age || '18+'} ans</p>
+                <span className="tag">{getModeById(profileDraft.mode).label}</span>
+                <p className="profile-preview-bio">{profileDraft.bio || 'Votre bio apparaîtra ici une fois renseignée.'}</p>
+                <div className="interest-row">
+                  {(profileDraft.interests ? profileDraft.interests.split(',').map((item) => item.trim()).filter(Boolean) : ['Ajoutez vos centres d’intérêt']).map((item) => (
+                    <span key={item}>{item}</span>
+                  ))}
+                </div>
+              </aside>
             </div>
-
-            <form className="profile-form" onSubmit={handleProfileSave}>
-              <div className="form-grid">
-                <label>
-                  <span>Prénom</span>
-                  <input name="name" defaultValue={profile?.name || ''} placeholder="Sofia" />
-                </label>
-                <label>
-                  <span>Âge</span>
-                  <input name="age" type="number" min="18" max="80" defaultValue={profile?.age || 28} />
-                </label>
-                <label>
-                  <span>Ville</span>
-                  <input name="city" defaultValue={profile?.city || ''} placeholder="Paris" />
-                </label>
-                <label>
-                  <span>Mode de rencontre</span>
-                  <select name="mode" defaultValue={profile?.mode || 'amoureux'}>
-                    {MODES.map((mode) => (
-                      <option key={mode.id} value={mode.id}>{mode.label}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <label>
-                <span>Avatar URL</span>
-                <input name="avatar" defaultValue={profile?.avatar || ''} placeholder="https://..." />
-              </label>
-
-              <label>
-                <span>Bio</span>
-                <textarea name="bio" rows="4" defaultValue={profile?.bio || ''} placeholder="Décrivez votre personnalité et ce que vous recherchez." />
-              </label>
-
-              <label>
-                <span>Centres d’intérêt</span>
-                <input name="interests" defaultValue={profile?.interests || ''} placeholder="voyage, musique, sport" />
-              </label>
-
-              <div className="form-actions">
-                <button type="submit" className="primary-button">Sauvegarder</button>
-              </div>
-            </form>
           </section>
         )}
       </main>
