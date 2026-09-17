@@ -1,12 +1,8 @@
 export default function Toast({ toasts, onDismiss }) {
   return (
-    <div className="toast-stack">
+    <div className="toast-stack" aria-live="polite" aria-atomic="false">
       {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          className={`toast toast-${toast.type || 'info'}`}
-          role={toast.type === 'error' ? 'alert' : 'status'}
-        >
+        <div key={toast.id} className={`toast toast-${toast.type || 'info'}`}>
           <div>
             <strong>{toast.title}</strong>
             {toast.description ? <p>{toast.description}</p> : null}

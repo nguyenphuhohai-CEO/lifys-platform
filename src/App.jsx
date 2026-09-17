@@ -198,6 +198,8 @@ function App() {
     }
 
     const text = draftMessage.trim();
+    const activeConversation = messages.find((item) => item.id === selectedConversation);
+    const targetProfileId = activeConversation?.profileId;
 
     setMessages((current) =>
       current.map((item) =>
@@ -221,7 +223,7 @@ function App() {
 
     setMatches((current) =>
       current.map((match) =>
-        match.profileId === selectedConversationData?.profileId
+        match.profileId === targetProfileId
           ? { ...match, lastMessage: text }
           : match,
       ),

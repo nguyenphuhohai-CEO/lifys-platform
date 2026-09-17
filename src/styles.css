@@ -869,16 +869,14 @@ textarea:focus-visible {
   }
 
   .info-banner,
-  .panel-header,
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .match-item,
   .composer {
     grid-template-columns: 1fr;
-  }
-
-  .info-banner,
-  .panel-header,
-  .match-item {
-    align-items: flex-start;
   }
 
   .mode-grid,
