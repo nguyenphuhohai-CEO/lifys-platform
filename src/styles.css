@@ -60,6 +60,26 @@ body {
   transform: translateY(0);
 }
 
+.sr-only,
+.choice-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.selection-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 button,
 input,
 select,
@@ -198,6 +218,13 @@ textarea:focus-visible {
 .nav-button:hover {
   background: linear-gradient(135deg, rgba(182, 95, 181, 0.18), rgba(102, 70, 200, 0.16));
   color: var(--secondary);
+}
+
+.mode-card:focus-within,
+.pill:focus-within,
+.conversation-item:focus-within {
+  outline: 3px solid rgba(102, 70, 200, 0.22);
+  outline-offset: 2px;
 }
 
 .topbar-actions {

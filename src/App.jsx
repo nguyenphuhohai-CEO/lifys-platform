@@ -523,23 +523,28 @@ function App() {
               </div>
             </section>
 
-            <section className="mode-grid" aria-label="Choix de catégorie">
-              {MODES.map((mode) => (
-                <button
-                  key={mode.id}
-                  type="button"
-                  className={activeMode === mode.id ? 'mode-card active' : 'mode-card'}
-                  onClick={() => {
-                    setActiveMode(mode.id);
-                    setCurrentView('discover');
-                  }}
-                  aria-current={activeMode === mode.id ? 'true' : undefined}
-                >
-                  <span className="mode-icon" style={{ '--mode-accent': mode.accent }}>{mode.icon}</span>
-                  <strong>{mode.label}</strong>
-                  <small>{mode.description}</small>
-                </button>
-              ))}
+            <section aria-labelledby="lifys-category-selection">
+              <fieldset className="selection-group mode-grid">
+                <legend id="lifys-category-selection" className="sr-only">Choix de catégorie</legend>
+                {MODES.map((mode) => (
+                  <label key={mode.id} className={activeMode === mode.id ? 'mode-card active' : 'mode-card'}>
+                    <input
+                      className="choice-input"
+                      type="radio"
+                      name="home-mode"
+                      value={mode.id}
+                      checked={activeMode === mode.id}
+                      onChange={() => {
+                        setActiveMode(mode.id);
+                        setCurrentView('discover');
+                      }}
+                    />
+                    <span className="mode-icon" style={{ '--mode-accent': mode.accent }}>{mode.icon}</span>
+                    <strong>{mode.label}</strong>
+                    <small>{mode.description}</small>
+                  </label>
+                ))}
+              </fieldset>
             </section>
           </>
         )}
@@ -559,20 +564,33 @@ function App() {
             />
 
             <div className="discover-toolbar">
-              <div className="mode-pills" aria-label="Filtre par catégorie">
-                <button type="button" className={activeMode === 'all' ? 'pill active' : 'pill'} onClick={() => setActiveMode('all')} aria-current={activeMode === 'all' ? 'true' : undefined}>Tous</button>
+              <fieldset className="selection-group mode-pills">
+                <legend className="sr-only">Filtre par catégorie</legend>
+                <label className={activeMode === 'all' ? 'pill active' : 'pill'}>
+                  <input
+                    className="choice-input"
+                    type="radio"
+                    name="discover-mode"
+                    value="all"
+                    checked={activeMode === 'all'}
+                    onChange={() => setActiveMode('all')}
+                  />
+                  Tous
+                </label>
                 {MODES.map((mode) => (
-                  <button
-                    type="button"
-                    key={mode.id}
-                    className={activeMode === mode.id ? 'pill active' : 'pill'}
-                    onClick={() => setActiveMode(mode.id)}
-                    aria-current={activeMode === mode.id ? 'true' : undefined}
-                  >
+                  <label key={mode.id} className={activeMode === mode.id ? 'pill active' : 'pill'}>
+                    <input
+                      className="choice-input"
+                      type="radio"
+                      name="discover-mode"
+                      value={mode.id}
+                      checked={activeMode === mode.id}
+                      onChange={() => setActiveMode(mode.id)}
+                    />
                     {mode.label}
-                  </button>
+                  </label>
                 ))}
-              </div>
+              </fieldset>
 
               <div className="filter-grid">
                 <label>
@@ -673,23 +691,29 @@ function App() {
               {conversations.length === 0 ? (
                 <EmptyState title="Aucune conversation" description="Un match local ouvre automatiquement un canal de discussion de démonstration." actionLabel="Trouver un match" onAction={() => setCurrentView('discover')} />
               ) : (
-                <div className="conversation-list">
+                <fieldset className="selection-group conversation-list">
+                  <legend className="sr-only">Choisir une conversation</legend>
                   {conversations.map((conversation) => (
-                    <button
+                    <label
                       key={conversation.id}
-                      type="button"
                       className={selectedConversation === conversation.id ? 'conversation-item active' : 'conversation-item'}
-                      onClick={() => setSelectedConversation(conversation.id)}
-                      aria-current={selectedConversation === conversation.id ? 'true' : undefined}
                     >
+                      <input
+                        className="choice-input"
+                        type="radio"
+                        name="conversation-selection"
+                        value={conversation.id}
+                        checked={selectedConversation === conversation.id}
+                        onChange={() => setSelectedConversation(conversation.id)}
+                      />
                       <Avatar className="conversation-avatar" src={conversation.avatar} alt={conversation.name} fallback={conversation.name} />
                       <div>
                         <strong>{conversation.name}</strong>
                         <small>{getConversationPreview(conversation)}</small>
                       </div>
-                    </button>
+                    </label>
                   ))}
-                </div>
+                </fieldset>
               )}
             </aside>
 
