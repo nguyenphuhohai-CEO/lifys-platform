@@ -44,6 +44,7 @@ const STORAGE_RECOVERY_LABELS = {
 };
 
 const PERSISTENCE_ERROR_MESSAGE = 'Le navigateur n’a pas pu enregistrer les dernières données locales. Elles restent visibles pendant cette session uniquement.';
+const RESET_ERROR_MESSAGE = 'Le navigateur n’a pas pu réinitialiser le stockage local. Réessayez pour vider les données enregistrées.';
 
 function createProfileDraft(profileValue) {
   return {
@@ -95,6 +96,7 @@ function App() {
   const [activeMode, setActiveMode] = useState('all');
   const [profile, setProfile] = useState(bootstrappedState.profile);
   const [profileDraft, setProfileDraft] = useState(createProfileDraft(bootstrappedState.profile));
+  const [hasUnsavedProfileChanges, setHasUnsavedProfileChanges] = useState(false);
   const [profileErrors, setProfileErrors] = useState({});
   const [likes, setLikes] = useState(bootstrappedState.likes);
   const [passed, setPassed] = useState(bootstrappedState.passed);
@@ -206,10 +208,6 @@ function App() {
     query: searchQuery,
     city: cityQuery,
   }), [activeMode, cityQuery, likes, passed, profile.mode, searchQuery]);
-  const hasUnsavedProfileChanges = useMemo(
-    () => JSON.stringify(sanitizeProfile(profileDraft)) !== JSON.stringify(profile),
-    [profile, profileDraft],
-  );
   const completedProfile = Boolean(profile.name && profile.age && profile.city && profile.bio.trim().length >= 20);
   const hasActiveFilters = Boolean(searchQuery.trim() || cityQuery.trim() || activeMode !== 'all');
 
@@ -236,7 +234,11 @@ function App() {
   };
 
   const updateProfileField = (field, value) => {
-    setProfileDraft((current) => ({ ...current, [field]: value }));
+    setProfileDraft((current) => {
+      const nextDraft = { ...current, [field]: value };
+      setHasUnsavedProfileChanges(JSON.stringify(sanitizeProfile(nextDraft)) !== JSON.stringify(profile));
+      return nextDraft;
+    });
     setProfileErrors((current) => {
       if (!current[field]) {
         return current;
@@ -279,6 +281,7 @@ function App() {
       const nextProfile = sanitizeProfile(profileDraft);
       setProfile(nextProfile);
       setProfileDraft(createProfileDraft(nextProfile));
+      setHasUnsavedProfileChanges(false);
       setProfileErrors({});
       setView('discover');
       setPageError('');
@@ -370,11 +373,24 @@ function App() {
 
     try {
       const storageReset = resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS);
+      const canApplyReset = storageReset || !storageAvailable;
+
+      if (!canApplyReset) {
+        setPageError(RESET_ERROR_MESSAGE);
+        showToast({
+          type: 'warning',
+          title: 'Réinitialisation incomplète',
+          message: RESET_ERROR_MESSAGE,
+        });
+        return;
+      }
+
       const defaultConversations = sanitizeConversations(DEFAULT_MESSAGES);
       const resetProfile = sanitizeProfile(defaultProfile);
 
       setProfile(resetProfile);
       setProfileDraft(createProfileDraft(resetProfile));
+      setHasUnsavedProfileChanges(false);
       setProfileErrors({});
       setLikes([]);
       setPassed([]);
@@ -390,11 +406,9 @@ function App() {
       setPageError('');
 
       showToast({
-        type: storageReset || !storageAvailable ? 'success' : 'warning',
+        type: 'success',
         title: 'Prototype réinitialisé',
-        message: storageReset || !storageAvailable
-          ? 'Le profil, les interactions et les messages locaux ont été remis à zéro.'
-          : 'Le prototype a été remis à zéro en mémoire, mais le navigateur n’a pas pu nettoyer tout localStorage.',
+        message: 'Le profil, les interactions et les messages locaux ont été remis à zéro.',
       });
     } finally {
       setResetting(false);
