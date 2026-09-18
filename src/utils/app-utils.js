@@ -297,12 +297,18 @@ export function applyPassAction({
   passed = [],
   matches = [],
   conversations = [],
+  selectedConversationId = null,
 }) {
+  const nextConversations = conversations.filter((conversation) => conversation.profileId !== profileId);
+
   return {
     likes: sanitizeIdList(likes).filter((item) => item !== profileId),
     passed: [...new Set([...sanitizeIdList(passed), profileId])],
     matches: matches.filter((match) => match.profileId !== profileId),
-    conversations: conversations.filter((conversation) => conversation.profileId !== profileId),
+    conversations: nextConversations,
+    selectedConversationId: nextConversations.some((conversation) => conversation.id === selectedConversationId)
+      ? selectedConversationId
+      : nextConversations[0]?.id ?? null,
   };
 }
 

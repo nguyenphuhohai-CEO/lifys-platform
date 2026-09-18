@@ -202,12 +202,14 @@ test('applyPassAction removes local like, match and conversation for a passed pr
     passed: [],
     matches: [{ id: 'match-p2', profileId: 'p2' }, { id: 'match-p7', profileId: 'p7' }],
     conversations: [{ id: 'conv-p2', profileId: 'p2' }, { id: 'conv-p7', profileId: 'p7' }],
+    selectedConversationId: 'conv-p2',
   });
 
   assert.deepEqual(result.likes, ['p1']);
   assert.deepEqual(result.passed, ['p2']);
   assert.deepEqual(result.matches.map((match) => match.profileId), ['p7']);
   assert.deepEqual(result.conversations.map((conversation) => conversation.profileId), ['p7']);
+  assert.equal(result.selectedConversationId, 'conv-p7');
 });
 
 test('ensureConversationForProfile reuses or creates a conversation for a matched profile', () => {

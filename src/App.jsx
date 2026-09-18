@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Avatar from './components/Avatar';
 import ToastRegion from './components/ToastRegion';
@@ -26,6 +26,14 @@ const NAV_ITEMS = [
   { id: 'matches', label: 'Matchs' },
   { id: 'messages', label: 'Messages' },
   { id: 'profile', label: 'Profil' },
+];
+
+const PROTOTYPE_STORAGE_KEYS = [
+  STORAGE_KEYS.profile,
+  STORAGE_KEYS.likes,
+  STORAGE_KEYS.passed,
+  STORAGE_KEYS.matches,
+  STORAGE_KEYS.messages,
 ];
 
 function getInitialPrototypeState() {
@@ -63,6 +71,7 @@ function SectionHeader({ eyebrow, title, description, aside }) {
 
 function App() {
   const [initialState] = useState(() => getInitialPrototypeState());
+  const hasHydratedRef = useRef(false);
   const [view, setView] = useState('home');
   const [activeMode, setActiveMode] = useState('all');
   const [profile, setProfile] = useState(initialState.profile);
@@ -82,7 +91,6 @@ function App() {
   const [toasts, setToasts] = useState([]);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [profileSaving, setProfileSaving] = useState(false);
-  const [messageSending, setMessageSending] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [pageError, setPageError] = useState('');
@@ -133,34 +141,58 @@ function App() {
   }, [handleStorageFailure, initialState, showToast]);
 
   useEffect(() => {
+    if (!hasHydratedRef.current) {
+      return;
+    }
+
     if (!safeWriteJSON(STORAGE_KEYS.profile, profile)) {
       handleWriteFailure();
     }
   }, [handleWriteFailure, profile]);
 
   useEffect(() => {
+    if (!hasHydratedRef.current) {
+      return;
+    }
+
     if (!safeWriteJSON(STORAGE_KEYS.likes, likes)) {
       handleWriteFailure();
     }
   }, [handleWriteFailure, likes]);
 
   useEffect(() => {
+    if (!hasHydratedRef.current) {
+      return;
+    }
+
     if (!safeWriteJSON(STORAGE_KEYS.passed, passed)) {
       handleWriteFailure();
     }
   }, [handleWriteFailure, passed]);
 
   useEffect(() => {
+    if (!hasHydratedRef.current) {
+      return;
+    }
+
     if (!safeWriteJSON(STORAGE_KEYS.matches, matches)) {
       handleWriteFailure();
     }
   }, [handleWriteFailure, matches]);
 
   useEffect(() => {
+    if (!hasHydratedRef.current) {
+      return;
+    }
+
     if (!safeWriteJSON(STORAGE_KEYS.messages, conversations)) {
       handleWriteFailure();
     }
   }, [conversations, handleWriteFailure]);
+
+  useEffect(() => {
+    hasHydratedRef.current = true;
+  }, []);
 
   useEffect(() => {
     setProfileDraft((current) => ({
@@ -308,15 +340,14 @@ function App() {
       passed,
       matches,
       conversations,
+      selectedConversationId: selectedConversation,
     });
 
     setLikes(result.likes);
     setPassed(result.passed);
     setMatches(result.matches);
     setConversations(result.conversations);
-    if (selectedConversationData?.profileId === profileId) {
-      setSelectedConversation(result.conversations[0]?.id ?? null);
-    }
+    setSelectedConversation(result.selectedConversationId);
     setPageError('');
     showToast({
       type: 'info',
@@ -341,12 +372,10 @@ function App() {
       return;
     }
 
-    setMessageSending(true);
     setConversations(result.conversations);
     setMatches(result.matches);
     setDraftMessage('');
     setPageError('');
-    setMessageSending(false);
   };
 
   const handleResetPrototype = () => {
@@ -354,7 +383,7 @@ function App() {
     const resetProfile = { ...defaultProfile };
 
     setResetting(true);
-    if (!resetPrototypeStorage(Object.values(STORAGE_KEYS))) {
+    if (!resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS)) {
       handleWriteFailure();
       setResetting(false);
       return;
@@ -492,7 +521,7 @@ function App() {
               <div className="hero-visual">
                 <div className="mini-card large">
                   <span className="mini-label">Catégorie active</span>
-                  <h3>{getModeById(activeMode === 'all' ? profile.mode : activeMode).label}</h3>
+                  <h3>{getModeById(activeMode === 'all' ? (profile.mode || defaultProfile.mode) : activeMode).label}</h3>
                   <p>{profile.city || 'Ville à compléter'} · {profile.age || '18+'} ans</p>
                 </div>
                 <div className="mini-card">
@@ -711,8 +740,8 @@ function App() {
                         }
                       }}
                     />
-                    <button type="button" className="primary-button" disabled={messageSending || !draftMessage.trim()} onClick={handleSendMessage}>
-                      {messageSending ? 'Envoi…' : 'Envoyer'}
+                    <button type="button" className="primary-button" disabled={!draftMessage.trim()} onClick={handleSendMessage}>
+                      Envoyer
                     </button>
                   </div>
                 </div>
