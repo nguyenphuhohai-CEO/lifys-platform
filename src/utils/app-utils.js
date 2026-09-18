@@ -292,6 +292,44 @@ export function applyLikeAction({
   };
 }
 
+export function appendMessageToConversation({
+  conversationId,
+  text,
+  conversations = [],
+  matches = [],
+  createId = () => `msg-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+}) {
+  const trimmedText = sanitizeString(text);
+  if (!trimmedText) {
+    return null;
+  }
+
+  const targetConversation = conversations.find((conversation) => conversation.id === conversationId);
+  if (!targetConversation) {
+    return null;
+  }
+
+  const nextMessage = {
+    id: createId(),
+    sender: 'me',
+    text: trimmedText,
+  };
+
+  return {
+    nextMessage,
+    conversations: conversations.map((conversation) => (
+      conversation.id === conversationId
+        ? { ...conversation, messages: [...conversation.messages, nextMessage] }
+        : conversation
+    )),
+    matches: matches.map((match) => (
+      match.profileId === targetConversation.profileId
+        ? { ...match, lastMessage: trimmedText }
+        : match
+    )),
+  };
+}
+
 export function getConversationPreview(conversation) {
   return conversation?.messages?.[conversation.messages.length - 1]?.text ?? 'Aucun message';
 }

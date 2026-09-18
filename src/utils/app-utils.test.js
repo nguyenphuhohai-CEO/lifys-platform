@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { defaultProfile, DEMO_PROFILES } from '../data/demoData.js';
 import {
   applyLikeAction,
+  appendMessageToConversation,
   createMatch,
   filterProfiles,
   loadInitialState,
@@ -153,4 +154,41 @@ test('applyLikeAction avoids duplicate matches and preserves existing conversati
   assert.equal(result.matches.length, 1);
   assert.equal(result.conversations.length, 1);
   assert.equal(result.selectedConversationId, 'conv-existing-p2');
+});
+
+test('appendMessageToConversation adds a local message and updates the related match preview', () => {
+  const conversations = [
+    {
+      id: 'conv-p2',
+      profileId: 'p2',
+      name: 'Lucas',
+      mode: 'amoureux',
+      avatar: '',
+      messages: [{ id: 'm1', sender: 'them', text: 'Salut !' }],
+    },
+  ];
+  const matches = [
+    {
+      id: 'match-p2',
+      profileId: 'p2',
+      name: 'Lucas',
+      city: 'Lyon',
+      mode: 'amoureux',
+      avatar: '',
+      lastMessage: 'Salut !',
+      reason: 'Point commun : musique.',
+    },
+  ];
+
+  const result = appendMessageToConversation({
+    conversationId: 'conv-p2',
+    text: ' Bonjour Lucas ',
+    conversations,
+    matches,
+    createId: () => 'msg-new',
+  });
+
+  assert.equal(result.nextMessage.id, 'msg-new');
+  assert.equal(result.conversations[0].messages.at(-1).text, 'Bonjour Lucas');
+  assert.equal(result.matches[0].lastMessage, 'Bonjour Lucas');
 });

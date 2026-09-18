@@ -5,6 +5,7 @@ import ToastRegion from './components/ToastRegion';
 import { DEFAULT_MESSAGES, DEMO_PROFILES, MODES, defaultProfile } from './data/demoData';
 import {
   applyLikeAction,
+  appendMessageToConversation,
   filterProfiles,
   getConversationPreview,
   getModeById,
@@ -337,28 +338,24 @@ function App() {
   };
 
   const handleSendMessage = () => {
-    const text = draftMessage.trim();
-    if (!text || !selectedConversationData) {
+    if (!selectedConversationData) {
       return;
     }
 
-    const nextMessage = {
-      id: `msg-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-      sender: 'me',
-      text,
-    };
+    const result = appendMessageToConversation({
+      conversationId: selectedConversationData.id,
+      text: draftMessage,
+      conversations,
+      matches,
+    });
+
+    if (!result) {
+      return;
+    }
 
     setMessageSending(true);
-    setConversations((current) => current.map((conversation) => (
-      conversation.id === selectedConversationData.id
-        ? { ...conversation, messages: [...conversation.messages, nextMessage] }
-        : conversation
-    )));
-    setMatches((current) => current.map((match) => (
-      match.profileId === selectedConversationData.profileId
-        ? { ...match, lastMessage: text }
-        : match
-    )));
+    setConversations(result.conversations);
+    setMatches(result.matches);
     setDraftMessage('');
     setPageError('');
     setMessageSending(false);
@@ -369,10 +366,12 @@ function App() {
     const resetProfile = { ...defaultProfile };
 
     setResetting(true);
-    skipPersistenceRef.current = true;
     if (!resetPrototypeStorage(Object.values(STORAGE_KEYS))) {
       handleWriteFailure();
+      setResetting(false);
+      return;
     }
+    skipPersistenceRef.current = true;
     setProfile(resetProfile);
     setProfileDraft({
       ...resetProfile,
