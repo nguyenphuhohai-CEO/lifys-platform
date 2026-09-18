@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Avatar from './components/Avatar';
 import ToastRegion from './components/ToastRegion';
@@ -62,6 +62,7 @@ function SectionHeader({ eyebrow, title, description, aside }) {
 
 function App() {
   const [initialState] = useState(() => getInitialPrototypeState());
+  const skipPersistenceRef = useRef(false);
   const [view, setView] = useState('home');
   const [activeMode, setActiveMode] = useState('all');
   const [profile, setProfile] = useState(initialState.profile);
@@ -127,34 +128,60 @@ function App() {
   }, [handleStorageFailure, initialState, showToast]);
 
   useEffect(() => {
+    if (skipPersistenceRef.current) {
+      return;
+    }
+
     if (!safeWriteJSON(STORAGE_KEYS.profile, profile)) {
       handleStorageFailure();
     }
   }, [handleStorageFailure, profile]);
 
   useEffect(() => {
+    if (skipPersistenceRef.current) {
+      return;
+    }
+
     if (!safeWriteJSON(STORAGE_KEYS.likes, likes)) {
       handleStorageFailure();
     }
   }, [handleStorageFailure, likes]);
 
   useEffect(() => {
+    if (skipPersistenceRef.current) {
+      return;
+    }
+
     if (!safeWriteJSON(STORAGE_KEYS.passed, passed)) {
       handleStorageFailure();
     }
   }, [handleStorageFailure, passed]);
 
   useEffect(() => {
+    if (skipPersistenceRef.current) {
+      return;
+    }
+
     if (!safeWriteJSON(STORAGE_KEYS.matches, matches)) {
       handleStorageFailure();
     }
   }, [handleStorageFailure, matches]);
 
   useEffect(() => {
+    if (skipPersistenceRef.current) {
+      return;
+    }
+
     if (!safeWriteJSON(STORAGE_KEYS.messages, conversations)) {
       handleStorageFailure();
     }
   }, [conversations, handleStorageFailure]);
+
+  useEffect(() => {
+    if (skipPersistenceRef.current) {
+      skipPersistenceRef.current = false;
+    }
+  });
 
   useEffect(() => {
     setProfileDraft((current) => ({
@@ -270,6 +297,7 @@ function App() {
     if (shouldCreateMatch(targetProfile, profile)) {
       const nextMatch = createMatch(targetProfile, profile);
       const nextConversation = createConversation(targetProfile);
+      const existingConversation = conversations.find((conversation) => conversation.profileId === profileId);
 
       setMatches((current) => (
         current.some((match) => match.profileId === profileId)
@@ -281,7 +309,7 @@ function App() {
           ? current
           : [nextConversation, ...current]
       ));
-      setSelectedConversation(nextConversation.id);
+      setSelectedConversation(existingConversation?.id ?? nextConversation.id);
       setView('matches');
       showToast({
         type: 'success',
@@ -341,6 +369,7 @@ function App() {
     const defaultMessages = sanitizeConversations(DEFAULT_MESSAGES);
 
     setResetting(true);
+    skipPersistenceRef.current = true;
     if (!resetPrototypeStorage(Object.values(STORAGE_KEYS))) {
       handleStorageFailure();
     }
