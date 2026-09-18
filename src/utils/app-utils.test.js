@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { defaultProfile, DEMO_PROFILES } from '../data/demoData.js';
 import {
+  applyLikeAction,
   createMatch,
   filterProfiles,
   loadInitialState,
@@ -116,4 +117,40 @@ test('loadInitialState reports recovered keys and keeps sanitized local data', (
   assert.equal(state.storageAvailable, true);
   assert.deepEqual(state.likes, ['p1']);
   assert.deepEqual(state.profile, defaultProfile);
+});
+
+test('applyLikeAction avoids duplicate matches and preserves existing conversations', () => {
+  const userProfile = sanitizeProfile({
+    name: 'Sofia',
+    age: 29,
+    city: 'Lyon',
+    bio: 'Créative, fiable et prête à rencontrer les bonnes personnes.',
+    mode: 'amoureux',
+    interests: 'musique, cuisine',
+  });
+  const existingMatch = createMatch(DEMO_PROFILES.find((profile) => profile.id === 'p2'), userProfile);
+  const existingConversation = {
+    id: 'conv-existing-p2',
+    profileId: 'p2',
+    name: 'Lucas',
+    mode: 'amoureux',
+    avatar: '',
+    messages: [{ id: 'm1', sender: 'them', text: 'Salut !' }],
+  };
+
+  const result = applyLikeAction({
+    profileId: 'p2',
+    profile: userProfile,
+    likes: ['p2'],
+    passed: ['p2'],
+    matches: [existingMatch],
+    conversations: [existingConversation],
+  });
+
+  assert.equal(result.matched, true);
+  assert.deepEqual(result.likes, ['p2']);
+  assert.deepEqual(result.passed, []);
+  assert.equal(result.matches.length, 1);
+  assert.equal(result.conversations.length, 1);
+  assert.equal(result.selectedConversationId, 'conv-existing-p2');
 });

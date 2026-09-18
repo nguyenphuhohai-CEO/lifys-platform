@@ -4,8 +4,7 @@ import Avatar from './components/Avatar';
 import ToastRegion from './components/ToastRegion';
 import { DEFAULT_MESSAGES, DEMO_PROFILES, MODES, defaultProfile } from './data/demoData';
 import {
-  createConversation,
-  createMatch,
+  applyLikeAction,
   filterProfiles,
   getConversationPreview,
   getModeById,
@@ -15,7 +14,6 @@ import {
   sanitizeMatches,
   sanitizeProfile,
   serializeInterests,
-  shouldCreateMatch,
 } from './utils/app-utils';
 import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './utils/storage';
 
@@ -97,17 +95,22 @@ function App() {
   }, []);
 
   const handleStorageFailure = useCallback(() => {
-    setStorageAvailable((current) => {
-      if (current) {
-        showToast({
-          type: 'warning',
-          title: 'Sauvegarde locale indisponible',
-          message: 'Votre navigateur a refusé l’écriture locale. Les changements restent visibles pendant cette session uniquement.',
-        });
-      }
-      return false;
-    });
+    setStorageAvailable(false);
     setPageError('La sauvegarde locale du prototype est indisponible sur ce navigateur. Les données restent simulées et temporaires.');
+    showToast({
+      type: 'warning',
+      title: 'Sauvegarde locale indisponible',
+      message: 'Votre navigateur a refusé la persistance locale. Les changements restent visibles pendant cette session uniquement.',
+    });
+  }, [showToast]);
+
+  const handleWriteFailure = useCallback(() => {
+    setPageError('Certaines données locales n’ont pas pu être enregistrées. Réessayez ou réinitialisez le prototype.');
+    showToast({
+      type: 'warning',
+      title: 'Écriture locale incomplète',
+      message: 'Le prototype continue de fonctionner, mais une partie des changements n’a pas pu être enregistrée.',
+    });
   }, [showToast]);
 
   useEffect(() => {
@@ -133,9 +136,9 @@ function App() {
     }
 
     if (!safeWriteJSON(STORAGE_KEYS.profile, profile)) {
-      handleStorageFailure();
+      handleWriteFailure();
     }
-  }, [handleStorageFailure, profile]);
+  }, [handleWriteFailure, profile]);
 
   useEffect(() => {
     if (skipPersistenceRef.current) {
@@ -143,9 +146,9 @@ function App() {
     }
 
     if (!safeWriteJSON(STORAGE_KEYS.likes, likes)) {
-      handleStorageFailure();
+      handleWriteFailure();
     }
-  }, [handleStorageFailure, likes]);
+  }, [handleWriteFailure, likes]);
 
   useEffect(() => {
     if (skipPersistenceRef.current) {
@@ -153,9 +156,9 @@ function App() {
     }
 
     if (!safeWriteJSON(STORAGE_KEYS.passed, passed)) {
-      handleStorageFailure();
+      handleWriteFailure();
     }
-  }, [handleStorageFailure, passed]);
+  }, [handleWriteFailure, passed]);
 
   useEffect(() => {
     if (skipPersistenceRef.current) {
@@ -163,9 +166,9 @@ function App() {
     }
 
     if (!safeWriteJSON(STORAGE_KEYS.matches, matches)) {
-      handleStorageFailure();
+      handleWriteFailure();
     }
-  }, [handleStorageFailure, matches]);
+  }, [handleWriteFailure, matches]);
 
   useEffect(() => {
     if (skipPersistenceRef.current) {
@@ -173,9 +176,9 @@ function App() {
     }
 
     if (!safeWriteJSON(STORAGE_KEYS.messages, conversations)) {
-      handleStorageFailure();
+      handleWriteFailure();
     }
-  }, [conversations, handleStorageFailure]);
+  }, [conversations, handleWriteFailure]);
 
   useEffect(() => {
     if (skipPersistenceRef.current) {
@@ -285,31 +288,27 @@ function App() {
   };
 
   const handleLike = (profileId) => {
-    const targetProfile = DEMO_PROFILES.find((person) => person.id === profileId);
-    if (!targetProfile) {
+    const result = applyLikeAction({
+      profileId,
+      profile,
+      likes,
+      passed,
+      matches,
+      conversations,
+    });
+
+    if (!result) {
       return;
     }
 
-    setLikes((current) => [...new Set([...current, profileId])]);
-    setPassed((current) => current.filter((item) => item !== profileId));
+    setLikes(result.likes);
+    setPassed(result.passed);
     setPageError('');
 
-    if (shouldCreateMatch(targetProfile, profile)) {
-      const nextMatch = createMatch(targetProfile, profile);
-      const nextConversation = createConversation(targetProfile);
-      const existingConversation = conversations.find((conversation) => conversation.profileId === profileId);
-
-      setMatches((current) => (
-        current.some((match) => match.profileId === profileId)
-          ? current
-          : [nextMatch, ...current]
-      ));
-      setConversations((current) => (
-        current.some((conversation) => conversation.profileId === profileId)
-          ? current
-          : [nextConversation, ...current]
-      ));
-      setSelectedConversation(existingConversation?.id ?? nextConversation.id);
+    if (result.matched) {
+      setMatches(result.matches);
+      setConversations(result.conversations);
+      setSelectedConversation(result.selectedConversationId);
       setView('matches');
       showToast({
         type: 'success',
@@ -367,14 +366,18 @@ function App() {
 
   const handleResetPrototype = () => {
     const defaultMessages = sanitizeConversations(DEFAULT_MESSAGES);
+    const resetProfile = { ...defaultProfile };
 
     setResetting(true);
     skipPersistenceRef.current = true;
     if (!resetPrototypeStorage(Object.values(STORAGE_KEYS))) {
-      handleStorageFailure();
+      handleWriteFailure();
     }
-    setProfile({ ...defaultProfile });
-    setProfileDraft({ ...defaultProfile });
+    setProfile(resetProfile);
+    setProfileDraft({
+      ...resetProfile,
+      interests: serializeInterests(resetProfile.interests),
+    });
     setProfileErrors({});
     setLikes([]);
     setPassed([]);

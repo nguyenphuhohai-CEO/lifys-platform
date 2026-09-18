@@ -247,6 +247,51 @@ export function createConversation(profileTarget) {
   };
 }
 
+export function applyLikeAction({
+  profileId,
+  profile,
+  likes = [],
+  passed = [],
+  matches = [],
+  conversations = [],
+  profiles = DEMO_PROFILES,
+}) {
+  const targetProfile = profiles.find((item) => item.id === profileId);
+  if (!targetProfile) {
+    return null;
+  }
+
+  const nextLikes = [...new Set([...sanitizeIdList(likes), profileId])];
+  const nextPassed = sanitizeIdList(passed).filter((item) => item !== profileId);
+
+  if (!shouldCreateMatch(targetProfile, profile)) {
+    return {
+      matched: false,
+      targetProfile,
+      likes: nextLikes,
+      passed: nextPassed,
+      matches,
+      conversations,
+      selectedConversationId: conversations.find((conversation) => conversation.profileId === profileId)?.id ?? null,
+    };
+  }
+
+  const existingMatch = matches.find((match) => match.profileId === profileId);
+  const existingConversation = conversations.find((conversation) => conversation.profileId === profileId);
+  const nextMatch = existingMatch ?? createMatch(targetProfile, profile);
+  const nextConversation = existingConversation ?? createConversation(targetProfile);
+
+  return {
+    matched: true,
+    targetProfile,
+    likes: nextLikes,
+    passed: nextPassed,
+    matches: existingMatch ? matches : [nextMatch, ...matches],
+    conversations: existingConversation ? conversations : [nextConversation, ...conversations],
+    selectedConversationId: nextConversation.id,
+  };
+}
+
 export function getConversationPreview(conversation) {
   return conversation?.messages?.[conversation.messages.length - 1]?.text ?? 'Aucun message';
 }
