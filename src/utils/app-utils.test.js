@@ -4,8 +4,10 @@ import assert from 'node:assert/strict';
 import { defaultProfile, DEMO_PROFILES } from '../data/demoData.js';
 import {
   applyLikeAction,
+  applyPassAction,
   appendMessageToConversation,
   createMatch,
+  ensureConversationForProfile,
   filterProfiles,
   loadInitialState,
   normalizeInterests,
@@ -191,4 +193,34 @@ test('appendMessageToConversation adds a local message and updates the related m
   assert.equal(result.nextMessage.id, 'msg-new');
   assert.equal(result.conversations[0].messages.at(-1).text, 'Bonjour Lucas');
   assert.equal(result.matches[0].lastMessage, 'Bonjour Lucas');
+});
+
+test('applyPassAction removes local like, match and conversation for a passed profile', () => {
+  const result = applyPassAction({
+    profileId: 'p2',
+    likes: ['p1', 'p2'],
+    passed: [],
+    matches: [{ id: 'match-p2', profileId: 'p2' }, { id: 'match-p7', profileId: 'p7' }],
+    conversations: [{ id: 'conv-p2', profileId: 'p2' }, { id: 'conv-p7', profileId: 'p7' }],
+  });
+
+  assert.deepEqual(result.likes, ['p1']);
+  assert.deepEqual(result.passed, ['p2']);
+  assert.deepEqual(result.matches.map((match) => match.profileId), ['p7']);
+  assert.deepEqual(result.conversations.map((conversation) => conversation.profileId), ['p7']);
+});
+
+test('ensureConversationForProfile reuses or creates a conversation for a matched profile', () => {
+  const existing = ensureConversationForProfile({
+    profileId: 'p2',
+    conversations: [{ id: 'conv-existing', profileId: 'p2', messages: [] }],
+  });
+  const created = ensureConversationForProfile({
+    profileId: 'p7',
+    conversations: [],
+  });
+
+  assert.equal(existing.conversation.id, 'conv-existing');
+  assert.equal(created.conversation.profileId, 'p7');
+  assert.equal(created.conversations.length, 1);
 });

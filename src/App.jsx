@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Avatar from './components/Avatar';
 import ToastRegion from './components/ToastRegion';
 import { DEFAULT_MESSAGES, DEMO_PROFILES, MODES, defaultProfile } from './data/demoData';
 import {
   applyLikeAction,
+  applyPassAction,
   appendMessageToConversation,
+  ensureConversationForProfile,
   filterProfiles,
   getConversationPreview,
   getModeById,
@@ -61,7 +63,6 @@ function SectionHeader({ eyebrow, title, description, aside }) {
 
 function App() {
   const [initialState] = useState(() => getInitialPrototypeState());
-  const skipPersistenceRef = useRef(false);
   const [view, setView] = useState('home');
   const [activeMode, setActiveMode] = useState('all');
   const [profile, setProfile] = useState(initialState.profile);
@@ -132,60 +133,34 @@ function App() {
   }, [handleStorageFailure, initialState, showToast]);
 
   useEffect(() => {
-    if (skipPersistenceRef.current) {
-      return;
-    }
-
     if (!safeWriteJSON(STORAGE_KEYS.profile, profile)) {
       handleWriteFailure();
     }
   }, [handleWriteFailure, profile]);
 
   useEffect(() => {
-    if (skipPersistenceRef.current) {
-      return;
-    }
-
     if (!safeWriteJSON(STORAGE_KEYS.likes, likes)) {
       handleWriteFailure();
     }
   }, [handleWriteFailure, likes]);
 
   useEffect(() => {
-    if (skipPersistenceRef.current) {
-      return;
-    }
-
     if (!safeWriteJSON(STORAGE_KEYS.passed, passed)) {
       handleWriteFailure();
     }
   }, [handleWriteFailure, passed]);
 
   useEffect(() => {
-    if (skipPersistenceRef.current) {
-      return;
-    }
-
     if (!safeWriteJSON(STORAGE_KEYS.matches, matches)) {
       handleWriteFailure();
     }
   }, [handleWriteFailure, matches]);
 
   useEffect(() => {
-    if (skipPersistenceRef.current) {
-      return;
-    }
-
     if (!safeWriteJSON(STORAGE_KEYS.messages, conversations)) {
       handleWriteFailure();
     }
   }, [conversations, handleWriteFailure]);
-
-  useEffect(() => {
-    if (skipPersistenceRef.current) {
-      skipPersistenceRef.current = false;
-    }
-  });
 
   useEffect(() => {
     setProfileDraft((current) => ({
@@ -327,8 +302,21 @@ function App() {
   };
 
   const handlePass = (profileId) => {
-    setPassed((current) => [...new Set([...current, profileId])]);
-    setLikes((current) => current.filter((item) => item !== profileId));
+    const result = applyPassAction({
+      profileId,
+      likes,
+      passed,
+      matches,
+      conversations,
+    });
+
+    setLikes(result.likes);
+    setPassed(result.passed);
+    setMatches(result.matches);
+    setConversations(result.conversations);
+    if (selectedConversationData?.profileId === profileId) {
+      setSelectedConversation(result.conversations[0]?.id ?? null);
+    }
     setPageError('');
     showToast({
       type: 'info',
@@ -371,7 +359,6 @@ function App() {
       setResetting(false);
       return;
     }
-    skipPersistenceRef.current = true;
     setProfile(resetProfile);
     setProfileDraft({
       ...resetProfile,
@@ -643,8 +630,14 @@ function App() {
                       <small>{match.lastMessage}</small>
                     </div>
                     <button type="button" className="secondary-button" onClick={() => {
-                      const conversation = conversations.find((item) => item.profileId === match.profileId);
-                      setSelectedConversation(conversation?.id ?? null);
+                      const conversationState = ensureConversationForProfile({
+                        profileId: match.profileId,
+                        conversations,
+                      });
+                      if (conversationState) {
+                        setConversations(conversationState.conversations);
+                        setSelectedConversation(conversationState.conversation.id);
+                      }
                       setCurrentView('messages');
                     }}>
                       Ouvrir la messagerie

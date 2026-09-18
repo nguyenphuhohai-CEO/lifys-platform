@@ -277,9 +277,8 @@ export function applyLikeAction({
   }
 
   const existingMatch = matches.find((match) => match.profileId === profileId);
-  const existingConversation = conversations.find((conversation) => conversation.profileId === profileId);
   const nextMatch = existingMatch ?? createMatch(targetProfile, profile);
-  const nextConversation = existingConversation ?? createConversation(targetProfile);
+  const conversationState = ensureConversationForProfile({ profileId, conversations, profiles });
 
   return {
     matched: true,
@@ -287,8 +286,49 @@ export function applyLikeAction({
     likes: nextLikes,
     passed: nextPassed,
     matches: existingMatch ? matches : [nextMatch, ...matches],
-    conversations: existingConversation ? conversations : [nextConversation, ...conversations],
-    selectedConversationId: nextConversation.id,
+    conversations: conversationState.conversations,
+    selectedConversationId: conversationState.conversation.id,
+  };
+}
+
+export function applyPassAction({
+  profileId,
+  likes = [],
+  passed = [],
+  matches = [],
+  conversations = [],
+}) {
+  return {
+    likes: sanitizeIdList(likes).filter((item) => item !== profileId),
+    passed: [...new Set([...sanitizeIdList(passed), profileId])],
+    matches: matches.filter((match) => match.profileId !== profileId),
+    conversations: conversations.filter((conversation) => conversation.profileId !== profileId),
+  };
+}
+
+export function ensureConversationForProfile({
+  profileId,
+  conversations = [],
+  profiles = DEMO_PROFILES,
+}) {
+  const existingConversation = conversations.find((conversation) => conversation.profileId === profileId);
+  if (existingConversation) {
+    return {
+      conversation: existingConversation,
+      conversations,
+    };
+  }
+
+  const targetProfile = profiles.find((profile) => profile.id === profileId);
+  if (!targetProfile) {
+    return null;
+  }
+
+  const nextConversation = createConversation(targetProfile);
+
+  return {
+    conversation: nextConversation,
+    conversations: [nextConversation, ...conversations],
   };
 }
 
