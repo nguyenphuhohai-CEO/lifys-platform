@@ -5,13 +5,16 @@ import { defaultProfile, DEMO_PROFILES } from '../data/demoData.js';
 import {
   createMatch,
   filterProfiles,
+  loadInitialState,
   normalizeInterests,
   sanitizeConversations,
+  sanitizeIdList,
+  sanitizeMatches,
   sanitizeProfile,
   serializeInterests,
   shouldCreateMatch,
 } from './app-utils.js';
-import { resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './storage.js';
+import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './storage.js';
 
 function createMockStorage() {
   const store = new Map();
@@ -94,4 +97,23 @@ test('sanitizeConversations restores defaults when conversations are invalid', (
 
   assert.ok(conversations.length >= 1);
   assert.ok(conversations.every((conversation) => conversation.messages.length >= 1));
+});
+
+test('loadInitialState reports recovered keys and keeps sanitized local data', () => {
+  const storage = createMockStorage();
+  storage.setItem(STORAGE_KEYS.profile, '{oops');
+  storage.setItem(STORAGE_KEYS.likes, JSON.stringify(['p1', 'p1']));
+
+  const state = loadInitialState({
+    profile: () => safeReadJSON(STORAGE_KEYS.profile, defaultProfile, { storage, sanitize: sanitizeProfile }),
+    likes: () => safeReadJSON(STORAGE_KEYS.likes, [], { storage, sanitize: sanitizeIdList }),
+    passed: () => safeReadJSON(STORAGE_KEYS.passed, [], { storage, sanitize: sanitizeIdList }),
+    matches: () => safeReadJSON(STORAGE_KEYS.matches, [], { storage, sanitize: sanitizeMatches }),
+    messages: () => safeReadJSON(STORAGE_KEYS.messages, [], { storage, sanitize: sanitizeConversations }),
+  });
+
+  assert.deepEqual(state.recoveredKeys, ['profile']);
+  assert.equal(state.storageAvailable, true);
+  assert.deepEqual(state.likes, ['p1']);
+  assert.deepEqual(state.profile, defaultProfile);
 });
