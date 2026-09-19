@@ -32,6 +32,7 @@ export function getConfig(overrides = {}) {
   const authRateLimitMax = parsePositiveNumber(overrides.AUTH_RATE_LIMIT_MAX ?? process.env.AUTH_RATE_LIMIT_MAX ?? 10, 'AUTH_RATE_LIMIT_MAX');
   const writeRateLimitMax = parsePositiveNumber(overrides.WRITE_RATE_LIMIT_MAX ?? process.env.WRITE_RATE_LIMIT_MAX ?? 60, 'WRITE_RATE_LIMIT_MAX');
   const refreshCookieName = overrides.REFRESH_COOKIE_NAME ?? process.env.REFRESH_COOKIE_NAME ?? 'lifys_refresh_token';
+  const csrfCookieName = overrides.CSRF_COOKIE_NAME ?? process.env.CSRF_COOKIE_NAME ?? 'lifys_csrf_token';
   const refreshTokenTtlDays = parsePositiveNumber(overrides.REFRESH_TOKEN_TTL_DAYS ?? process.env.REFRESH_TOKEN_TTL_DAYS ?? 30, 'REFRESH_TOKEN_TTL_DAYS');
   const emailVerificationTokenTtlHours = parsePositiveNumber(overrides.EMAIL_VERIFICATION_TOKEN_TTL_HOURS ?? process.env.EMAIL_VERIFICATION_TOKEN_TTL_HOURS ?? 24, 'EMAIL_VERIFICATION_TOKEN_TTL_HOURS');
   const passwordResetTokenTtlMinutes = parsePositiveNumber(overrides.PASSWORD_RESET_TOKEN_TTL_MINUTES ?? process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES ?? 30, 'PASSWORD_RESET_TOKEN_TTL_MINUTES');
@@ -57,6 +58,7 @@ export function getConfig(overrides = {}) {
     authRateLimitMax,
     writeRateLimitMax,
     refreshCookieName,
+    csrfCookieName,
     refreshTokenTtlDays,
     emailVerificationTokenTtlHours,
     passwordResetTokenTtlMinutes,

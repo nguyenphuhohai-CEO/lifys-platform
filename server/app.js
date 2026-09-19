@@ -61,6 +61,19 @@ function extractRequestOrigin(req) {
   }
 }
 
+function getCookieValue(req, cookieName) {
+  const rawCookies = `${req.headers.cookie ?? ''}`;
+  if (!rawCookies) {
+    return '';
+  }
+
+  return rawCookies
+    .split(';')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(`${cookieName}=`))
+    ?.slice(cookieName.length + 1) ?? '';
+}
+
 export function createApp(config) {
   const database = createDatabase(config.databaseFile);
   const authService = createAuthService({ database, config });
@@ -105,6 +118,17 @@ export function createApp(config) {
 
     next();
   };
+  const requireMatchingCsrfToken = (req, _res, next) => {
+    const cookieToken = decodeURIComponent(getCookieValue(req, config.csrfCookieName));
+    const headerToken = `${req.headers['x-csrf-token'] ?? ''}`.trim();
+
+    if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+      next(createHttpError(403, 'Jeton CSRF invalide.', 'CSRF_TOKEN_INVALID'));
+      return;
+    }
+
+    next();
+  };
 
   app.disable('x-powered-by');
   app.use(express.json({ limit: '1mb' }));
@@ -139,17 +163,17 @@ export function createApp(config) {
         res.setHeader('Vary', 'Origin');
         res.setHeader('Access-Control-Allow-Credentials', 'true');
       }
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
     }
 
     if (req.method === 'OPTIONS') {
-      if (allowedOrigins.length === 0) {
-        res.status(204).end();
+      if (allowedOrigins.length === 0 && requestOrigin) {
+        next(createHttpError(403, 'Origine non autorisée.', 'CORS_ORIGIN_DENIED'));
         return;
       }
 
-      if (!allowedOrigin) {
+      if (allowedOrigins.length > 0 && !allowedOrigin) {
         next(createHttpError(403, 'Origine non autorisée.', 'CORS_ORIGIN_DENIED'));
         return;
       }
@@ -199,8 +223,8 @@ export function createApp(config) {
   app.post('/api/auth/register', authRateLimiter, authController.register);
 
   app.post('/api/auth/login', authRateLimiter, authController.login);
-  app.post('/api/auth/refresh', authRateLimiter, refreshCookieRateLimiter, requireTrustedCookieOrigin, authController.requireRefreshCookie, authController.refresh);
-  app.post('/api/auth/logout', refreshCookieRateLimiter, requireTrustedCookieOrigin, authController.logout);
+  app.post('/api/auth/refresh', authRateLimiter, refreshCookieRateLimiter, requireTrustedCookieOrigin, requireMatchingCsrfToken, authController.requireRefreshCookie, authController.refresh);
+  app.post('/api/auth/logout', refreshCookieRateLimiter, requireTrustedCookieOrigin, requireMatchingCsrfToken, authController.logout);
   app.get('/api/auth/session', protectedRouteRateLimiter, requireAuth, authController.session);
   app.post('/api/auth/verify-email/request', protectedRouteRateLimiter, requireAuth, writeRateLimiter, authController.requestEmailVerification);
   app.post('/api/auth/verify-email/confirm', authRateLimiter, authController.verifyEmail);

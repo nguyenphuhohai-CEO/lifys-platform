@@ -396,6 +396,12 @@ export function getConversationPreview(conversation) {
   return conversation?.messages?.[conversation.messages.length - 1]?.text ?? 'Aucun message';
 }
 
+export function resolveSelectedConversationId(conversations = [], currentId = null) {
+  return conversations.some((conversation) => conversation.id === currentId)
+    ? currentId
+    : conversations[0]?.id ?? null;
+}
+
 export function loadInitialState(readers) {
   const profileResult = readers.profile();
   const likesResult = readers.likes();

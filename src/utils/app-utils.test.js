@@ -11,6 +11,7 @@ import {
   filterProfiles,
   loadInitialState,
   normalizeInterests,
+  resolveSelectedConversationId,
   sanitizeConversations,
   sanitizeIdList,
   sanitizeMatches,
@@ -256,4 +257,15 @@ test('ensureConversationForProfile returns null when neither profile nor match i
   });
 
   assert.equal(result, null);
+});
+
+test('resolveSelectedConversationId keeps a valid selection and falls back safely after sync', () => {
+  const conversations = [
+    { id: 'conv-a', profileId: 'p1', messages: [] },
+    { id: 'conv-b', profileId: 'p2', messages: [] },
+  ];
+
+  assert.equal(resolveSelectedConversationId(conversations, 'conv-b'), 'conv-b');
+  assert.equal(resolveSelectedConversationId(conversations, 'missing'), 'conv-a');
+  assert.equal(resolveSelectedConversationId([], 'conv-b'), null);
 });

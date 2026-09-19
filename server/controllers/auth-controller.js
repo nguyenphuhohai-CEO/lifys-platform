@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import { createHttpError } from '../http.js';
 import { normalizeBody, readRequiredString, readOptionalString } from '../validation.js';
 
@@ -44,9 +46,26 @@ export function createAuthController({ authService, config }) {
     }));
   }
 
+  function setCsrfCookie(res, csrfToken) {
+    res.append('Set-Cookie', serializeCookie(config.csrfCookieName, encodeURIComponent(csrfToken), {
+      httpOnly: false,
+      secure: config.cookieSecure,
+      sameSite: 'Lax',
+      path: '/',
+      maxAge: config.refreshTokenTtlDays * 24 * 60 * 60,
+    }));
+  }
+
   function clearRefreshCookie(res) {
     res.append('Set-Cookie', serializeCookie(config.refreshCookieName, '', {
       httpOnly: true,
+      secure: config.cookieSecure,
+      sameSite: 'Lax',
+      path: '/',
+      maxAge: 0,
+    }));
+    res.append('Set-Cookie', serializeCookie(config.csrfCookieName, '', {
+      httpOnly: false,
       secure: config.cookieSecure,
       sameSite: 'Lax',
       path: '/',
@@ -56,7 +75,9 @@ export function createAuthController({ authService, config }) {
 
   function sendSession(res, result, status = 200) {
     if (result.refreshToken) {
+      const csrfToken = crypto.randomUUID();
       setRefreshCookie(res, result.refreshToken);
+      setCsrfCookie(res, csrfToken);
     }
 
     res.status(status).json({

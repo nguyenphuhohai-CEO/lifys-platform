@@ -49,9 +49,23 @@ async function request(baseUrl, pathName, options = {}) {
   };
 }
 
-function getCookieHeader(response) {
-  const setCookie = response.headers.get('set-cookie');
-  return setCookie ? setCookie.split(';')[0] : '';
+function getSetCookieEntries(response) {
+  const rawHeader = response.headers.get('set-cookie');
+  return rawHeader
+    ? rawHeader.split(/,(?=\s*[^;]+=)/).map((entry) => entry.trim()).filter(Boolean)
+    : [];
+}
+
+function getCookieHeader(response, cookieNames = ['lifys_refresh_token', 'lifys_csrf_token']) {
+  return getSetCookieEntries(response)
+    .map((entry) => entry.split(';')[0])
+    .filter((entry) => cookieNames.some((cookieName) => entry.startsWith(`${cookieName}=`)))
+    .join('; ');
+}
+
+function getCsrfHeader(response) {
+  const csrfCookie = getCookieHeader(response, ['lifys_csrf_token']);
+  return decodeURIComponent(csrfCookie.split('=').slice(1).join('='));
 }
 
 test('register, update profile, like demo profile and send message', async () => {
@@ -292,6 +306,7 @@ test('refresh cookie restores session and logout revokes it', async () => {
     const trustedOrigin = new URL(server.baseUrl).origin;
 
     assert.ok(refreshCookie.includes('lifys_refresh_token='));
+    assert.ok(refreshCookie.includes('lifys_csrf_token='));
     assert.equal(register.body.user.emailVerified, false);
 
     const refreshed = await request(server.baseUrl, '/api/auth/refresh', {
@@ -299,6 +314,7 @@ test('refresh cookie restores session and logout revokes it', async () => {
       headers: {
         cookie: refreshCookie,
         origin: trustedOrigin,
+        'x-csrf-token': getCsrfHeader(register),
       },
     });
     const rotatedCookie = getCookieHeader(refreshed);
@@ -312,6 +328,7 @@ test('refresh cookie restores session and logout revokes it', async () => {
       headers: {
         cookie: refreshCookie,
         origin: trustedOrigin,
+        'x-csrf-token': getCsrfHeader(register),
       },
     });
     assert.equal(reuseOldRefresh.status, 401);
@@ -322,6 +339,7 @@ test('refresh cookie restores session and logout revokes it', async () => {
       headers: {
         cookie: rotatedCookie,
         origin: trustedOrigin,
+        'x-csrf-token': getCsrfHeader(refreshed),
       },
     });
 
@@ -332,6 +350,7 @@ test('refresh cookie restores session and logout revokes it', async () => {
       headers: {
         cookie: rotatedCookie,
         origin: trustedOrigin,
+        'x-csrf-token': getCsrfHeader(refreshed),
       },
     });
     assert.equal(refreshAfterLogout.status, 401);
@@ -360,11 +379,40 @@ test('refresh rejects untrusted origins for cookie-authenticated mutation', asyn
       headers: {
         cookie: refreshCookie,
         origin: 'http://malicious.example',
+        'x-csrf-token': getCsrfHeader(register),
       },
     });
 
     assert.equal(response.status, 403);
     assert.equal(response.body.code, 'TRUSTED_ORIGIN_REQUIRED');
+  } finally {
+    await server.close();
+  }
+});
+
+test('refresh rejects missing csrf token even from a trusted origin', async () => {
+  const server = await startTestServer();
+
+  try {
+    const register = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'csrf-missing@example.com',
+        password: 'supersecret',
+        name: 'Csrf Missing',
+      }),
+    });
+
+    const response = await request(server.baseUrl, '/api/auth/refresh', {
+      method: 'POST',
+      headers: {
+        cookie: getCookieHeader(register),
+        origin: new URL(server.baseUrl).origin,
+      },
+    });
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.code, 'CSRF_TOKEN_INVALID');
   } finally {
     await server.close();
   }
@@ -665,6 +713,25 @@ test('CORS preflight rejects unknown origins and allows the configured one', asy
 
     assert.equal(allowedResponse.status, 204);
     assert.equal(allowedResponse.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+  } finally {
+    await server.close();
+  }
+});
+
+test('CORS preflight rejects cross-origin requests when no allowlist is configured', async () => {
+  const server = await startTestServer();
+
+  try {
+    const deniedResponse = await fetch(`${server.baseUrl}/api/health`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'http://localhost:5173',
+      },
+    });
+    const deniedBody = await deniedResponse.json();
+
+    assert.equal(deniedResponse.status, 403);
+    assert.equal(deniedBody.code, 'CORS_ORIGIN_DENIED');
   } finally {
     await server.close();
   }

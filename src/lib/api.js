@@ -1,4 +1,17 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+const CSRF_COOKIE_NAME = import.meta.env.VITE_CSRF_COOKIE_NAME ?? 'lifys_csrf_token';
+
+function getBrowserCookie(name) {
+  if (typeof document === 'undefined') {
+    return '';
+  }
+
+  return document.cookie
+    .split(';')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(`${name}=`))
+    ?.slice(name.length + 1) ?? '';
+}
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -29,12 +42,15 @@ async function parseResponse(response) {
 }
 
 export async function apiRequest(path, options = {}) {
+  const method = options.method ?? 'GET';
+  const csrfToken = decodeURIComponent(getBrowserCookie(CSRF_COOKIE_NAME));
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: options.method ?? 'GET',
+    method,
     credentials: 'include',
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
       ...(options.token ? { Authorization: 'Bearer ' + options.token } : {}),
+      ...(method !== 'GET' && csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
       ...(options.headers ?? {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,

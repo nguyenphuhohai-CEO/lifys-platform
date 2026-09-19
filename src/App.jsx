@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Avatar from './components/Avatar';
 import ToastRegion from './components/ToastRegion';
 import { MODES, defaultProfile } from './data/demoData';
 import { api, ApiError } from './lib/api';
-import { getConversationPreview, getModeById, serializeInterests } from './utils/app-utils';
+import { getConversationPreview, getModeById, resolveSelectedConversationId, serializeInterests } from './utils/app-utils';
 import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './utils/storage';
 
 const NAV_ITEMS = [
@@ -94,6 +94,7 @@ function App() {
   const [passwordResetPreviewToken, setPasswordResetPreviewToken] = useState('');
   const [emailVerificationToken, setEmailVerificationToken] = useState('');
   const [emailVerificationPreviewToken, setEmailVerificationPreviewToken] = useState('');
+  const refreshRequestRef = useRef(null);
 
   const showToast = useCallback((toast) => {
     const id = `${toast.type}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -218,12 +219,21 @@ function App() {
   }, [showToast]);
 
   const refreshAccessToken = useCallback(async (options = {}) => {
-    const response = await api.refreshSession();
-    applyAuthenticatedSession(response, options);
-    if (response.previewEmailVerificationToken) {
-      setEmailVerificationPreviewToken(response.previewEmailVerificationToken);
+    if (!refreshRequestRef.current) {
+      refreshRequestRef.current = api.refreshSession()
+        .then((response) => {
+          applyAuthenticatedSession(response, options);
+          if (response.previewEmailVerificationToken) {
+            setEmailVerificationPreviewToken(response.previewEmailVerificationToken);
+          }
+          return response.token;
+        })
+        .finally(() => {
+          refreshRequestRef.current = null;
+        });
     }
-    return response.token;
+
+    return refreshRequestRef.current;
   }, [applyAuthenticatedSession]);
 
   const withFreshToken = useCallback(async (callback, options = {}) => {
@@ -251,11 +261,7 @@ function App() {
     applyProfileState(profileResponse.profile);
     setMatches(matchesResponse.matches);
     setConversations(conversationsResponse.conversations);
-    setSelectedConversation((current) => (
-      conversationsResponse.conversations.some((conversation) => conversation.id === current)
-        ? current
-        : conversationsResponse.conversations[0]?.id ?? null
-    ));
+    setSelectedConversation((current) => resolveSelectedConversationId(conversationsResponse.conversations, current));
   }, [applyProfileState, view, withFreshToken]);
 
   const loadDiscovery = useCallback(async () => {
@@ -301,11 +307,7 @@ function App() {
       setMatches(matchesData.matches);
       setConversations(conversationsData.conversations);
       setProfiles(discoveryData.profiles);
-      setSelectedConversation((current) => (
-        conversationsData.conversations.some((conversation) => conversation.id === current)
-          ? current
-          : conversationsData.conversations[0]?.id ?? null
-      ));
+      setSelectedConversation((current) => resolveSelectedConversationId(conversationsData.conversations, current));
       setPageError('');
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -374,7 +376,7 @@ function App() {
 
   useEffect(() => {
     if (!conversations.some((conversation) => conversation.id === selectedConversation)) {
-      setSelectedConversation(conversations[0]?.id ?? null);
+      setSelectedConversation(resolveSelectedConversationId(conversations, selectedConversation));
     }
   }, [conversations, selectedConversation]);
 
