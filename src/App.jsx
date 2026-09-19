@@ -392,13 +392,11 @@ function App() {
         });
       }
       await loadDiscovery(token);
-      if (restoredAuth) {
-        showToast({
-          type: 'success',
-          title: 'Données de démonstration réinitialisées',
-          message: 'Vos interactions serveur ont été nettoyées et votre profil a été réinitialisé.',
-        });
-      }
+      showToast({
+        type: 'success',
+        title: 'Données de démonstration réinitialisées',
+        message: 'Vos interactions serveur ont été nettoyées et votre profil a été réinitialisé.',
+      });
     } catch (error) {
       handleApiError(error, 'Impossible de réinitialiser le prototype.');
     } finally {

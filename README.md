@@ -143,20 +143,19 @@ server/                   # API Express, auth JWT et persistance SQLite
 
 ### Backend
 
-- exposer une API sécurisée pour profils, interactions et conversations ;
+- durcir l’API existante pour un usage public ;
 - séparer services, validation et stockage ;
 - ajouter limitation de débit et journalisation.
 
 ### Authentification
 
-- comptes réels ;
-- gestion de session sécurisée ;
+- améliorer la gestion de session sécurisée ;
 - vérification e-mail ;
 - récupération de mot de passe.
 
 ### Base de données
 
-- stockage persistant serveur ;
+- préparer une base serveur multi-instance ;
 - migrations versionnées ;
 - indexation et audit ;
 - stratégie de sauvegarde.
