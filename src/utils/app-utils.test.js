@@ -245,3 +245,14 @@ test('ensureConversationForProfile can fallback to existing match data when prof
   assert.equal(created.conversation.name, 'Maya');
   assert.equal(created.conversations.length, 1);
 });
+
+test('ensureConversationForProfile returns null when neither profile nor match is available', () => {
+  const result = ensureConversationForProfile({
+    profileId: 'missing',
+    conversations: [],
+    profiles: [],
+    matches: [],
+  });
+
+  assert.equal(result, null);
+});

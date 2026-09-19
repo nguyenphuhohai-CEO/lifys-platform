@@ -278,14 +278,19 @@ export function applyLikeAction({
 
   const existingMatch = matches.find((match) => match.profileId === profileId);
   const nextMatch = existingMatch ?? createMatch(targetProfile, profile);
-  const conversationState = ensureConversationForProfile({ profileId, conversations, profiles, matches });
+  const nextMatches = existingMatch ? matches : [nextMatch, ...matches];
+  const conversationState = ensureConversationForProfile({ profileId, conversations, profiles, matches: nextMatches });
+
+  if (!conversationState) {
+    return null;
+  }
 
   return {
     matched: true,
     targetProfile,
     likes: nextLikes,
     passed: nextPassed,
-    matches: existingMatch ? matches : [nextMatch, ...matches],
+    matches: nextMatches,
     conversations: conversationState.conversations,
     selectedConversationId: conversationState.conversation.id,
   };
