@@ -87,6 +87,7 @@ function App() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [messageSending, setMessageSending] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [uiPersistenceWarningShown, setUiPersistenceWarningShown] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [pageError, setPageError] = useState('');
 
@@ -123,6 +124,7 @@ function App() {
     setSearchQuery('');
     setCityQuery('');
     setActiveMode('all');
+    setUiPersistenceWarningShown(false);
     setIsMobileNavOpen(false);
     resetPrototypeStorage([STORAGE_KEYS.auth, STORAGE_KEYS.sessionUi]);
 
@@ -173,15 +175,31 @@ function App() {
 
   useEffect(() => {
     if (!token) {
+      setUiPersistenceWarningShown(false);
       resetPrototypeStorage([STORAGE_KEYS.sessionUi]);
       return;
     }
 
-    safeWriteJSON(STORAGE_KEYS.sessionUi, {
+    const persisted = safeWriteJSON(STORAGE_KEYS.sessionUi, {
       view,
       selectedConversation,
     });
-  }, [selectedConversation, token, view]);
+    if (persisted) {
+      if (uiPersistenceWarningShown) {
+        setUiPersistenceWarningShown(false);
+      }
+      return;
+    }
+
+    if (!uiPersistenceWarningShown) {
+      setUiPersistenceWarningShown(true);
+      showToast({
+        type: 'warning',
+        title: 'Vue non persistée',
+        message: 'Le navigateur a refusé la persistance locale de la vue active et de la conversation sélectionnée.',
+      });
+    }
+  }, [selectedConversation, showToast, token, uiPersistenceWarningShown, view]);
 
   useEffect(() => {
     if (!initialAuthState.recovered && !initialSessionUiState.recovered) {

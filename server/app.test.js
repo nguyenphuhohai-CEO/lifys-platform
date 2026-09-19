@@ -320,3 +320,34 @@ test('auth rate limiting returns 429 after repeated login attempts', async () =>
     await server.close();
   }
 });
+
+test('CORS preflight rejects unknown origins and allows the configured one', async () => {
+  const server = await startTestServer({
+    CORS_ORIGIN: 'http://localhost:5173',
+  });
+
+  try {
+    const deniedResponse = await fetch(`${server.baseUrl}/api/health`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'http://malicious.example',
+      },
+    });
+    const deniedBody = await deniedResponse.json();
+
+    assert.equal(deniedResponse.status, 403);
+    assert.equal(deniedBody.code, 'CORS_ORIGIN_DENIED');
+
+    const allowedResponse = await fetch(`${server.baseUrl}/api/health`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'http://localhost:5173',
+      },
+    });
+
+    assert.equal(allowedResponse.status, 204);
+    assert.equal(allowedResponse.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+  } finally {
+    await server.close();
+  }
+});

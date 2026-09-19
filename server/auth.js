@@ -1,14 +1,24 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export function normalizeEmail(value) {
   return `${value ?? ''}`.trim().toLowerCase();
 }
 
 export function validateEmail(value) {
-  return EMAIL_RE.test(normalizeEmail(value));
+  const normalized = normalizeEmail(value);
+  if (!normalized || normalized.includes(' ')) {
+    return false;
+  }
+
+  const atIndex = normalized.indexOf('@');
+  const lastAtIndex = normalized.lastIndexOf('@');
+  const dotIndex = normalized.lastIndexOf('.');
+
+  return atIndex > 0
+    && atIndex === lastAtIndex
+    && dotIndex > atIndex + 1
+    && dotIndex < normalized.length - 1;
 }
 
 export function validatePassword(value) {

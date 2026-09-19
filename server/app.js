@@ -56,8 +56,7 @@ function readOptionalString(body, field, { maxLength = 2000 } = {}) {
 }
 
 function getRequestIp(req) {
-  const forwarded = `${req.headers['x-forwarded-for'] ?? ''}`.split(',')[0].trim();
-  return forwarded || req.socket.remoteAddress || 'local';
+  return req.ip || req.socket.remoteAddress || 'local';
 }
 
 function createRateLimiter({ windowMs, max, keyGenerator }) {
@@ -144,12 +143,15 @@ export function createApp(config) {
   });
   app.use('/api', (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
+    const requestOrigin = `${req.headers.origin ?? ''}`.trim();
+    const allowAll = allowedOrigins.includes('*');
+    const allowedOrigin = allowAll
+      ? '*'
+      : (requestOrigin && allowedOrigins.includes(requestOrigin) ? requestOrigin : '');
 
     if (allowedOrigins.length > 0) {
-      const requestOrigin = `${req.headers.origin ?? ''}`.trim();
-      const allowAll = allowedOrigins.includes('*');
-      if (allowAll || allowedOrigins.includes(requestOrigin)) {
-        res.setHeader('Access-Control-Allow-Origin', allowAll ? '*' : requestOrigin);
+      if (allowedOrigin) {
+        res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
         res.setHeader('Vary', 'Origin');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
         res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
@@ -157,6 +159,11 @@ export function createApp(config) {
     }
 
     if (req.method === 'OPTIONS') {
+      if (!allowedOrigin) {
+        next(createHttpError(403, 'Origine non autorisée.', 'CORS_ORIGIN_DENIED'));
+        return;
+      }
+
       res.status(204).end();
       return;
     }
@@ -269,7 +276,7 @@ export function createApp(config) {
     res.json({ profile: database.getProfileByUserId(req.auth.userId) });
   });
 
-  app.put('/api/profile', requireAuth, writeRateLimiter, (req, res, next) => {
+  app.put('/api/profile', writeRateLimiter, requireAuth, (req, res, next) => {
     try {
       const profile = sanitizeProfileInput(normalizeBody(req.body));
 
@@ -293,7 +300,7 @@ export function createApp(config) {
     });
   });
 
-  app.post('/api/interactions/like', requireAuth, writeRateLimiter, (req, res, next) => {
+  app.post('/api/interactions/like', writeRateLimiter, requireAuth, (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
@@ -308,7 +315,7 @@ export function createApp(config) {
     }
   });
 
-  app.post('/api/interactions/pass', requireAuth, writeRateLimiter, (req, res, next) => {
+  app.post('/api/interactions/pass', writeRateLimiter, requireAuth, (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
@@ -335,7 +342,7 @@ export function createApp(config) {
     res.json({ conversations: database.listConversationsForUser(req.auth.userId) });
   });
 
-  app.post('/api/conversations/:conversationId/messages', requireAuth, writeRateLimiter, (req, res, next) => {
+  app.post('/api/conversations/:conversationId/messages', writeRateLimiter, requireAuth, (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const text = readRequiredString(body, 'text', { maxLength: 2000 });
@@ -355,7 +362,7 @@ export function createApp(config) {
     }
   });
 
-  app.post('/api/prototype/reset', requireAuth, writeRateLimiter, (req, res) => {
+  app.post('/api/prototype/reset', writeRateLimiter, requireAuth, (req, res) => {
     database.resetUserData(req.auth.userId);
     res.json({
       profile: database.getProfileByUserId(req.auth.userId),
