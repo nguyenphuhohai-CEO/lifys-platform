@@ -346,12 +346,13 @@ function App() {
 
     try {
       const response = await api.sendMessage(token, selectedConversationData.id, text);
+      const persistedLastMessage = response.conversation.messages.at(-1)?.text ?? text.trim();
       setConversations((current) => current.map((conversation) => (
         conversation.id === response.conversation.id ? response.conversation : conversation
       )));
       setMatches((current) => current.map((match) => (
         match.profileId === response.conversation.profileId
-          ? { ...match, lastMessage: text }
+          ? { ...match, lastMessage: persistedLastMessage }
           : match
       )));
       setDraftMessage('');
@@ -381,7 +382,9 @@ function App() {
       setActiveMode('all');
       setDraftMessage('');
       resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS);
-      if (!safeWriteJSON(STORAGE_KEYS.auth, { token })) {
+      const restoredAuth = safeWriteJSON(STORAGE_KEYS.auth, { token });
+      if (!restoredAuth) {
+        setPageError('Le prototype a été réinitialisé, mais le navigateur a refusé de restaurer la session locale. Un rechargement vous déconnectera.');
         showToast({
           type: 'warning',
           title: 'Session non persistée',
@@ -389,11 +392,13 @@ function App() {
         });
       }
       await loadDiscovery(token);
-      showToast({
-        type: 'success',
-        title: 'Données de démonstration réinitialisées',
-        message: 'Vos interactions serveur ont été nettoyées et votre profil a été réinitialisé.',
-      });
+      if (restoredAuth) {
+        showToast({
+          type: 'success',
+          title: 'Données de démonstration réinitialisées',
+          message: 'Vos interactions serveur ont été nettoyées et votre profil a été réinitialisé.',
+        });
+      }
     } catch (error) {
       handleApiError(error, 'Impossible de réinitialiser le prototype.');
     } finally {
