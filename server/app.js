@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 import express from 'express';
 import { rateLimit } from 'express-rate-limit';
@@ -13,6 +14,10 @@ import { normalizeBody, readRequiredString } from './validation.js';
 
 function getRequestIp(req) {
   return req.ip || req.socket.remoteAddress || 'local';
+}
+
+function hashIdentifier(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
 }
 
 function createApiRateLimiter({ windowMs, max, keyGenerator }) {
@@ -48,6 +53,16 @@ export function createApp(config) {
     windowMs: config.rateLimitWindowMs,
     max: config.authRateLimitMax,
     keyGenerator: (req) => `auth:${getRequestIp(req)}`,
+  });
+  const protectedRouteRateLimiter = createApiRateLimiter({
+    windowMs: config.rateLimitWindowMs,
+    max: config.writeRateLimitMax,
+    keyGenerator: (req) => {
+      const authorization = `${req.headers.authorization ?? ''}`.trim();
+      return authorization
+        ? `protected:${hashIdentifier(authorization)}`
+        : `protected-ip:${getRequestIp(req)}`;
+    },
   });
   const writeRateLimiter = createApiRateLimiter({
     windowMs: config.rateLimitWindowMs,
@@ -150,13 +165,13 @@ export function createApp(config) {
   app.post('/api/auth/login', authRateLimiter, authController.login);
   app.post('/api/auth/refresh', authRateLimiter, authController.requireRefreshCookie, authController.refresh);
   app.post('/api/auth/logout', authController.logout);
-  app.get('/api/auth/session', requireAuth, authController.session);
-  app.post('/api/auth/verify-email/request', requireAuth, writeRateLimiter, authController.requestEmailVerification);
+  app.get('/api/auth/session', protectedRouteRateLimiter, requireAuth, authController.session);
+  app.post('/api/auth/verify-email/request', protectedRouteRateLimiter, requireAuth, writeRateLimiter, authController.requestEmailVerification);
   app.post('/api/auth/verify-email/confirm', authRateLimiter, authController.verifyEmail);
   app.post('/api/auth/password-reset/request', authRateLimiter, authController.requestPasswordReset);
   app.post('/api/auth/password-reset/confirm', authRateLimiter, authController.resetPassword);
 
-  app.get('/api/bootstrap', requireAuth, (req, res) => {
+  app.get('/api/bootstrap', protectedRouteRateLimiter, requireAuth, (req, res) => {
     res.json({
       profile: database.getProfileByUserId(req.auth.userId),
       matches: database.listMatchesForUser(req.auth.userId),
@@ -164,11 +179,11 @@ export function createApp(config) {
     });
   });
 
-  app.get('/api/profile', requireAuth, (req, res) => {
+  app.get('/api/profile', protectedRouteRateLimiter, requireAuth, (req, res) => {
     res.json({ profile: database.getProfileByUserId(req.auth.userId) });
   });
 
-  app.put('/api/profile', requireAuth, writeRateLimiter, (req, res, next) => {
+  app.put('/api/profile', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res, next) => {
     try {
       const profile = sanitizeProfileInput(normalizeBody(req.body));
 
@@ -182,7 +197,7 @@ export function createApp(config) {
     }
   });
 
-  app.get('/api/discovery', requireAuth, (req, res) => {
+  app.get('/api/discovery', protectedRouteRateLimiter, requireAuth, (req, res) => {
     res.json({
       profiles: database.listDiscoveryProfiles(req.auth.userId, {
         activeMode: req.query.mode ?? 'all',
@@ -192,7 +207,7 @@ export function createApp(config) {
     });
   });
 
-  app.post('/api/interactions/like', requireAuth, writeRateLimiter, (req, res, next) => {
+  app.post('/api/interactions/like', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
@@ -207,7 +222,7 @@ export function createApp(config) {
     }
   });
 
-  app.post('/api/interactions/pass', requireAuth, writeRateLimiter, (req, res, next) => {
+  app.post('/api/interactions/pass', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
@@ -226,15 +241,15 @@ export function createApp(config) {
     }
   });
 
-  app.get('/api/matches', requireAuth, (req, res) => {
+  app.get('/api/matches', protectedRouteRateLimiter, requireAuth, (req, res) => {
     res.json({ matches: database.listMatchesForUser(req.auth.userId) });
   });
 
-  app.get('/api/conversations', requireAuth, (req, res) => {
+  app.get('/api/conversations', protectedRouteRateLimiter, requireAuth, (req, res) => {
     res.json({ conversations: database.listConversationsForUser(req.auth.userId) });
   });
 
-  app.post('/api/conversations/:conversationId/messages', requireAuth, writeRateLimiter, (req, res, next) => {
+  app.post('/api/conversations/:conversationId/messages', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const text = readRequiredString(body, 'text', { maxLength: 2000 });
@@ -254,7 +269,7 @@ export function createApp(config) {
     }
   });
 
-  app.post('/api/prototype/reset', requireAuth, writeRateLimiter, (req, res) => {
+  app.post('/api/prototype/reset', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res) => {
     database.resetUserData(req.auth.userId);
     res.json({
       profile: database.getProfileByUserId(req.auth.userId),

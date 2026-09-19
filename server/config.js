@@ -41,6 +41,10 @@ export function getConfig(overrides = {}) {
     throw new Error('JWT_SECRET must be set in production.');
   }
 
+  if (`${corsOrigin}`.split(',').map((value) => value.trim()).includes('*')) {
+    throw new Error('CORS_ORIGIN cannot contain * when refresh-cookie auth is enabled.');
+  }
+
   return {
     port,
     databaseFile,

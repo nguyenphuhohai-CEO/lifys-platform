@@ -593,3 +593,10 @@ test('config rejects invalid numeric rate limit values', () => {
     /RATE_LIMIT_WINDOW_MS must be a positive number\./,
   );
 });
+
+test('config rejects wildcard CORS with refresh-cookie auth', () => {
+  assert.throws(
+    () => getConfig({ CORS_ORIGIN: '*' }),
+    /CORS_ORIGIN cannot contain \* when refresh-cookie auth is enabled\./,
+  );
+});

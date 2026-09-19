@@ -1206,7 +1206,7 @@ function App() {
 
                   <div className="chat-body" aria-live="polite">
                     {selectedConversationData.messages.length === 0 ? (
-                      <EmptyState title="Aucun message" description="Envoyez le premier message pour démarrer la conversation." />
+                      <p className="section-description">Aucun message pour l’instant. Envoyez le premier message pour démarrer la conversation.</p>
                     ) : selectedConversationData.messages.map((message) => (
                       <div key={message.id} className={message.sender === 'me' ? 'bubble me' : 'bubble them'}>
                         {message.text}

@@ -304,12 +304,22 @@ export function createDatabase(databaseFile) {
     `),
     findEmailVerificationToken: db.prepare(`SELECT * FROM email_verification_tokens WHERE token_hash = ?`),
     consumeEmailVerificationToken: db.prepare(`UPDATE email_verification_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL`),
+    invalidateEmailVerificationTokensForUser: db.prepare(`
+      UPDATE email_verification_tokens
+      SET used_at = ?
+      WHERE user_id = ? AND used_at IS NULL
+    `),
     insertPasswordResetToken: db.prepare(`
       INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at, used_at)
       VALUES (?, ?, ?, ?, NULL)
     `),
     findPasswordResetToken: db.prepare(`SELECT * FROM password_reset_tokens WHERE token_hash = ?`),
     consumePasswordResetToken: db.prepare(`UPDATE password_reset_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL`),
+    invalidatePasswordResetTokensForUser: db.prepare(`
+      UPDATE password_reset_tokens
+      SET used_at = ?
+      WHERE user_id = ? AND used_at IS NULL
+    `),
     markUserEmailVerified: db.prepare(`UPDATE users SET email_verified_at = ? WHERE id = ?`),
     updateUserPasswordHash: db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`),
     listMatchesForUser: db.prepare(`
@@ -642,6 +652,7 @@ export function createDatabase(databaseFile) {
   }
 
   function createEmailVerificationToken(userId, tokenHash, expiresAt) {
+    statements.invalidateEmailVerificationTokensForUser.run(now(), userId);
     statements.insertEmailVerificationToken.run(userId, tokenHash, expiresAt, now());
   }
 
@@ -658,6 +669,7 @@ export function createDatabase(databaseFile) {
   });
 
   function createPasswordResetToken(userId, tokenHash, expiresAt) {
+    statements.invalidatePasswordResetTokensForUser.run(now(), userId);
     statements.insertPasswordResetToken.run(userId, tokenHash, expiresAt, now());
   }
 
