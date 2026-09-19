@@ -26,6 +26,7 @@ Le MVP propose :
 - une récupération sûre du `localStorage` si des données JSON d’interface sont corrompues ;
 - une réinitialisation complète du prototype local ;
 - une restauration de session via refresh token en cookie httpOnly après reload ;
+- un jeton CSRF en cookie compagnon pour protéger les endpoints de session basés cookie ;
 - une vérification e-mail locale par token de démonstration ;
 - une réinitialisation locale de mot de passe par token de démonstration ;
 - un rate limiting minimal sur auth et écritures sensibles côté Express.
@@ -42,6 +43,8 @@ Variables utiles pour le backend local :
 - `JWT_SECRET` : secret JWT à remplacer hors démo ;
 - `JWT_EXPIRES_IN` : durée de vie du token d’accès ;
 - `REFRESH_COOKIE_NAME` : nom du cookie httpOnly de refresh ;
+- `CSRF_COOKIE_NAME` : nom du cookie CSRF lisible côté frontend ;
+- `VITE_CSRF_COOKIE_NAME` : nom attendu côté client pour relire ce cookie ;
 - `REFRESH_TOKEN_TTL_DAYS` : durée de vie du refresh token ;
 - `EMAIL_VERIFICATION_TOKEN_TTL_HOURS` : durée de vie du token de vérification locale ;
 - `PASSWORD_RESET_TOKEN_TTL_MINUTES` : durée de vie du token de reset local ;
