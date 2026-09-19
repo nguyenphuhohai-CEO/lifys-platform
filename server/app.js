@@ -43,6 +43,24 @@ function parseCorsOrigins(corsOrigin) {
     .filter(Boolean);
 }
 
+function extractRequestOrigin(req) {
+  const origin = `${req.headers.origin ?? ''}`.trim();
+  if (origin) {
+    return origin;
+  }
+
+  const referer = `${req.headers.referer ?? ''}`.trim();
+  if (!referer) {
+    return '';
+  }
+
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return '';
+  }
+}
+
 export function createApp(config) {
   const database = createDatabase(config.databaseFile);
   const authService = createAuthService({ database, config });
@@ -74,6 +92,19 @@ export function createApp(config) {
     max: config.writeRateLimitMax,
     keyGenerator: (req) => `write-user:${req.auth.userId}`,
   });
+  const requireTrustedCookieOrigin = (req, _res, next) => {
+    const requestOrigin = extractRequestOrigin(req);
+    const trustedOrigins = allowedOrigins.length > 0
+      ? allowedOrigins
+      : [`${req.protocol}://${req.get('host')}`];
+
+    if (!requestOrigin || !trustedOrigins.includes(requestOrigin)) {
+      next(createHttpError(403, 'Origine non autorisée pour ce cookie sécurisé.', 'TRUSTED_ORIGIN_REQUIRED'));
+      return;
+    }
+
+    next();
+  };
 
   app.disable('x-powered-by');
   app.use(express.json({ limit: '1mb' }));
@@ -168,8 +199,8 @@ export function createApp(config) {
   app.post('/api/auth/register', authRateLimiter, authController.register);
 
   app.post('/api/auth/login', authRateLimiter, authController.login);
-  app.post('/api/auth/refresh', authRateLimiter, refreshCookieRateLimiter, authController.requireRefreshCookie, authController.refresh);
-  app.post('/api/auth/logout', refreshCookieRateLimiter, authController.logout);
+  app.post('/api/auth/refresh', authRateLimiter, refreshCookieRateLimiter, requireTrustedCookieOrigin, authController.requireRefreshCookie, authController.refresh);
+  app.post('/api/auth/logout', refreshCookieRateLimiter, requireTrustedCookieOrigin, authController.logout);
   app.get('/api/auth/session', protectedRouteRateLimiter, requireAuth, authController.session);
   app.post('/api/auth/verify-email/request', protectedRouteRateLimiter, requireAuth, writeRateLimiter, authController.requestEmailVerification);
   app.post('/api/auth/verify-email/confirm', authRateLimiter, authController.verifyEmail);

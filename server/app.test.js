@@ -147,7 +147,7 @@ test('register accepts quoted local-part emails', async () => {
   }
 });
 
-test('register rejects quoted local-part emails with spaces', async () => {
+test('register accepts quoted local-part emails with spaces', async () => {
   const server = await startTestServer();
 
   try {
@@ -160,8 +160,8 @@ test('register rejects quoted local-part emails with spaces', async () => {
       }),
     });
 
-    assert.equal(response.status, 400);
-    assert.equal(response.body.code, 'INVALID_EMAIL');
+    assert.equal(response.status, 201);
+    assert.ok(response.body.token);
   } finally {
     await server.close();
   }
@@ -289,6 +289,7 @@ test('refresh cookie restores session and logout revokes it', async () => {
       }),
     });
     const refreshCookie = getCookieHeader(register);
+    const trustedOrigin = new URL(server.baseUrl).origin;
 
     assert.ok(refreshCookie.includes('lifys_refresh_token='));
     assert.equal(register.body.user.emailVerified, false);
@@ -297,6 +298,7 @@ test('refresh cookie restores session and logout revokes it', async () => {
       method: 'POST',
       headers: {
         cookie: refreshCookie,
+        origin: trustedOrigin,
       },
     });
     const rotatedCookie = getCookieHeader(refreshed);
@@ -309,6 +311,7 @@ test('refresh cookie restores session and logout revokes it', async () => {
       method: 'POST',
       headers: {
         cookie: refreshCookie,
+        origin: trustedOrigin,
       },
     });
     assert.equal(reuseOldRefresh.status, 401);
@@ -318,6 +321,7 @@ test('refresh cookie restores session and logout revokes it', async () => {
       method: 'POST',
       headers: {
         cookie: rotatedCookie,
+        origin: trustedOrigin,
       },
     });
 
@@ -327,10 +331,40 @@ test('refresh cookie restores session and logout revokes it', async () => {
       method: 'POST',
       headers: {
         cookie: rotatedCookie,
+        origin: trustedOrigin,
       },
     });
     assert.equal(refreshAfterLogout.status, 401);
     assert.equal(refreshAfterLogout.body.code, 'REFRESH_TOKEN_INVALID');
+  } finally {
+    await server.close();
+  }
+});
+
+test('refresh rejects untrusted origins for cookie-authenticated mutation', async () => {
+  const server = await startTestServer();
+
+  try {
+    const register = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'csrf@example.com',
+        password: 'supersecret',
+        name: 'Csrf User',
+      }),
+    });
+    const refreshCookie = getCookieHeader(register);
+
+    const response = await request(server.baseUrl, '/api/auth/refresh', {
+      method: 'POST',
+      headers: {
+        cookie: refreshCookie,
+        origin: 'http://malicious.example',
+      },
+    });
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.code, 'TRUSTED_ORIGIN_REQUIRED');
   } finally {
     await server.close();
   }

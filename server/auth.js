@@ -7,7 +7,7 @@ export function normalizeEmail(value) {
 
 export function validateEmail(value) {
   const normalized = normalizeEmail(value);
-  if (!normalized || normalized.includes(' ')) {
+  if (!normalized) {
     return false;
   }
 
@@ -22,8 +22,8 @@ export function validateEmail(value) {
     && localPart.startsWith('"')
     && localPart.endsWith('"')
     && quotedContent.length > 0
-    && !/[\s"]/.test(quotedContent)
-    && /^[\x21\x23-\x5B\x5D-\x7E\\]+$/.test(quotedContent)
+    && !quotedContent.includes('"')
+    && /^[\x20\x21\x23-\x5B\x5D-\x7E\\]+$/.test(quotedContent)
     && !quotedContent.endsWith('\\');
   const unquotedLocalPartAllowed = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(localPart);
 

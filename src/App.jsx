@@ -717,18 +717,28 @@ function App() {
   };
 
   const handleLogout = async () => {
+    let logoutConfirmed = false;
+
     try {
       await api.logout();
+      logoutConfirmed = true;
     } catch {
       // ignore logout transport failures, local reset still wins
     }
 
     resetSessionState({
-      toast: {
-        type: 'info',
-        title: 'Session fermée',
-        message: 'Le refresh cookie sécurisé et la session locale ont été supprimés.',
-      },
+      pageError: logoutConfirmed ? '' : 'La session locale a été fermée, mais la révocation serveur du refresh cookie n’a pas pu être confirmée.',
+      toast: logoutConfirmed
+        ? {
+          type: 'info',
+          title: 'Session fermée',
+          message: 'Le refresh cookie sécurisé et la session locale ont été supprimés.',
+        }
+        : {
+          type: 'warning',
+          title: 'Déconnexion partielle',
+          message: 'L’état local a été réinitialisé, mais la révocation serveur du refresh cookie n’a pas pu être confirmée.',
+        },
     });
   };
 
