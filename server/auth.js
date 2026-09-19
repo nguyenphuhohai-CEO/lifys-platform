@@ -14,9 +14,21 @@ export function validateEmail(value) {
   const atIndex = normalized.indexOf('@');
   const lastAtIndex = normalized.lastIndexOf('@');
   const dotIndex = normalized.lastIndexOf('.');
+  const localPart = normalized.slice(0, atIndex);
+  const domainPart = normalized.slice(atIndex + 1);
+  const domainLabels = domainPart.split('.');
 
   return atIndex > 0
     && atIndex === lastAtIndex
+    && !localPart.startsWith('.')
+    && !localPart.endsWith('.')
+    && !localPart.includes('..')
+    && domainPart.length > 0
+    && !domainPart.startsWith('.')
+    && !domainPart.endsWith('.')
+    && !domainPart.includes('..')
+    && domainLabels.length >= 2
+    && domainLabels.every((label) => Boolean(label) && /^[a-z0-9-]+$/i.test(label) && !label.startsWith('-') && !label.endsWith('-'))
     && dotIndex > atIndex + 1
     && dotIndex < normalized.length - 1;
 }

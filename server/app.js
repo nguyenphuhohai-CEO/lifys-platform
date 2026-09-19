@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import express from 'express';
+import { rateLimit } from 'express-rate-limit';
 
 import {
   comparePassword,
@@ -59,35 +60,20 @@ function getRequestIp(req) {
   return req.ip || req.socket.remoteAddress || 'local';
 }
 
-function createRateLimiter({ windowMs, max, keyGenerator }) {
-  const hits = new Map();
-
-  return (req, res, next) => {
-    if (!Number.isFinite(windowMs) || windowMs <= 0 || !Number.isFinite(max) || max <= 0) {
-      next();
-      return;
-    }
-
-    const key = keyGenerator(req);
-    const now = Date.now();
-    const current = hits.get(key);
-
-    if (!current || current.resetAt <= now) {
-      hits.set(key, { count: 1, resetAt: now + windowMs });
-      next();
-      return;
-    }
-
-    current.count += 1;
-    if (current.count > max) {
-      const retryAfterSeconds = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
-      res.setHeader('Retry-After', retryAfterSeconds);
-      next(createHttpError(429, 'Trop de requêtes, réessayez plus tard.', 'RATE_LIMITED'));
-      return;
-    }
-
-    next();
-  };
+function createApiRateLimiter({ windowMs, max, keyGenerator }) {
+  return rateLimit({
+    windowMs,
+    max,
+    legacyHeaders: false,
+    standardHeaders: 'draft-7',
+    keyGenerator,
+    handler: (_req, res) => {
+      res.status(429).json({
+        error: 'Trop de requêtes, réessayez plus tard.',
+        code: 'RATE_LIMITED',
+      });
+    },
+  });
 }
 
 function parseCorsOrigins(corsOrigin) {
@@ -111,15 +97,20 @@ export function createApp(config) {
   const database = createDatabase(config.databaseFile);
   const app = express();
   const allowedOrigins = parseCorsOrigins(config.corsOrigin);
-  const authRateLimiter = createRateLimiter({
+  const authRateLimiter = createApiRateLimiter({
     windowMs: config.rateLimitWindowMs,
     max: config.authRateLimitMax,
     keyGenerator: (req) => `auth:${getRequestIp(req)}`,
   });
-  const writeRateLimiter = createRateLimiter({
+  const writeRateLimiter = createApiRateLimiter({
     windowMs: config.rateLimitWindowMs,
     max: config.writeRateLimitMax,
-    keyGenerator: (req) => `write:${req.auth?.userId ?? getRequestIp(req)}`,
+    keyGenerator: (req) => {
+      const authorization = `${req.headers.authorization ?? ''}`.trim();
+      return authorization.startsWith('Bearer ')
+        ? `write-token:${authorization.slice(7)}`
+        : `write-ip:${getRequestIp(req)}`;
+    },
   });
 
   app.disable('x-powered-by');

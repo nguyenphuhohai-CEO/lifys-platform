@@ -230,6 +230,26 @@ test('login with missing password returns 401 instead of leaking an internal err
   }
 });
 
+test('register rejects malformed email structures', async () => {
+  const server = await startTestServer();
+
+  try {
+    const response = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'user@.example.com',
+        password: 'supersecret',
+        name: 'Malformed Email',
+      }),
+    });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, 'INVALID_EMAIL');
+  } finally {
+    await server.close();
+  }
+});
+
 test('invalid session token returns a clean 401 payload', async () => {
   const server = await startTestServer();
 
@@ -316,6 +336,61 @@ test('auth rate limiting returns 429 after repeated login attempts', async () =>
     assert.equal(thirdResponse.status, 429);
     assert.equal(thirdAttempt.code, 'RATE_LIMITED');
     assert.equal(thirdResponse.headers.get('retry-after'), '60');
+  } finally {
+    await server.close();
+  }
+});
+
+test('write rate limiting throttles repeated authenticated profile updates', async () => {
+  const server = await startTestServer({
+    RATE_LIMIT_WINDOW_MS: 60_000,
+    WRITE_RATE_LIMIT_MAX: 2,
+  });
+
+  try {
+    const register = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'writer@example.com',
+        password: 'supersecret',
+        name: 'Writer',
+      }),
+    });
+    const auth = { authorization: 'Bearer ' + register.body.token };
+    const payload = {
+      name: 'Writer',
+      age: 29,
+      city: 'Paris',
+      bio: 'Profil complet utilisé pour vérifier le rate limit d’écriture.',
+      interests: ['produit'],
+      mode: 'professionnel',
+      avatar: '',
+    };
+
+    const firstUpdate = await request(server.baseUrl, '/api/profile', {
+      method: 'PUT',
+      headers: auth,
+      body: JSON.stringify(payload),
+    });
+    const secondUpdate = await request(server.baseUrl, '/api/profile', {
+      method: 'PUT',
+      headers: auth,
+      body: JSON.stringify({ ...payload, city: 'Lyon' }),
+    });
+    const thirdResponse = await fetch(`${server.baseUrl}/api/profile`, {
+      method: 'PUT',
+      headers: {
+        'content-type': 'application/json',
+        ...auth,
+      },
+      body: JSON.stringify({ ...payload, city: 'Marseille' }),
+    });
+    const thirdUpdate = await thirdResponse.json();
+
+    assert.equal(firstUpdate.status, 200);
+    assert.equal(secondUpdate.status, 200);
+    assert.equal(thirdResponse.status, 429);
+    assert.equal(thirdUpdate.code, 'RATE_LIMITED');
   } finally {
     await server.close();
   }
