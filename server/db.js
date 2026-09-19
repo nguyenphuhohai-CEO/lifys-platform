@@ -643,6 +643,17 @@ export function createDatabase(databaseFile) {
     return session;
   }
 
+  const rotateRefreshToken = db.transaction((currentTokenHash, nextTokenHash, nextExpiresAt) => {
+    const session = statements.findRefreshToken.get(currentTokenHash);
+    if (!session || session.revoked_at || !isFutureTimestamp(session.expires_at)) {
+      return null;
+    }
+
+    statements.revokeRefreshToken.run(now(), currentTokenHash);
+    statements.insertRefreshToken.run(session.user_id, nextTokenHash, nextExpiresAt, now());
+    return session.user_id;
+  });
+
   function revokeRefreshToken(tokenHash) {
     statements.revokeRefreshToken.run(now(), tokenHash);
   }
@@ -720,6 +731,7 @@ export function createDatabase(databaseFile) {
     addMessage,
     createRefreshToken,
     getRefreshToken,
+    rotateRefreshToken,
     revokeRefreshToken,
     revokeRefreshTokensForUser,
     createEmailVerificationToken,

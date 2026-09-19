@@ -127,6 +127,26 @@ test('register, update profile, like demo profile and send message', async () =>
   }
 });
 
+test('register accepts quoted local-part emails', async () => {
+  const server = await startTestServer();
+
+  try {
+    const response = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: '"john..doe"@example.com',
+        password: 'supersecret',
+        name: 'Quoted Email',
+      }),
+    });
+
+    assert.equal(response.status, 201);
+    assert.ok(response.body.token);
+  } finally {
+    await server.close();
+  }
+});
+
 test('discovery hides private identifiers and reset keeps real-user matches intact', async () => {
   const server = await startTestServer();
 
@@ -264,6 +284,15 @@ test('refresh cookie restores session and logout revokes it', async () => {
     assert.equal(refreshed.status, 200);
     assert.ok(refreshed.body.token);
     assert.notEqual(rotatedCookie, refreshCookie);
+
+    const reuseOldRefresh = await request(server.baseUrl, '/api/auth/refresh', {
+      method: 'POST',
+      headers: {
+        cookie: refreshCookie,
+      },
+    });
+    assert.equal(reuseOldRefresh.status, 401);
+    assert.equal(reuseOldRefresh.body.code, 'REFRESH_TOKEN_INVALID');
 
     const logout = await fetch(`${server.baseUrl}/api/auth/logout`, {
       method: 'POST',

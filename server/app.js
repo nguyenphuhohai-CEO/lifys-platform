@@ -20,6 +20,18 @@ function hashIdentifier(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
+function getCookieValue(cookieHeader, name) {
+  const prefix = `${name}=`;
+  for (const chunk of `${cookieHeader ?? ''}`.split(';')) {
+    const part = chunk.trim();
+    if (part.startsWith(prefix)) {
+      return decodeURIComponent(part.slice(prefix.length));
+    }
+  }
+
+  return '';
+}
+
 function createApiRateLimiter({ windowMs, max, keyGenerator }) {
   return rateLimit({
     windowMs,
@@ -62,6 +74,16 @@ export function createApp(config) {
       return authorization
         ? `protected:${hashIdentifier(authorization)}`
         : `protected-ip:${getRequestIp(req)}`;
+    },
+  });
+  const refreshCookieRateLimiter = createApiRateLimiter({
+    windowMs: config.rateLimitWindowMs,
+    max: config.writeRateLimitMax,
+    keyGenerator: (req) => {
+      const refreshCookie = getCookieValue(req.headers.cookie, config.refreshCookieName);
+      return refreshCookie
+        ? `refresh-cookie:${hashIdentifier(refreshCookie)}`
+        : `refresh-ip:${getRequestIp(req)}`;
     },
   });
   const writeRateLimiter = createApiRateLimiter({
@@ -163,8 +185,8 @@ export function createApp(config) {
   app.post('/api/auth/register', authRateLimiter, authController.register);
 
   app.post('/api/auth/login', authRateLimiter, authController.login);
-  app.post('/api/auth/refresh', authRateLimiter, authController.requireRefreshCookie, authController.refresh);
-  app.post('/api/auth/logout', authController.logout);
+  app.post('/api/auth/refresh', authRateLimiter, refreshCookieRateLimiter, authController.requireRefreshCookie, authController.refresh);
+  app.post('/api/auth/logout', refreshCookieRateLimiter, authController.logout);
   app.get('/api/auth/session', protectedRouteRateLimiter, requireAuth, authController.session);
   app.post('/api/auth/verify-email/request', protectedRouteRateLimiter, requireAuth, writeRateLimiter, authController.requestEmailVerification);
   app.post('/api/auth/verify-email/confirm', authRateLimiter, authController.verifyEmail);

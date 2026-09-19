@@ -17,14 +17,20 @@ export function validateEmail(value) {
   const localPart = normalized.slice(0, atIndex);
   const domainPart = normalized.slice(atIndex + 1);
   const domainLabels = domainPart.split('.');
-  const localPartAllowed = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(localPart);
+  const quotedLocalPart = localPart.length >= 2
+    && localPart.startsWith('"')
+    && localPart.endsWith('"')
+    && !localPart.slice(1, -1).includes('"');
+  const unquotedLocalPartAllowed = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(localPart);
 
   return atIndex > 0
     && atIndex === lastAtIndex
-    && localPartAllowed
-    && !localPart.startsWith('.')
-    && !localPart.endsWith('.')
-    && !localPart.includes('..')
+    && (quotedLocalPart || (
+      unquotedLocalPartAllowed
+      && !localPart.startsWith('.')
+      && !localPart.endsWith('.')
+      && !localPart.includes('..')
+    ))
     && domainPart.length > 0
     && !domainPart.startsWith('.')
     && !domainPart.endsWith('.')

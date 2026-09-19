@@ -131,14 +131,17 @@ export function createAuthService({ database, config }) {
         throw createHttpError(401, 'Refresh token manquant.', 'REFRESH_TOKEN_MISSING');
       }
 
-      const existingSession = database.getRefreshToken(hashOpaqueToken(refreshToken));
-      if (!existingSession) {
+      const nextRefreshToken = createOpaqueToken();
+      const userId = database.rotateRefreshToken(
+        hashOpaqueToken(refreshToken),
+        hashOpaqueToken(nextRefreshToken),
+        addDuration({ days: config.refreshTokenTtlDays }),
+      );
+      if (!userId) {
         throw createHttpError(401, 'Refresh token expiré ou invalide.', 'REFRESH_TOKEN_INVALID');
       }
 
-      database.revokeRefreshToken(hashOpaqueToken(refreshToken));
-      const nextRefreshToken = issueRefreshSession(existingSession.user_id);
-      return buildSessionResult(existingSession.user_id, nextRefreshToken);
+      return buildSessionResult(userId, nextRefreshToken);
     },
 
     logout(refreshToken) {
