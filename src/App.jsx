@@ -347,9 +347,19 @@ function App() {
     try {
       const response = await api.sendMessage(token, selectedConversationData.id, text);
       const persistedLastMessage = response.conversation.messages.at(-1)?.text ?? text.trim();
-      setConversations((current) => current.map((conversation) => (
-        conversation.id === response.conversation.id ? response.conversation : conversation
-      )));
+      setConversations((current) => {
+        const existingConversation = current.some(
+          (conversation) => conversation.id === response.conversation.id,
+        );
+
+        if (!existingConversation) {
+          return [response.conversation, ...current];
+        }
+
+        return current.map((conversation) => (
+          conversation.id === response.conversation.id ? response.conversation : conversation
+        ));
+      });
       setMatches((current) => current.map((match) => (
         match.profileId === response.conversation.profileId
           ? { ...match, lastMessage: persistedLastMessage }

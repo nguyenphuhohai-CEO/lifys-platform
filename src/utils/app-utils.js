@@ -345,13 +345,7 @@ export function ensureConversationForProfile({
       name: fallbackMatch.name,
       mode: fallbackMatch.mode,
       avatar: fallbackMatch.avatar,
-      messages: [
-        {
-          id: `seed-${profileId}`,
-          sender: 'them',
-          text: 'Conversation locale prête à démarrer.',
-        },
-      ],
+      messages: [],
     };
 
   return {

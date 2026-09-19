@@ -243,6 +243,7 @@ test('ensureConversationForProfile can fallback to existing match data when prof
 
   assert.equal(created.conversation.profileId, 'p42');
   assert.equal(created.conversation.name, 'Maya');
+  assert.deepEqual(created.conversation.messages, []);
   assert.equal(created.conversations.length, 1);
 });
 
