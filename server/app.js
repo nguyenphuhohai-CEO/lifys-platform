@@ -138,15 +138,15 @@ export function createApp(config) {
     const allowAll = allowedOrigins.includes('*');
     const allowedOrigin = allowAll
       ? '*'
-      : (requestOrigin && allowedOrigins.includes(requestOrigin) ? requestOrigin : '');
+      : (requestOrigin && allowedOrigins.length === 0
+        ? requestOrigin
+        : (requestOrigin && allowedOrigins.includes(requestOrigin) ? requestOrigin : ''));
 
-    if (allowedOrigins.length > 0) {
-      if (allowedOrigin) {
-        res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-        res.setHeader('Vary', 'Origin');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
-      }
+    if (allowedOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
     }
 
     if (req.method === 'OPTIONS') {

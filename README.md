@@ -155,7 +155,7 @@ server/                   # API Express, auth JWT et persistance SQLite
 
 - durcir l’API existante pour un usage public ;
 - séparer services, validation et stockage ;
-- ajouter limitation de débit et journalisation.
+- compléter la journalisation minimale et la supervision.
 
 ### Authentification
 
