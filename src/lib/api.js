@@ -31,6 +31,7 @@ async function parseResponse(response) {
 export async function apiRequest(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: options.method ?? 'GET',
+    credentials: 'include',
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
       ...(options.token ? { Authorization: 'Bearer ' + options.token } : {}),
@@ -53,8 +54,29 @@ export const api = {
   login(payload) {
     return apiRequest('/api/auth/login', { method: 'POST', body: payload });
   },
+  refreshSession() {
+    return apiRequest('/api/auth/refresh', { method: 'POST' });
+  },
+  logout() {
+    return apiRequest('/api/auth/logout', { method: 'POST' });
+  },
   getSession(token) {
     return apiRequest('/api/auth/session', { token });
+  },
+  requestEmailVerification(token) {
+    return apiRequest('/api/auth/verify-email/request', { method: 'POST', token });
+  },
+  confirmEmailVerification(tokenValue) {
+    return apiRequest('/api/auth/verify-email/confirm', { method: 'POST', body: { token: tokenValue } });
+  },
+  requestPasswordReset(email) {
+    return apiRequest('/api/auth/password-reset/request', { method: 'POST', body: { email } });
+  },
+  confirmPasswordReset(tokenValue, password) {
+    return apiRequest('/api/auth/password-reset/confirm', {
+      method: 'POST',
+      body: { token: tokenValue, password },
+    });
   },
   getBootstrap(token) {
     return apiRequest('/api/bootstrap', { token });

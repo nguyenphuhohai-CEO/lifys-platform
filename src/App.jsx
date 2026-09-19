@@ -25,12 +25,6 @@ const PROTOTYPE_STORAGE_KEYS = [
   STORAGE_KEYS.passed,
 ];
 
-const initialAuthState = safeReadJSON(STORAGE_KEYS.auth, { token: '' }, {
-  sanitize: (value) => ({
-    token: typeof value?.token === 'string' ? value.token : '',
-  }),
-});
-
 const initialSessionUiState = safeReadJSON(STORAGE_KEYS.sessionUi, { view: 'home', selectedConversation: null }, {
   sanitize: (value) => ({
     view: NAV_VIEW_IDS.has(value?.view) ? value.view : 'home',
@@ -38,7 +32,6 @@ const initialSessionUiState = safeReadJSON(STORAGE_KEYS.sessionUi, { view: 'home
   }),
 });
 
-const initialAuth = initialAuthState.data;
 const initialSessionUi = initialSessionUiState.data;
 
 function EmptyState({ title, description, actionLabel, onAction }) {
@@ -65,7 +58,7 @@ function SectionHeader({ eyebrow, title, description, aside }) {
 }
 
 function App() {
-  const [token, setToken] = useState(initialAuth.token);
+  const [token, setToken] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState(initialSessionUi.view);
   const [activeMode, setActiveMode] = useState('all');
@@ -81,15 +74,26 @@ function App() {
   const [cityQuery, setCityQuery] = useState('');
   const [toasts, setToasts] = useState([]);
   const [sessionLoading, setSessionLoading] = useState(true);
+  const [sessionBootstrapped, setSessionBootstrapped] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
   const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [emailVerificationSubmitting, setEmailVerificationSubmitting] = useState(false);
+  const [passwordResetSubmitting, setPasswordResetSubmitting] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [messageSending, setMessageSending] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [uiPersistenceWarningShown, setUiPersistenceWarningShown] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [pageError, setPageError] = useState('');
+  const [passwordResetRequestEmail, setPasswordResetRequestEmail] = useState('');
+  const [passwordResetForm, setPasswordResetForm] = useState({
+    token: '',
+    password: '',
+  });
+  const [passwordResetPreviewToken, setPasswordResetPreviewToken] = useState('');
+  const [emailVerificationToken, setEmailVerificationToken] = useState('');
+  const [emailVerificationPreviewToken, setEmailVerificationPreviewToken] = useState('');
 
   const showToast = useCallback((toast) => {
     const id = `${toast.type}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -124,6 +128,9 @@ function App() {
     setSearchQuery('');
     setCityQuery('');
     setActiveMode('all');
+    setEmailVerificationToken('');
+    setEmailVerificationPreviewToken('');
+    setPasswordResetPreviewToken('');
     setUiPersistenceWarningShown(false);
     setIsMobileNavOpen(false);
     resetPrototypeStorage([STORAGE_KEYS.auth, STORAGE_KEYS.sessionUi]);
@@ -138,6 +145,15 @@ function App() {
       showToast(options.toast);
     }
   }, [showToast]);
+
+  const applyAuthenticatedSession = useCallback((response, options = {}) => {
+    setToken(response.token);
+    setCurrentUser(response.user);
+    if (options.view) {
+      setView(options.view);
+    }
+    setPageError('');
+  }, []);
 
   const handleUnauthorized = useCallback((error) => {
     const message = error instanceof ApiError ? error.message : 'Votre session n’est plus valide. Reconnectez-vous.';
@@ -158,20 +174,6 @@ function App() {
       interests: serializeInterests(nextProfile.interests),
     });
   }, []);
-
-  useEffect(() => {
-    if (token) {
-      if (!safeWriteJSON(STORAGE_KEYS.auth, { token })) {
-        showToast({
-          type: 'warning',
-          title: 'Session non persistée',
-          message: 'Le navigateur a refusé la persistance locale du jeton. La session restera active jusqu’au rechargement.',
-        });
-      }
-    } else {
-      resetPrototypeStorage([STORAGE_KEYS.auth]);
-    }
-  }, [showToast, token]);
 
   useEffect(() => {
     if (!token) {
@@ -202,7 +204,9 @@ function App() {
   }, [selectedConversation, showToast, token, uiPersistenceWarningShown, view]);
 
   useEffect(() => {
-    if (!initialAuthState.recovered && !initialSessionUiState.recovered) {
+    resetPrototypeStorage([STORAGE_KEYS.auth]);
+
+    if (!initialSessionUiState.recovered) {
       return;
     }
 
@@ -213,12 +217,36 @@ function App() {
     });
   }, [showToast]);
 
-  const syncAccountData = useCallback(async (authToken) => {
-    const [profileResponse, matchesResponse, conversationsResponse] = await Promise.all([
-      api.getProfile(authToken),
-      api.getMatches(authToken),
-      api.getConversations(authToken),
-    ]);
+  const refreshAccessToken = useCallback(async (options = {}) => {
+    const response = await api.refreshSession();
+    applyAuthenticatedSession(response, options);
+    if (response.previewEmailVerificationToken) {
+      setEmailVerificationPreviewToken(response.previewEmailVerificationToken);
+    }
+    return response.token;
+  }, [applyAuthenticatedSession]);
+
+  const withFreshToken = useCallback(async (callback, options = {}) => {
+    const currentToken = token || await refreshAccessToken(options.refreshView ? { view: options.refreshView } : {});
+
+    try {
+      return await callback(currentToken);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 401) {
+        throw error;
+      }
+
+      const refreshedToken = await refreshAccessToken(options.refreshView ? { view: options.refreshView } : {});
+      return callback(refreshedToken);
+    }
+  }, [refreshAccessToken, token]);
+
+  const syncAccountData = useCallback(async () => {
+    const [profileResponse, matchesResponse, conversationsResponse] = await withFreshToken((nextToken) => Promise.all([
+      api.getProfile(nextToken),
+      api.getMatches(nextToken),
+      api.getConversations(nextToken),
+    ]), { refreshView: view });
 
     applyProfileState(profileResponse.profile);
     setMatches(matchesResponse.matches);
@@ -228,17 +256,17 @@ function App() {
         ? current
         : conversationsResponse.conversations[0]?.id ?? null
     ));
-  }, [applyProfileState]);
+  }, [applyProfileState, view, withFreshToken]);
 
-  const loadDiscovery = useCallback(async (authToken) => {
+  const loadDiscovery = useCallback(async () => {
     setDiscoveryLoading(true);
 
     try {
-      const response = await api.getDiscovery(authToken, {
+      const response = await withFreshToken((nextToken) => api.getDiscovery(nextToken, {
         activeMode,
         query: searchQuery,
         city: cityQuery,
-      });
+      }), { refreshView: 'discover' });
       setProfiles(response.profiles);
       setPageError('');
     } catch (error) {
@@ -250,23 +278,23 @@ function App() {
     } finally {
       setDiscoveryLoading(false);
     }
-  }, [activeMode, cityQuery, handleApiError, handleUnauthorized, searchQuery]);
+  }, [activeMode, cityQuery, handleApiError, handleUnauthorized, searchQuery, withFreshToken]);
 
-  const loadDashboard = useCallback(async (authToken) => {
+  const loadDashboard = useCallback(async () => {
     setDashboardLoading(true);
 
     try {
-      const [sessionData, profileData, matchesData, conversationsData, discoveryData] = await Promise.all([
-        api.getSession(authToken),
-        api.getProfile(authToken),
-        api.getMatches(authToken),
-        api.getConversations(authToken),
-        api.getDiscovery(authToken, {
+      const [sessionData, profileData, matchesData, conversationsData, discoveryData] = await withFreshToken((nextToken) => Promise.all([
+        api.getSession(nextToken),
+        api.getProfile(nextToken),
+        api.getMatches(nextToken),
+        api.getConversations(nextToken),
+        api.getDiscovery(nextToken, {
           activeMode,
           query: searchQuery,
           city: cityQuery,
         }),
-      ]);
+      ]), { refreshView: view });
 
       setCurrentUser(sessionData.user);
       applyProfileState(profileData.profile);
@@ -289,21 +317,50 @@ function App() {
       setDashboardLoading(false);
       setSessionLoading(false);
     }
-  }, [activeMode, applyProfileState, cityQuery, handleApiError, handleUnauthorized, searchQuery]);
+  }, [activeMode, applyProfileState, cityQuery, handleApiError, handleUnauthorized, searchQuery, view, withFreshToken]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      try {
+        await refreshAccessToken();
+      } catch {
+        if (!cancelled) {
+          setToken('');
+          setCurrentUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setSessionBootstrapped(true);
+        }
+      }
+    };
+
+    restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshAccessToken]);
+
+  useEffect(() => {
+    if (!sessionBootstrapped) {
+      return;
+    }
+
     if (!token) {
       setSessionLoading(false);
       setCurrentUser(null);
       return;
     }
 
-    loadDashboard(token);
-  }, [loadDashboard, token]);
+    loadDashboard();
+  }, [loadDashboard, sessionBootstrapped, token]);
 
   useEffect(() => {
     if (currentUser && token) {
-      loadDiscovery(token);
+      loadDiscovery();
     }
   }, [activeMode, cityQuery, currentUser, loadDiscovery, searchQuery, token]);
 
@@ -364,25 +421,119 @@ function App() {
         ? await api.register(authForm)
         : await api.login({ email: authForm.email, password: authForm.password });
 
-      setToken(response.token);
-      setCurrentUser(response.user);
-      setView('profile');
+      applyAuthenticatedSession(response, { view: 'profile' });
+      setSessionBootstrapped(true);
       setAuthForm({
         name: '',
         email: '',
         password: '',
         mode: 'amoureux',
       });
+      setPasswordResetPreviewToken('');
+      if (response.previewEmailVerificationToken) {
+        setEmailVerificationPreviewToken(response.previewEmailVerificationToken);
+        setEmailVerificationToken(response.previewEmailVerificationToken);
+      }
       showToast({
         type: 'success',
         title: authMode === 'register' ? 'Compte créé' : 'Connexion réussie',
-        message: 'Votre session Lifys backend est maintenant active.',
+        message: authMode === 'register'
+          ? 'Votre session Lifys backend est active. Vérifiez maintenant votre e-mail dans le flux local.'
+          : 'Votre session Lifys backend est maintenant active.',
       });
-      setPageError('');
     } catch (error) {
       handleApiError(error, 'Impossible de démarrer votre session.');
     } finally {
       setAuthSubmitting(false);
+    }
+  };
+
+  const handleRequestEmailVerification = async () => {
+    setEmailVerificationSubmitting(true);
+
+    try {
+      const response = await withFreshToken((authToken) => api.requestEmailVerification(authToken));
+      if (response.previewToken) {
+        setEmailVerificationPreviewToken(response.previewToken);
+        setEmailVerificationToken(response.previewToken);
+      }
+      showToast({
+        type: 'info',
+        title: 'Vérification préparée',
+        message: response.message,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
+      handleApiError(error, 'Impossible de préparer la vérification e-mail.');
+    } finally {
+      setEmailVerificationSubmitting(false);
+    }
+  };
+
+  const handleConfirmEmailVerification = async (event) => {
+    event.preventDefault();
+    setEmailVerificationSubmitting(true);
+
+    try {
+      const response = await api.confirmEmailVerification(emailVerificationToken);
+      setCurrentUser(response.user);
+      setEmailVerificationPreviewToken('');
+      showToast({
+        type: 'success',
+        title: 'E-mail vérifié',
+        message: 'Votre adresse e-mail est maintenant confirmée pour ce MVP local.',
+      });
+    } catch (error) {
+      handleApiError(error, 'Impossible de confirmer cet e-mail.');
+    } finally {
+      setEmailVerificationSubmitting(false);
+    }
+  };
+
+  const handleRequestPasswordReset = async (event) => {
+    event.preventDefault();
+    setPasswordResetSubmitting(true);
+
+    try {
+      const response = await api.requestPasswordReset(passwordResetRequestEmail);
+      setPasswordResetPreviewToken(response.previewToken ?? '');
+      if (response.previewToken) {
+        setPasswordResetForm((current) => ({ ...current, token: response.previewToken }));
+      }
+      showToast({
+        type: 'info',
+        title: 'Réinitialisation préparée',
+        message: response.message,
+      });
+    } catch (error) {
+      handleApiError(error, 'Impossible de préparer la réinitialisation du mot de passe.');
+    } finally {
+      setPasswordResetSubmitting(false);
+    }
+  };
+
+  const handleConfirmPasswordReset = async (event) => {
+    event.preventDefault();
+    setPasswordResetSubmitting(true);
+
+    try {
+      const response = await api.confirmPasswordReset(passwordResetForm.token, passwordResetForm.password);
+      applyAuthenticatedSession(response, { view: 'profile' });
+      setSessionBootstrapped(true);
+      setPasswordResetForm({ token: '', password: '' });
+      setPasswordResetPreviewToken('');
+      showToast({
+        type: 'success',
+        title: 'Mot de passe réinitialisé',
+        message: 'Un nouveau refresh cookie et un nouvel access token ont été émis.',
+      });
+    } catch (error) {
+      handleApiError(error, 'Impossible de réinitialiser ce mot de passe.');
+    } finally {
+      setPasswordResetSubmitting(false);
     }
   };
 
@@ -403,7 +554,7 @@ function App() {
     setProfileSaving(true);
 
     try {
-      const response = await api.updateProfile(token, profileDraft);
+      const response = await withFreshToken((nextToken) => api.updateProfile(nextToken, profileDraft), { refreshView: 'profile' });
       applyProfileState(response.profile);
       setProfileErrors({});
       setView('discover');
@@ -414,8 +565,8 @@ function App() {
         message: 'Votre profil est maintenant enregistré côté serveur.',
       });
       await Promise.all([
-        syncAccountData(token),
-        loadDiscovery(token),
+        syncAccountData(),
+        loadDiscovery(),
       ]);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -430,10 +581,10 @@ function App() {
 
   const handleLike = async (profileId) => {
     try {
-      const response = await api.likeProfile(token, profileId);
+      const response = await withFreshToken((nextToken) => api.likeProfile(nextToken, profileId), { refreshView: 'discover' });
       await Promise.all([
-        syncAccountData(token),
-        loadDiscovery(token),
+        syncAccountData(),
+        loadDiscovery(),
       ]);
 
       if (response.matched) {
@@ -461,10 +612,10 @@ function App() {
 
   const handlePass = async (profileId) => {
     try {
-      await api.passProfile(token, profileId);
+      await withFreshToken((nextToken) => api.passProfile(nextToken, profileId), { refreshView: 'discover' });
       await Promise.all([
-        syncAccountData(token),
-        loadDiscovery(token),
+        syncAccountData(),
+        loadDiscovery(),
       ]);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -484,7 +635,10 @@ function App() {
     setMessageSending(true);
 
     try {
-      const response = await api.sendMessage(token, selectedConversationData.id, text);
+      const response = await withFreshToken(
+        (nextToken) => api.sendMessage(nextToken, selectedConversationData.id, text),
+        { refreshView: 'messages' },
+      );
       const persistedLastMessage = response.conversation.messages.at(-1)?.text ?? text.trim();
       setConversations((current) => {
         const existingConversation = current.some(
@@ -521,7 +675,7 @@ function App() {
     setResetting(true);
 
     try {
-      const response = await api.resetPrototype(token);
+      const response = await withFreshToken((nextToken) => api.resetPrototype(nextToken), { refreshView: view });
       const nextSelectedConversation = response.conversations[0]?.id ?? null;
       const nextView = view === 'messages' && !nextSelectedConversation ? 'matches' : view;
       applyProfileState(response.profile);
@@ -534,19 +688,10 @@ function App() {
       setActiveMode('all');
       setDraftMessage('');
       resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS);
-      const restoredAuth = safeWriteJSON(STORAGE_KEYS.auth, { token });
       const restoredSessionUi = safeWriteJSON(STORAGE_KEYS.sessionUi, {
         view: nextView,
         selectedConversation: nextSelectedConversation,
       });
-      if (!restoredAuth) {
-        setPageError('Le prototype a été réinitialisé, mais le navigateur a refusé de restaurer la session locale. Un rechargement vous déconnectera.');
-        showToast({
-          type: 'warning',
-          title: 'Session non persistée',
-          message: 'Le prototype a été réinitialisé, mais le navigateur a refusé de restaurer le jeton local.',
-        });
-      }
       if (!restoredSessionUi) {
         showToast({
           type: 'warning',
@@ -554,7 +699,7 @@ function App() {
           message: 'Le prototype a été réinitialisé, mais la vue et la conversation actives n’ont pas pu être restaurées localement.',
         });
       }
-      await loadDiscovery(token);
+      await loadDiscovery();
       showToast({
         type: 'success',
         title: 'Données de démonstration réinitialisées',
@@ -571,12 +716,18 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch {
+      // ignore logout transport failures, local reset still wins
+    }
+
     resetSessionState({
       toast: {
         type: 'info',
         title: 'Session fermée',
-        message: 'Votre jeton local a été supprimé du navigateur.',
+        message: 'Le refresh cookie sécurisé et la session locale ont été supprimés.',
       },
     });
   };
@@ -628,8 +779,8 @@ function App() {
                 </article>
                 <article className="metric-card">
                   <span>Session</span>
-                  <strong>JWT</strong>
-                  <small>restaurée après reload</small>
+                  <strong>httpOnly</strong>
+                  <small>refresh cookie + access token</small>
                 </article>
               </div>
             </div>
@@ -638,7 +789,7 @@ function App() {
               <SectionHeader
                 eyebrow={authMode === 'register' ? 'Créer un compte' : 'Connexion'}
                 title={authMode === 'register' ? 'Commencer sur Lifys' : 'Reprendre votre session'}
-                description="Les comptes utilisateur sont réels dans votre instance locale. Les profils de découverte restent des profils fictifs de démonstration."
+                description="Les comptes utilisateur sont réels dans votre instance locale. Le refresh token est stocké en cookie httpOnly ; les profils de découverte restent fictifs."
               />
 
               {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
@@ -675,6 +826,58 @@ function App() {
                   </button>
                 </div>
               </form>
+
+              <div className="profile-layout">
+                <form className="profile-form" onSubmit={handleRequestPasswordReset}>
+                  <SectionHeader
+                    eyebrow="Mot de passe"
+                    title="Préparer une réinitialisation"
+                    description="Flux local de démonstration : un token de reset est généré côté backend sans envoi e-mail réel."
+                  />
+                  <label>
+                    <span>E-mail du compte</span>
+                    <input
+                      type="email"
+                      value={passwordResetRequestEmail}
+                      onChange={(event) => setPasswordResetRequestEmail(event.target.value)}
+                    />
+                  </label>
+                  {passwordResetPreviewToken ? <small className="section-description">Token local : {passwordResetPreviewToken}</small> : null}
+                  <div className="form-actions">
+                    <button type="submit" className="secondary-button" disabled={passwordResetSubmitting}>
+                      {passwordResetSubmitting ? 'Préparation…' : 'Préparer le reset'}
+                    </button>
+                  </div>
+                </form>
+
+                <form className="profile-form" onSubmit={handleConfirmPasswordReset}>
+                  <SectionHeader
+                    eyebrow="Réinitialisation"
+                    title="Appliquer un nouveau mot de passe"
+                    description="Collez le token de démo, définissez un nouveau mot de passe, puis une nouvelle session sera ouverte."
+                  />
+                  <label>
+                    <span>Token de reset</span>
+                    <input
+                      value={passwordResetForm.token}
+                      onChange={(event) => setPasswordResetForm((current) => ({ ...current, token: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Nouveau mot de passe</span>
+                    <input
+                      type="password"
+                      value={passwordResetForm.password}
+                      onChange={(event) => setPasswordResetForm((current) => ({ ...current, password: event.target.value }))}
+                    />
+                  </label>
+                  <div className="form-actions">
+                    <button type="submit" className="secondary-button" disabled={passwordResetSubmitting}>
+                      {passwordResetSubmitting ? 'Réinitialisation…' : 'Valider le reset'}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </section>
         </main>
@@ -733,8 +936,37 @@ function App() {
         <section className="local-notice" aria-label="Avertissement MVP">
           <strong>MVP backend local</strong>
           <span>Les comptes utilisateur, profils, matchs et messages sont persistés dans SQLite sur votre instance locale.</span>
-          <span>Les profils de découverte restent fictifs et aucune identité réelle n’est encore vérifiée.</span>
+          <span>Le refresh token est protégé par cookie httpOnly ; les profils de découverte restent fictifs et aucune identité réelle n’est encore vérifiée.</span>
         </section>
+
+        {!currentUser.emailVerified ? (
+          <section className="content-panel">
+            <SectionHeader
+              eyebrow="Vérification e-mail"
+              title="Adresse non vérifiée"
+              description="Le backend peut maintenant générer un token de vérification local. Aucun envoi d’e-mail réel n’est encore branché."
+            />
+            <div className="profile-layout">
+              <div className="form-actions">
+                <button type="button" className="secondary-button" onClick={handleRequestEmailVerification} disabled={emailVerificationSubmitting}>
+                  {emailVerificationSubmitting ? 'Préparation…' : 'Préparer un token de vérification'}
+                </button>
+              </div>
+              <form className="profile-form" onSubmit={handleConfirmEmailVerification}>
+                <label>
+                  <span>Token de vérification</span>
+                  <input value={emailVerificationToken} onChange={(event) => setEmailVerificationToken(event.target.value)} />
+                </label>
+                {emailVerificationPreviewToken ? <small className="section-description">Token local : {emailVerificationPreviewToken}</small> : null}
+                <div className="form-actions">
+                  <button type="submit" className="primary-button" disabled={emailVerificationSubmitting || !emailVerificationToken.trim()}>
+                    {emailVerificationSubmitting ? 'Validation…' : 'Confirmer mon e-mail'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </section>
+        ) : null}
 
         {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
 

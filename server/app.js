@@ -4,57 +4,12 @@ import path from 'node:path';
 import express from 'express';
 import { rateLimit } from 'express-rate-limit';
 
-import {
-  comparePassword,
-  createToken,
-  hashPassword,
-  normalizeEmail,
-  validateEmail,
-  validatePassword,
-  verifyToken,
-} from './auth.js';
+import { verifyToken } from './auth.js';
+import { createAuthController } from './controllers/auth-controller.js';
 import { createDatabase, sanitizeProfileInput } from './db.js';
-
-function createHttpError(status, message, code = 'REQUEST_ERROR') {
-  const error = new Error(message);
-  error.status = status;
-  error.code = code;
-  return error;
-}
-
-function normalizeBody(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {};
-  }
-
-  return value;
-}
-
-function readRequiredString(body, field, { maxLength = 200 } = {}) {
-  const value = `${body[field] ?? ''}`.trim();
-  if (!value) {
-    throw createHttpError(400, `${field} est requis.`, 'VALIDATION_ERROR');
-  }
-
-  if (value.length > maxLength) {
-    throw createHttpError(400, `${field} dépasse la longueur maximale autorisée.`, 'VALIDATION_ERROR');
-  }
-
-  return value;
-}
-
-function readOptionalString(body, field, { maxLength = 2000 } = {}) {
-  const value = `${body[field] ?? ''}`.trim();
-  if (!value) {
-    return '';
-  }
-
-  if (value.length > maxLength) {
-    throw createHttpError(400, `${field} dépasse la longueur maximale autorisée.`, 'VALIDATION_ERROR');
-  }
-
-  return value;
-}
+import { createHttpError } from './http.js';
+import { createAuthService } from './services/auth-service.js';
+import { normalizeBody, readRequiredString } from './validation.js';
 
 function getRequestIp(req) {
   return req.ip || req.socket.remoteAddress || 'local';
@@ -83,18 +38,10 @@ function parseCorsOrigins(corsOrigin) {
     .filter(Boolean);
 }
 
-function sendSession(res, token, profile) {
-  res.json({
-    token,
-    user: {
-      email: profile.email,
-      profile,
-    },
-  });
-}
-
 export function createApp(config) {
   const database = createDatabase(config.databaseFile);
+  const authService = createAuthService({ database, config });
+  const authController = createAuthController({ authService, config });
   const app = express();
   const allowedOrigins = parseCorsOrigins(config.corsOrigin);
   const authRateLimiter = createApiRateLimiter({
@@ -139,6 +86,7 @@ export function createApp(config) {
       res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
       if (!allowAll) {
         res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
       }
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
@@ -197,63 +145,16 @@ export function createApp(config) {
     res.json({ ok: true });
   });
 
-  app.post('/api/auth/register', authRateLimiter, (req, res, next) => {
-    try {
-      const body = normalizeBody(req.body);
-      const email = normalizeEmail(body.email);
-      const password = readRequiredString(body, 'password', { maxLength: 200 });
-      const initialProfile = sanitizeProfileInput({
-        name: body.name || email.split('@')[0] || 'Profil Lifys',
-        mode: body.mode,
-      });
+  app.post('/api/auth/register', authRateLimiter, authController.register);
 
-      if (!validateEmail(email)) {
-        throw createHttpError(400, 'Adresse e-mail invalide.', 'INVALID_EMAIL');
-      }
-
-      if (!validatePassword(password)) {
-        throw createHttpError(400, 'Le mot de passe doit contenir au moins 8 caractères.', 'INVALID_PASSWORD');
-      }
-
-      if (database.getUserByEmail(email)) {
-        throw createHttpError(409, 'Un compte existe déjà avec cet e-mail.', 'EMAIL_ALREADY_EXISTS');
-      }
-
-      const created = database.createUser({
-        email,
-        passwordHash: hashPassword(password),
-        name: initialProfile.name || 'Profil Lifys',
-        mode: initialProfile.mode,
-      });
-      const token = createToken({ userId: created.userId, email }, config);
-      res.status(201);
-      sendSession(res, token, created.profile);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post('/api/auth/login', authRateLimiter, (req, res, next) => {
-    try {
-      const body = normalizeBody(req.body);
-      const email = normalizeEmail(body.email);
-      const password = readOptionalString(body, 'password', { maxLength: 200 });
-      const user = database.getUserByEmail(email);
-
-      if (typeof password !== 'string' || !password || !user || !comparePassword(password, user.password_hash)) {
-        throw createHttpError(401, 'Identifiants invalides.', 'INVALID_CREDENTIALS');
-      }
-
-      const token = createToken({ userId: user.id, email }, config);
-      sendSession(res, token, database.getProfileByUserId(user.id));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get('/api/auth/session', requireAuth, (req, res) => {
-    sendSession(res, req.auth.token, database.getProfileByUserId(req.auth.userId));
-  });
+  app.post('/api/auth/login', authRateLimiter, authController.login);
+  app.post('/api/auth/refresh', authRateLimiter, authController.requireRefreshCookie, authController.refresh);
+  app.post('/api/auth/logout', authController.logout);
+  app.get('/api/auth/session', requireAuth, authController.session);
+  app.post('/api/auth/verify-email/request', requireAuth, writeRateLimiter, authController.requestEmailVerification);
+  app.post('/api/auth/verify-email/confirm', authRateLimiter, authController.verifyEmail);
+  app.post('/api/auth/password-reset/request', authRateLimiter, authController.requestPasswordReset);
+  app.post('/api/auth/password-reset/confirm', authRateLimiter, authController.resetPassword);
 
   app.get('/api/bootstrap', requireAuth, (req, res) => {
     res.json({

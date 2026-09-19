@@ -23,9 +23,11 @@ Le MVP propose :
 - des matchs persistés avec accès direct à la messagerie ;
 - des conversations persistées avec envoi par `Enter` ;
 - des notifications non bloquantes ;
-- une récupération sûre du `localStorage` si des données JSON sont corrompues ;
+- une récupération sûre du `localStorage` si des données JSON d’interface sont corrompues ;
 - une réinitialisation complète du prototype local ;
-- une restauration de session plus robuste après reload avec vue et conversation réouvertes si encore valides ;
+- une restauration de session via refresh token en cookie httpOnly après reload ;
+- une vérification e-mail locale par token de démonstration ;
+- une réinitialisation locale de mot de passe par token de démonstration ;
 - un rate limiting minimal sur auth et écritures sensibles côté Express.
 
 ## Installation
@@ -38,6 +40,12 @@ cp .env.example .env
 Variables utiles pour le backend local :
 
 - `JWT_SECRET` : secret JWT à remplacer hors démo ;
+- `JWT_EXPIRES_IN` : durée de vie du token d’accès ;
+- `REFRESH_COOKIE_NAME` : nom du cookie httpOnly de refresh ;
+- `REFRESH_TOKEN_TTL_DAYS` : durée de vie du refresh token ;
+- `EMAIL_VERIFICATION_TOKEN_TTL_HOURS` : durée de vie du token de vérification locale ;
+- `PASSWORD_RESET_TOKEN_TTL_MINUTES` : durée de vie du token de reset local ;
+- `COOKIE_SECURE` : active le flag `Secure` du cookie refresh ;
 - `CORS_ORIGIN` : origine frontend autorisée si frontend et API sont servis séparément ;
 - `RATE_LIMIT_WINDOW_MS` : fenêtre du rate limiting Express ;
 - `AUTH_RATE_LIMIT_MAX` : plafond sur inscription / connexion ;
@@ -112,7 +120,7 @@ npm run dev -- --host
 
 ### Robustesse locale
 
-- lecture JSON sécurisée de `localStorage` avec fallback pour la session JWT ;
+- lecture JSON sécurisée de `localStorage` avec fallback pour l’état de navigation local ;
 - nettoyage des clés corrompues ;
 - réinitialisation complète des données du prototype ;
 - message explicite lorsque le navigateur refuse la persistance locale.
@@ -128,25 +136,31 @@ src/
   data/
     demoData.js           # catégories et profils fictifs
   lib/
-    api.js                # client API fetch centralisé
+    api.js                # client API fetch centralisé + credentials cookie
   utils/
     app-utils.js          # filtrage, matching, sanitization
     app-utils.test.js     # tests ciblés utilitaires/localStorage
     storage.js            # lecture/écriture/reset localStorage sûrs
   styles.css              # design system et responsive UI
 
-server/                   # API Express, auth JWT et persistance SQLite
+server/
+  controllers/           # contrôleurs Express (auth)
+  services/              # logique métier auth/session/tokens
+  validation.js          # validation de payload backend
+  http.js                # erreurs HTTP partagées
+  app.js                 # API Express
+  auth.js                # helpers JWT / mot de passe
+  db.js                  # persistance SQLite
 ```
 
 ## Limites du MVP full-stack local
 
-- pas de vérification e-mail ;
 - aucune vérification d’identité ;
 - aucun paiement ;
 - backend local mono-instance, pas encore prêt pour une prod publique ;
 - aucune synchronisation entre appareils ;
 - aucune messagerie temps réel ;
-- stockage JWT encore côté navigateur ;
+- aucun envoi d’e-mail réel : vérification/reset restent des flux locaux de démonstration ;
 - profils de découverte entièrement fictifs.
 
 ## Roadmap recommandée
@@ -159,9 +173,9 @@ server/                   # API Express, auth JWT et persistance SQLite
 
 ### Authentification
 
-- améliorer la gestion de session sécurisée ;
-- vérification e-mail ;
-- récupération de mot de passe.
+- remplacer les tokens de démonstration par un vrai fournisseur e-mail ;
+- ajouter rotation/monitoring de sessions plus avancés ;
+- renforcer encore la gestion multi-appareils et la révocation globale.
 
 ### Base de données
 
@@ -183,6 +197,7 @@ Ce dépôt reste un **prototype full-stack local**.
 Ne pas y saisir de données sensibles réelles. Avant toute mise en production future, prévoir au minimum :
 
 - authentification et sessions durcies ;
+- e-mails transactionnels réels pour vérification et reset ;
 - backend validé côté sécurité ;
 - stockage serveur adapté ;
 - protection contre l’injection, l’abus et le spam ;

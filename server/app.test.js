@@ -45,7 +45,13 @@ async function request(baseUrl, pathName, options = {}) {
   return {
     status: response.status,
     body: text ? JSON.parse(text) : null,
+    headers: response.headers,
   };
+}
+
+function getCookieHeader(response) {
+  const setCookie = response.headers.get('set-cookie');
+  return setCookie ? setCookie.split(';')[0] : '';
 }
 
 test('register, update profile, like demo profile and send message', async () => {
@@ -225,6 +231,140 @@ test('login with missing password returns 401 instead of leaking an internal err
 
     assert.equal(response.status, 401);
     assert.equal(response.body.error, 'Identifiants invalides.');
+  } finally {
+    await server.close();
+  }
+});
+
+test('refresh cookie restores session and logout revokes it', async () => {
+  const server = await startTestServer();
+
+  try {
+    const register = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'cookie@example.com',
+        password: 'supersecret',
+        name: 'Cookie User',
+      }),
+    });
+    const refreshCookie = getCookieHeader(register);
+
+    assert.ok(refreshCookie.includes('lifys_refresh_token='));
+    assert.equal(register.body.user.emailVerified, false);
+
+    const refreshed = await request(server.baseUrl, '/api/auth/refresh', {
+      method: 'POST',
+      headers: {
+        cookie: refreshCookie,
+      },
+    });
+    const rotatedCookie = getCookieHeader(refreshed);
+
+    assert.equal(refreshed.status, 200);
+    assert.ok(refreshed.body.token);
+    assert.notEqual(rotatedCookie, refreshCookie);
+
+    const logout = await fetch(`${server.baseUrl}/api/auth/logout`, {
+      method: 'POST',
+      headers: {
+        cookie: rotatedCookie,
+      },
+    });
+
+    assert.equal(logout.status, 204);
+
+    const refreshAfterLogout = await request(server.baseUrl, '/api/auth/refresh', {
+      method: 'POST',
+      headers: {
+        cookie: rotatedCookie,
+      },
+    });
+    assert.equal(refreshAfterLogout.status, 401);
+    assert.equal(refreshAfterLogout.body.code, 'REFRESH_TOKEN_INVALID');
+  } finally {
+    await server.close();
+  }
+});
+
+test('email verification request and confirm update the session user', async () => {
+  const server = await startTestServer();
+
+  try {
+    const register = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'verify@example.com',
+        password: 'supersecret',
+        name: 'Verify User',
+      }),
+    });
+    const auth = { authorization: 'Bearer ' + register.body.token };
+
+    assert.ok(register.body.previewEmailVerificationToken);
+
+    const requestVerification = await request(server.baseUrl, '/api/auth/verify-email/request', {
+      method: 'POST',
+      headers: auth,
+    });
+    assert.equal(requestVerification.status, 200);
+    assert.ok(requestVerification.body.previewToken);
+
+    const confirmVerification = await request(server.baseUrl, '/api/auth/verify-email/confirm', {
+      method: 'POST',
+      body: JSON.stringify({
+        token: requestVerification.body.previewToken,
+      }),
+    });
+    assert.equal(confirmVerification.status, 200);
+    assert.equal(confirmVerification.body.user.emailVerified, true);
+  } finally {
+    await server.close();
+  }
+});
+
+test('password reset request and confirm issue a new session', async () => {
+  const server = await startTestServer();
+
+  try {
+    await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'reset@example.com',
+        password: 'supersecret',
+        name: 'Reset User',
+      }),
+    });
+
+    const requestReset = await request(server.baseUrl, '/api/auth/password-reset/request', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'reset@example.com',
+      }),
+    });
+
+    assert.equal(requestReset.status, 200);
+    assert.ok(requestReset.body.previewToken);
+
+    const confirmReset = await request(server.baseUrl, '/api/auth/password-reset/confirm', {
+      method: 'POST',
+      body: JSON.stringify({
+        token: requestReset.body.previewToken,
+        password: 'newsupersecret',
+      }),
+    });
+
+    assert.equal(confirmReset.status, 200);
+    assert.ok(confirmReset.body.token);
+
+    const login = await request(server.baseUrl, '/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'reset@example.com',
+        password: 'newsupersecret',
+      }),
+    });
+    assert.equal(login.status, 200);
   } finally {
     await server.close();
   }
