@@ -13,6 +13,10 @@ function now() {
   return new Date().toISOString();
 }
 
+function isFutureTimestamp(value) {
+  return typeof value === 'string' && value > now();
+}
+
 function createPublicId(prefix) {
   return `${prefix}-${crypto.randomUUID().slice(0, 12)}`;
 }
@@ -60,6 +64,7 @@ function serializeProfile(row) {
     userId: row.user_id,
     userPublicId: row.user_public_id,
     email: row.email,
+    emailVerifiedAt: row.email_verified_at ?? null,
     name: row.name,
     age: row.age,
     city: row.city,
@@ -133,6 +138,7 @@ export function createDatabase(databaseFile) {
       public_id TEXT NOT NULL UNIQUE,
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
+      email_verified_at TEXT,
       is_demo INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
@@ -193,32 +199,65 @@ export function createDatabase(databaseFile) {
       content TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      revoked_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      used_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      used_at TEXT
+    );
   `);
+
+  const userColumns = db.prepare(`PRAGMA table_info(users)`).all();
+  if (!userColumns.some((column) => column.name === 'email_verified_at')) {
+    db.exec(`ALTER TABLE users ADD COLUMN email_verified_at TEXT`);
+  }
 
   const statements = {
     insertUser: db.prepare(`
-      INSERT INTO users (public_id, email, password_hash, is_demo, created_at)
-      VALUES (@public_id, @email, @password_hash, @is_demo, @created_at)
+      INSERT INTO users (public_id, email, password_hash, email_verified_at, is_demo, created_at)
+      VALUES (@public_id, @email, @password_hash, @email_verified_at, @is_demo, @created_at)
     `),
     insertProfile: db.prepare(`
       INSERT INTO profiles (user_id, public_id, name, age, city, bio, interests, mode, avatar, created_at, updated_at)
       VALUES (@user_id, @public_id, @name, @age, @city, @bio, @interests, @mode, @avatar, @created_at, @updated_at)
     `),
     findUserByEmail: db.prepare(`SELECT * FROM users WHERE email = ?`),
+    findUserById: db.prepare(`SELECT * FROM users WHERE id = ?`),
     findProfileByUserId: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.email_verified_at, users.is_demo
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.user_id = ?
     `),
     findProfileByPublicId: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.email_verified_at, users.is_demo
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.public_id = ?
     `),
     listProfilesExcludingUser: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.email_verified_at, users.is_demo
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.user_id != ?
@@ -252,6 +291,37 @@ export function createDatabase(databaseFile) {
       INSERT INTO messages (public_id, conversation_id, sender_user_id, content, created_at)
       VALUES (?, ?, ?, ?, ?)
     `),
+    insertRefreshToken: db.prepare(`
+      INSERT INTO refresh_tokens (user_id, token_hash, expires_at, created_at, revoked_at)
+      VALUES (?, ?, ?, ?, NULL)
+    `),
+    findRefreshToken: db.prepare(`SELECT * FROM refresh_tokens WHERE token_hash = ?`),
+    revokeRefreshToken: db.prepare(`UPDATE refresh_tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL`),
+    revokeRefreshTokensForUser: db.prepare(`UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`),
+    insertEmailVerificationToken: db.prepare(`
+      INSERT INTO email_verification_tokens (user_id, token_hash, expires_at, created_at, used_at)
+      VALUES (?, ?, ?, ?, NULL)
+    `),
+    findEmailVerificationToken: db.prepare(`SELECT * FROM email_verification_tokens WHERE token_hash = ?`),
+    consumeEmailVerificationToken: db.prepare(`UPDATE email_verification_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL`),
+    invalidateEmailVerificationTokensForUser: db.prepare(`
+      UPDATE email_verification_tokens
+      SET used_at = ?
+      WHERE user_id = ? AND used_at IS NULL
+    `),
+    insertPasswordResetToken: db.prepare(`
+      INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at, used_at)
+      VALUES (?, ?, ?, ?, NULL)
+    `),
+    findPasswordResetToken: db.prepare(`SELECT * FROM password_reset_tokens WHERE token_hash = ?`),
+    consumePasswordResetToken: db.prepare(`UPDATE password_reset_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL`),
+    invalidatePasswordResetTokensForUser: db.prepare(`
+      UPDATE password_reset_tokens
+      SET used_at = ?
+      WHERE user_id = ? AND used_at IS NULL
+    `),
+    markUserEmailVerified: db.prepare(`UPDATE users SET email_verified_at = ? WHERE id = ?`),
+    updateUserPasswordHash: db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`),
     listMatchesForUser: db.prepare(`
       SELECT
         matches.public_id AS match_public_id,
@@ -369,6 +439,7 @@ export function createDatabase(databaseFile) {
       public_id: createPublicId('user'),
       email: normalizeEmail(email),
       password_hash: passwordHash,
+      email_verified_at: null,
       is_demo: 0,
       created_at: createdAt,
     });
@@ -395,6 +466,10 @@ export function createDatabase(databaseFile) {
 
   function getUserByEmail(email) {
     return statements.findUserByEmail.get(normalizeEmail(email));
+  }
+
+  function getUserById(userId) {
+    return statements.findUserById.get(userId) ?? null;
   }
 
   function getProfileByUserId(userId) {
@@ -555,6 +630,72 @@ export function createDatabase(databaseFile) {
     return listConversationsForUser(userId).find((item) => item.id === conversationPublicId) ?? null;
   }
 
+  function createRefreshToken(userId, tokenHash, expiresAt) {
+    statements.insertRefreshToken.run(userId, tokenHash, expiresAt, now());
+  }
+
+  function getRefreshToken(tokenHash) {
+    const session = statements.findRefreshToken.get(tokenHash);
+    if (!session || session.revoked_at || !isFutureTimestamp(session.expires_at)) {
+      return null;
+    }
+
+    return session;
+  }
+
+  const rotateRefreshToken = db.transaction((currentTokenHash, nextTokenHash, nextExpiresAt) => {
+    const session = statements.findRefreshToken.get(currentTokenHash);
+    if (!session || session.revoked_at || !isFutureTimestamp(session.expires_at)) {
+      return null;
+    }
+
+    statements.revokeRefreshToken.run(now(), currentTokenHash);
+    statements.insertRefreshToken.run(session.user_id, nextTokenHash, nextExpiresAt, now());
+    return session.user_id;
+  });
+
+  function revokeRefreshToken(tokenHash) {
+    statements.revokeRefreshToken.run(now(), tokenHash);
+  }
+
+  function revokeRefreshTokensForUser(userId) {
+    statements.revokeRefreshTokensForUser.run(now(), userId);
+  }
+
+  function createEmailVerificationToken(userId, tokenHash, expiresAt) {
+    statements.invalidateEmailVerificationTokensForUser.run(now(), userId);
+    statements.insertEmailVerificationToken.run(userId, tokenHash, expiresAt, now());
+  }
+
+  const verifyEmailToken = db.transaction((tokenHash) => {
+    const record = statements.findEmailVerificationToken.get(tokenHash);
+    if (!record || record.used_at || !isFutureTimestamp(record.expires_at)) {
+      return null;
+    }
+
+    const verifiedAt = now();
+    statements.consumeEmailVerificationToken.run(verifiedAt, tokenHash);
+    statements.markUserEmailVerified.run(verifiedAt, record.user_id);
+    return getUserById(record.user_id);
+  });
+
+  function createPasswordResetToken(userId, tokenHash, expiresAt) {
+    statements.invalidatePasswordResetTokensForUser.run(now(), userId);
+    statements.insertPasswordResetToken.run(userId, tokenHash, expiresAt, now());
+  }
+
+  const resetPasswordWithToken = db.transaction((tokenHash, passwordHash) => {
+    const record = statements.findPasswordResetToken.get(tokenHash);
+    if (!record || record.used_at || !isFutureTimestamp(record.expires_at)) {
+      return null;
+    }
+
+    statements.consumePasswordResetToken.run(now(), tokenHash);
+    statements.updateUserPasswordHash.run(passwordHash, record.user_id);
+    statements.revokeRefreshTokensForUser.run(now(), record.user_id);
+    return getUserById(record.user_id);
+  });
+
   const resetUserData = db.transaction((userId) => {
     statements.deleteDemoMessagesForUser.run({ user_id: userId });
     statements.deleteDemoConversationsForUser.run({ user_id: userId });
@@ -578,6 +719,7 @@ export function createDatabase(databaseFile) {
     db,
     createUser,
     getUserByEmail,
+    getUserById,
     getProfileByUserId,
     getProfileByPublicId,
     updateUserProfile,
@@ -587,6 +729,15 @@ export function createDatabase(databaseFile) {
     listMatchesForUser,
     listConversationsForUser,
     addMessage,
+    createRefreshToken,
+    getRefreshToken,
+    rotateRefreshToken,
+    revokeRefreshToken,
+    revokeRefreshTokensForUser,
+    createEmailVerificationToken,
+    verifyEmailToken,
+    createPasswordResetToken,
+    resetPasswordWithToken,
     resetUserData,
   };
 }
@@ -605,6 +756,7 @@ function seedDemoData(db, statements) {
         public_id: `user-${demoProfile.id}`,
         email: `demo-${demoProfile.id}@lifys.local`,
         password_hash: 'demo-account',
+        email_verified_at: createdAt,
         is_demo: 1,
         created_at: createdAt,
       });
