@@ -15,6 +15,8 @@ const NAV_ITEMS = [
   { id: 'profile', label: 'Profil' },
 ];
 
+const NAV_VIEW_IDS = new Set(NAV_ITEMS.map((item) => item.id));
+
 const PROTOTYPE_STORAGE_KEYS = [
   STORAGE_KEYS.profile,
   STORAGE_KEYS.likes,
@@ -23,11 +25,21 @@ const PROTOTYPE_STORAGE_KEYS = [
   STORAGE_KEYS.passed,
 ];
 
-const initialAuth = safeReadJSON(STORAGE_KEYS.auth, { token: '' }, {
+const initialAuthState = safeReadJSON(STORAGE_KEYS.auth, { token: '' }, {
   sanitize: (value) => ({
     token: typeof value?.token === 'string' ? value.token : '',
   }),
-}).data;
+});
+
+const initialSessionUiState = safeReadJSON(STORAGE_KEYS.sessionUi, { view: 'home', selectedConversation: null }, {
+  sanitize: (value) => ({
+    view: NAV_VIEW_IDS.has(value?.view) ? value.view : 'home',
+    selectedConversation: typeof value?.selectedConversation === 'string' ? value.selectedConversation : null,
+  }),
+});
+
+const initialAuth = initialAuthState.data;
+const initialSessionUi = initialSessionUiState.data;
 
 function EmptyState({ title, description, actionLabel, onAction }) {
   return (
@@ -55,7 +67,7 @@ function SectionHeader({ eyebrow, title, description, aside }) {
 function App() {
   const [token, setToken] = useState(initialAuth.token);
   const [currentUser, setCurrentUser] = useState(null);
-  const [view, setView] = useState('home');
+  const [view, setView] = useState(initialSessionUi.view);
   const [activeMode, setActiveMode] = useState('all');
   const [profile, setProfile] = useState(defaultProfile);
   const [profileDraft, setProfileDraft] = useState(defaultProfile);
@@ -63,7 +75,7 @@ function App() {
   const [profiles, setProfiles] = useState([]);
   const [matches, setMatches] = useState([]);
   const [conversations, setConversations] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [selectedConversation, setSelectedConversation] = useState(initialSessionUi.selectedConversation);
   const [draftMessage, setDraftMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [cityQuery, setCityQuery] = useState('');
@@ -96,6 +108,55 @@ function App() {
     });
   }, [showToast]);
 
+  const resetSessionState = useCallback((options = {}) => {
+    setToken('');
+    setCurrentUser(null);
+    setView('home');
+    setProfile(defaultProfile);
+    setProfileDraft(defaultProfile);
+    setProfileErrors({});
+    setProfiles([]);
+    setMatches([]);
+    setConversations([]);
+    setSelectedConversation(null);
+    setDraftMessage('');
+    setSearchQuery('');
+    setCityQuery('');
+    setActiveMode('all');
+    setIsMobileNavOpen(false);
+    resetPrototypeStorage([STORAGE_KEYS.auth, STORAGE_KEYS.sessionUi]);
+
+    if (options.pageError !== undefined) {
+      setPageError(options.pageError);
+    } else {
+      setPageError('');
+    }
+
+    if (options.toast) {
+      showToast(options.toast);
+    }
+  }, [showToast]);
+
+  const handleUnauthorized = useCallback((error) => {
+    const message = error instanceof ApiError ? error.message : 'Votre session n’est plus valide. Reconnectez-vous.';
+    resetSessionState({
+      pageError: message,
+      toast: {
+        type: 'warning',
+        title: 'Session expirée',
+        message,
+      },
+    });
+  }, [resetSessionState]);
+
+  const applyProfileState = useCallback((nextProfile) => {
+    setProfile(nextProfile);
+    setProfileDraft({
+      ...nextProfile,
+      interests: serializeInterests(nextProfile.interests),
+    });
+  }, []);
+
   useEffect(() => {
     if (token) {
       if (!safeWriteJSON(STORAGE_KEYS.auth, { token })) {
@@ -110,6 +171,47 @@ function App() {
     }
   }, [showToast, token]);
 
+  useEffect(() => {
+    if (!token) {
+      resetPrototypeStorage([STORAGE_KEYS.sessionUi]);
+      return;
+    }
+
+    safeWriteJSON(STORAGE_KEYS.sessionUi, {
+      view,
+      selectedConversation,
+    });
+  }, [selectedConversation, token, view]);
+
+  useEffect(() => {
+    if (!initialAuthState.recovered && !initialSessionUiState.recovered) {
+      return;
+    }
+
+    showToast({
+      type: 'warning',
+      title: 'Session locale réparée',
+      message: 'Des données locales corrompues ont été ignorées pour restaurer une session saine.',
+    });
+  }, [showToast]);
+
+  const syncAccountData = useCallback(async (authToken) => {
+    const [profileResponse, matchesResponse, conversationsResponse] = await Promise.all([
+      api.getProfile(authToken),
+      api.getMatches(authToken),
+      api.getConversations(authToken),
+    ]);
+
+    applyProfileState(profileResponse.profile);
+    setMatches(matchesResponse.matches);
+    setConversations(conversationsResponse.conversations);
+    setSelectedConversation((current) => (
+      conversationsResponse.conversations.some((conversation) => conversation.id === current)
+        ? current
+        : conversationsResponse.conversations[0]?.id ?? null
+    ));
+  }, [applyProfileState]);
+
   const loadDiscovery = useCallback(async (authToken) => {
     setDiscoveryLoading(true);
 
@@ -122,19 +224,25 @@ function App() {
       setProfiles(response.profiles);
       setPageError('');
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
       handleApiError(error, 'Impossible de charger la découverte.');
     } finally {
       setDiscoveryLoading(false);
     }
-  }, [activeMode, cityQuery, handleApiError, searchQuery]);
+  }, [activeMode, cityQuery, handleApiError, handleUnauthorized, searchQuery]);
 
   const loadDashboard = useCallback(async (authToken) => {
     setDashboardLoading(true);
 
     try {
-      const [sessionData, bootstrapData, discoveryData] = await Promise.all([
+      const [sessionData, profileData, matchesData, conversationsData, discoveryData] = await Promise.all([
         api.getSession(authToken),
-        api.getBootstrap(authToken),
+        api.getProfile(authToken),
+        api.getMatches(authToken),
+        api.getConversations(authToken),
         api.getDiscovery(authToken, {
           activeMode,
           query: searchQuery,
@@ -143,31 +251,27 @@ function App() {
       ]);
 
       setCurrentUser(sessionData.user);
-      setProfile(bootstrapData.profile);
-      setProfileDraft({
-        ...bootstrapData.profile,
-        interests: serializeInterests(bootstrapData.profile.interests),
-      });
-      setMatches(bootstrapData.matches);
-      setConversations(bootstrapData.conversations);
+      applyProfileState(profileData.profile);
+      setMatches(matchesData.matches);
+      setConversations(conversationsData.conversations);
       setProfiles(discoveryData.profiles);
       setSelectedConversation((current) => (
-        bootstrapData.conversations.some((conversation) => conversation.id === current)
+        conversationsData.conversations.some((conversation) => conversation.id === current)
           ? current
-          : bootstrapData.conversations[0]?.id ?? null
+          : conversationsData.conversations[0]?.id ?? null
       ));
       setPageError('');
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
-        setToken('');
-        setCurrentUser(null);
+        handleUnauthorized(error);
+        return;
       }
       handleApiError(error, 'Impossible de charger votre espace Lifys.');
     } finally {
       setDashboardLoading(false);
       setSessionLoading(false);
     }
-  }, [activeMode, cityQuery, handleApiError, searchQuery]);
+  }, [activeMode, applyProfileState, cityQuery, handleApiError, handleUnauthorized, searchQuery]);
 
   useEffect(() => {
     if (!token) {
@@ -282,11 +386,7 @@ function App() {
 
     try {
       const response = await api.updateProfile(token, profileDraft);
-      setProfile(response.profile);
-      setProfileDraft({
-        ...response.profile,
-        interests: serializeInterests(response.profile.interests),
-      });
+      applyProfileState(response.profile);
       setProfileErrors({});
       setView('discover');
       setPageError('');
@@ -295,8 +395,15 @@ function App() {
         title: 'Profil synchronisé',
         message: 'Votre profil est maintenant enregistré côté serveur.',
       });
-      await loadDiscovery(token);
+      await Promise.all([
+        syncAccountData(token),
+        loadDiscovery(token),
+      ]);
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
       handleApiError(error, 'Impossible de sauvegarder le profil.');
     } finally {
       setProfileSaving(false);
@@ -306,7 +413,10 @@ function App() {
   const handleLike = async (profileId) => {
     try {
       const response = await api.likeProfile(token, profileId);
-      await loadDashboard(token);
+      await Promise.all([
+        syncAccountData(token),
+        loadDiscovery(token),
+      ]);
 
       if (response.matched) {
         setSelectedConversation(response.conversationId);
@@ -323,6 +433,10 @@ function App() {
         });
       }
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
       handleApiError(error, 'Impossible d’enregistrer ce like.');
     }
   };
@@ -330,8 +444,15 @@ function App() {
   const handlePass = async (profileId) => {
     try {
       await api.passProfile(token, profileId);
-      await loadDiscovery(token);
+      await Promise.all([
+        syncAccountData(token),
+        loadDiscovery(token),
+      ]);
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
       handleApiError(error, 'Impossible d’enregistrer ce pass.');
     }
   };
@@ -368,6 +489,10 @@ function App() {
       setDraftMessage('');
       setPageError('');
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
       handleApiError(error, 'Impossible d’envoyer le message.');
     } finally {
       setMessageSending(false);
@@ -379,11 +504,7 @@ function App() {
 
     try {
       const response = await api.resetPrototype(token);
-      setProfile(response.profile);
-      setProfileDraft({
-        ...response.profile,
-        interests: serializeInterests(response.profile.interests),
-      });
+      applyProfileState(response.profile);
       setMatches(response.matches);
       setConversations(response.conversations);
       setSelectedConversation(response.conversations[0]?.id ?? null);
@@ -408,6 +529,10 @@ function App() {
         message: 'Vos interactions serveur ont été nettoyées et votre profil a été réinitialisé.',
       });
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
       handleApiError(error, 'Impossible de réinitialiser le prototype.');
     } finally {
       setResetting(false);
@@ -415,20 +540,12 @@ function App() {
   };
 
   const handleLogout = () => {
-    setToken('');
-    setCurrentUser(null);
-    setProfile(defaultProfile);
-    setProfileDraft(defaultProfile);
-    setProfiles([]);
-    setMatches([]);
-    setConversations([]);
-    setSelectedConversation(null);
-    setDraftMessage('');
-    setPageError('');
-    showToast({
-      type: 'info',
-      title: 'Session fermée',
-      message: 'Votre jeton local a été supprimé du navigateur.',
+    resetSessionState({
+      toast: {
+        type: 'info',
+        title: 'Session fermée',
+        message: 'Votre jeton local a été supprimé du navigateur.',
+      },
     });
   };
 

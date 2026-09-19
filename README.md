@@ -24,7 +24,9 @@ Le MVP propose :
 - des conversations persistées avec envoi par `Enter` ;
 - des notifications non bloquantes ;
 - une récupération sûre du `localStorage` si des données JSON sont corrompues ;
-- une réinitialisation complète du prototype local.
+- une réinitialisation complète du prototype local ;
+- une restauration de session plus robuste après reload avec vue et conversation réouvertes si encore valides ;
+- un rate limiting minimal sur auth et écritures sensibles côté Express.
 
 ## Installation
 
@@ -32,6 +34,14 @@ Le MVP propose :
 npm install
 cp .env.example .env
 ```
+
+Variables utiles pour le backend local :
+
+- `JWT_SECRET` : secret JWT à remplacer hors démo ;
+- `CORS_ORIGIN` : origine frontend autorisée si frontend et API sont servis séparément ;
+- `RATE_LIMIT_WINDOW_MS` : fenêtre du rate limiting Express ;
+- `AUTH_RATE_LIMIT_MAX` : plafond sur inscription / connexion ;
+- `WRITE_RATE_LIMIT_MAX` : plafond sur profil / likes / pass / messages / reset.
 
 ## Scripts
 

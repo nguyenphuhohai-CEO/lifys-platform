@@ -8,7 +8,7 @@ import { createServer } from 'node:http';
 import { createApp } from './app.js';
 import { getConfig } from './config.js';
 
-async function startTestServer() {
+async function startTestServer(overrides = {}) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lifys-server-'));
   const config = getConfig({
     NODE_ENV: 'test',
@@ -16,6 +16,7 @@ async function startTestServer() {
     DATABASE_FILE: path.join(tempDir, 'lifys.sqlite'),
     JWT_SECRET: 'test-secret',
     STATIC_DIR: path.join(tempDir, 'dist'),
+    ...overrides,
   });
   const { app } = createApp(config);
   const server = createServer(app);
@@ -224,6 +225,97 @@ test('login with missing password returns 401 instead of leaking an internal err
 
     assert.equal(response.status, 401);
     assert.equal(response.body.error, 'Identifiants invalides.');
+  } finally {
+    await server.close();
+  }
+});
+
+test('invalid session token returns a clean 401 payload', async () => {
+  const server = await startTestServer();
+
+  try {
+    const response = await request(server.baseUrl, '/api/auth/session', {
+      headers: {
+        authorization: '******',
+      },
+    });
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.error, 'Session expirée ou invalide.');
+    assert.equal(response.body.code, 'SESSION_INVALID');
+  } finally {
+    await server.close();
+  }
+});
+
+test('invalid JSON body returns 400 with a stable API error', async () => {
+  const server = await startTestServer();
+
+  try {
+    const response = await fetch(`${server.baseUrl}/api/auth/register`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: '{"email": "broken@example.com"',
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error, 'Corps JSON invalide.');
+    assert.equal(body.code, 'INVALID_JSON');
+  } finally {
+    await server.close();
+  }
+});
+
+test('auth rate limiting returns 429 after repeated login attempts', async () => {
+  const server = await startTestServer({
+    RATE_LIMIT_WINDOW_MS: 60_000,
+    AUTH_RATE_LIMIT_MAX: 3,
+  });
+
+  try {
+    await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'limit@example.com',
+        password: 'supersecret',
+        name: 'Limit Test',
+      }),
+    });
+
+    const firstAttempt = await request(server.baseUrl, '/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'limit@example.com',
+        password: 'wrong-password',
+      }),
+    });
+    const secondAttempt = await request(server.baseUrl, '/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'limit@example.com',
+        password: 'wrong-password',
+      }),
+    });
+    const thirdResponse = await fetch(`${server.baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: 'limit@example.com',
+        password: 'wrong-password',
+      }),
+    });
+    const thirdAttempt = await thirdResponse.json();
+
+    assert.equal(firstAttempt.status, 401);
+    assert.equal(secondAttempt.status, 401);
+    assert.equal(thirdResponse.status, 429);
+    assert.equal(thirdAttempt.code, 'RATE_LIMITED');
+    assert.equal(thirdResponse.headers.get('retry-after'), '60');
   } finally {
     await server.close();
   }

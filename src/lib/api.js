@@ -11,7 +11,15 @@ export class ApiError extends Error {
 
 async function parseResponse(response) {
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new ApiError('Réponse serveur invalide.', response.status, { code: 'INVALID_JSON_RESPONSE' });
+    }
+  }
 
   if (!response.ok) {
     throw new ApiError(data?.error || 'Une erreur serveur est survenue.', response.status, data);
@@ -29,6 +37,7 @@ export async function apiRequest(path, options = {}) {
       ...(options.headers ?? {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
   });
 
   return parseResponse(response);
