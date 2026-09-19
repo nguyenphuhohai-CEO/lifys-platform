@@ -1139,7 +1139,7 @@ function App() {
             {dashboardLoading ? (
               <EmptyState title="Chargement des matchs" description="Lecture des correspondances depuis SQLite." />
             ) : matches.length === 0 ? (
-              <EmptyState title="Aucun match pour l’instant" description="Commencez par liker des profils pour créer vos premières connexions." actionLabel="Voir la découverte" onAction={() => setCurrentView('discover')} />
+              <EmptyState title="Aucun match pour l’instant" description="Commencez par liker des profils pour créer vos premières connexions." actionLabel="Voir la découverte" onAction={() => setView('discover')} />
             ) : (
               <div className="matches-list">
                 {matches.map((match) => (
@@ -1172,7 +1172,7 @@ function App() {
               {dashboardLoading ? (
                 <EmptyState title="Chargement des conversations" description="Récupération de vos messages depuis le backend." />
               ) : conversations.length === 0 ? (
-                <EmptyState title="Aucune conversation" description="Un match backend ouvre automatiquement un canal de discussion." actionLabel="Trouver un match" onAction={() => setCurrentView('discover')} />
+                <EmptyState title="Aucune conversation" description="Un match backend ouvre automatiquement un canal de discussion." actionLabel="Trouver un match" onAction={() => setView('discover')} />
               ) : (
                 <div className="conversation-list">
                   {conversations.map((conversation) => (

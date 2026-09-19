@@ -20,18 +20,6 @@ function hashIdentifier(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
-function getCookieValue(cookieHeader, name) {
-  const prefix = `${name}=`;
-  for (const chunk of `${cookieHeader ?? ''}`.split(';')) {
-    const part = chunk.trim();
-    if (part.startsWith(prefix)) {
-      return decodeURIComponent(part.slice(prefix.length));
-    }
-  }
-
-  return '';
-}
-
 function createApiRateLimiter({ windowMs, max, keyGenerator }) {
   return rateLimit({
     windowMs,
@@ -79,12 +67,7 @@ export function createApp(config) {
   const refreshCookieRateLimiter = createApiRateLimiter({
     windowMs: config.rateLimitWindowMs,
     max: config.writeRateLimitMax,
-    keyGenerator: (req) => {
-      const refreshCookie = getCookieValue(req.headers.cookie, config.refreshCookieName);
-      return refreshCookie
-        ? `refresh-cookie:${hashIdentifier(refreshCookie)}`
-        : `refresh-ip:${getRequestIp(req)}`;
-    },
+    keyGenerator: (req) => `refresh-ip:${getRequestIp(req)}`,
   });
   const writeRateLimiter = createApiRateLimiter({
     windowMs: config.rateLimitWindowMs,

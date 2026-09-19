@@ -147,6 +147,26 @@ test('register accepts quoted local-part emails', async () => {
   }
 });
 
+test('register rejects quoted local-part emails with spaces', async () => {
+  const server = await startTestServer();
+
+  try {
+    const response = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: '"john doe"@example.com',
+        password: 'supersecret',
+        name: 'Invalid Quoted Email',
+      }),
+    });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, 'INVALID_EMAIL');
+  } finally {
+    await server.close();
+  }
+});
+
 test('discovery hides private identifiers and reset keeps real-user matches intact', async () => {
   const server = await startTestServer();
 
