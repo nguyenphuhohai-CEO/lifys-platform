@@ -7,8 +7,10 @@ import { rateLimit } from 'express-rate-limit';
 
 import { verifyToken } from './auth.js';
 import { createAuthController } from './controllers/auth-controller.js';
+import { createEmailService } from './email-service.js';
 import { createDatabase, sanitizeProfileInput } from './db.js';
 import { createHttpError } from './http.js';
+import { createLogger } from './logger.js';
 import { createAuthService } from './services/auth-service.js';
 import { normalizeBody, readRequiredString } from './validation.js';
 
@@ -75,8 +77,10 @@ function getCookieValue(req, cookieName) {
 }
 
 export function createApp(config) {
-  const database = createDatabase(config.databaseFile);
-  const authService = createAuthService({ database, config });
+  const logger = createLogger(config);
+  const database = createDatabase(config);
+  const emailService = createEmailService({ config, logger });
+  const authService = createAuthService({ database, config, emailService, logger });
   const authController = createAuthController({ authService, config });
   const app = express();
   const allowedOrigins = parseCorsOrigins(config.corsOrigin);
@@ -131,6 +135,26 @@ export function createApp(config) {
   };
 
   app.disable('x-powered-by');
+  app.use((req, res, next) => {
+    req.requestId = crypto.randomUUID();
+    res.setHeader('X-Request-Id', req.requestId);
+    const startedAt = performance.now();
+    res.on('finish', () => {
+      if (!config.logRequests || req.path === '/api/health') {
+        return;
+      }
+
+      logger.info('HTTP request completed', {
+        requestId: req.requestId,
+        method: req.method,
+        path: req.path,
+        statusCode: res.statusCode,
+        durationMs: Number((performance.now() - startedAt).toFixed(1)),
+        userId: req.auth?.userId ?? null,
+      });
+    });
+    next();
+  });
   app.use(express.json({ limit: '1mb' }));
   app.use((error, _req, res, next) => {
     if (error instanceof SyntaxError && 'body' in error) {
@@ -164,7 +188,7 @@ export function createApp(config) {
         res.setHeader('Access-Control-Allow-Credentials', 'true');
       }
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     }
 
     if (req.method === 'OPTIONS') {
@@ -217,7 +241,16 @@ export function createApp(config) {
   }
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true });
+    res.json({
+      ok: true,
+      uptimeSeconds: Number(process.uptime().toFixed(0)),
+      environment: {
+        emailDeliveryMode: config.emailDeliveryMode,
+        demoDiscoveryEnabled: config.demoDiscoveryEnabled,
+        databaseProvider: config.databaseProvider,
+      },
+      database: database.getHealthState(),
+    });
   });
 
   app.post('/api/auth/register', authRateLimiter, authController.register);
@@ -230,6 +263,7 @@ export function createApp(config) {
   app.post('/api/auth/verify-email/confirm', authRateLimiter, authController.verifyEmail);
   app.post('/api/auth/password-reset/request', authRateLimiter, authController.requestPasswordReset);
   app.post('/api/auth/password-reset/confirm', authRateLimiter, authController.resetPassword);
+  app.delete('/api/account', protectedRouteRateLimiter, requireAuth, writeRateLimiter, authController.deleteAccount);
 
   app.get('/api/bootstrap', protectedRouteRateLimiter, requireAuth, (req, res) => {
     res.json({
@@ -301,6 +335,48 @@ export function createApp(config) {
     }
   });
 
+  app.post('/api/interactions/block', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res, next) => {
+    try {
+      const body = normalizeBody(req.body);
+      const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
+      const reason = `${body.reason ?? ''}`.trim().slice(0, 200);
+      const blockedProfile = database.blockProfile(req.auth.userId, profileId, reason);
+
+      if (!blockedProfile) {
+        throw createHttpError(404, 'Profil introuvable.', 'PROFILE_NOT_FOUND');
+      }
+
+      res.status(201).json({
+        blockedProfile,
+        matches: database.listMatchesForUser(req.auth.userId),
+        conversations: database.listConversationsForUser(req.auth.userId),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/reports/profile', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res, next) => {
+    try {
+      const body = normalizeBody(req.body);
+      const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
+      const reason = readRequiredString(body, 'reason', { maxLength: 120 });
+      const details = `${body.details ?? ''}`.trim().slice(0, 1000);
+      const report = database.reportProfile(req.auth.userId, profileId, reason, details);
+
+      if (!report) {
+        throw createHttpError(404, 'Profil introuvable.', 'PROFILE_NOT_FOUND');
+      }
+
+      res.status(201).json({
+        report,
+        message: 'Le signalement a été enregistré pour modération.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get('/api/matches', protectedRouteRateLimiter, requireAuth, (req, res) => {
     res.json({ matches: database.listMatchesForUser(req.auth.userId) });
   });
@@ -329,14 +405,16 @@ export function createApp(config) {
     }
   });
 
-  app.post('/api/prototype/reset', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res) => {
-    database.resetUserData(req.auth.userId);
-    res.json({
-      profile: database.getProfileByUserId(req.auth.userId),
-      matches: database.listMatchesForUser(req.auth.userId),
-      conversations: database.listConversationsForUser(req.auth.userId),
+  if (config.demoDiscoveryEnabled) {
+    app.post('/api/prototype/reset', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res) => {
+      database.resetUserData(req.auth.userId);
+      res.json({
+        profile: database.getProfileByUserId(req.auth.userId),
+        matches: database.listMatchesForUser(req.auth.userId),
+        conversations: database.listConversationsForUser(req.auth.userId),
+      });
     });
-  });
+  }
 
   if (fs.existsSync(config.staticDir)) {
     app.use(express.static(config.staticDir));
@@ -346,13 +424,25 @@ export function createApp(config) {
   }
 
   app.use((error, _req, res, _next) => {
-    if ((error.status || 500) >= 500) {
-      console.error('[lifys-api]', error);
+    const statusCode = error.status || 500;
+    const context = {
+      requestId: _req.requestId,
+      path: _req.path,
+      method: _req.method,
+      statusCode,
+      code: error.code || 'INTERNAL_ERROR',
+      message: error.message,
+    };
+    if (statusCode >= 500) {
+      logger.error('Unhandled API error', context);
+    } else {
+      logger.warn('Handled API error', context);
     }
 
-    res.status(error.status || 500).json({
+    res.status(statusCode).json({
       error: error.message || 'Une erreur inattendue est survenue.',
       code: error.code || 'INTERNAL_ERROR',
+      requestId: _req.requestId,
     });
   });
 

@@ -1,11 +1,11 @@
 # Lifys Platform
 
-Lifys est maintenant un **MVP full-stack local** : frontend **React + Vite** connecté à un backend **Express + SQLite + JWT** pour une expérience de rencontre multi-catégories : **Amical**, **Amoureux**, **Sans lendemain**, **Mariage** et **Professionnel**.
+Lifys est maintenant un **MVP full-stack local durci** : frontend **React + Vite** connecté à un backend **Express + SQLite + JWT** pour une expérience de rencontre multi-catégories : **Amical**, **Amoureux**, **Sans lendemain**, **Mariage** et **Professionnel**.
 
 L’application reste encore volontairement **locale et partiellement simulée** :
 
 - les comptes, profils, matchs et messages sont persistés dans votre instance locale ;
-- les profils de découverte sont fictifs ;
+- les profils de découverte peuvent rester fictifs uniquement si le mode démo explicite est activé ;
 - aucune vérification d’identité réelle n’est effectuée ;
 - aucun paiement ou temps réel WebSocket n’est encore présenté comme existant.
 
@@ -20,16 +20,23 @@ Le MVP propose :
 - des centres d’intérêt nettoyés et formatés ;
 - une découverte filtrable par catégorie, texte et ville ;
 - des actions Like / Pass accessibles ;
+- des actions Bloquer / Signaler minimales sur les profils ;
 - des matchs persistés avec accès direct à la messagerie ;
 - des conversations persistées avec envoi par `Enter` ;
+- des liens e-mail de vérification et reset exploitables via `APP_BASE_URL` ;
 - des notifications non bloquantes ;
 - une récupération sûre du `localStorage` si des données JSON d’interface sont corrompues ;
 - une réinitialisation complète du prototype local ;
 - une restauration de session via refresh token en cookie httpOnly après reload ;
 - un jeton CSRF en cookie compagnon pour protéger les endpoints de session basés cookie ;
-- une vérification e-mail locale par token de démonstration ;
-- une réinitialisation locale de mot de passe par token de démonstration ;
+- une vérification e-mail avec envoi configurable et fallback preview explicite ;
+- une réinitialisation de mot de passe avec envoi configurable et fallback preview explicite ;
 - un rate limiting minimal sur auth et écritures sensibles côté Express.
+- un envoi d’e-mails configurable via Resend avec fallback preview explicite hors production ;
+- des migrations SQL versionnées et un schéma cible PostgreSQL ;
+- une suppression de compte avec purge serveur ;
+- des actions de blocage / signalement minimales ;
+- une healthcheck enrichie et des logs structurés.
 
 ## Installation
 
@@ -42,9 +49,14 @@ Variables utiles pour le backend local :
 
 - `JWT_SECRET` : secret JWT à remplacer hors démo ;
 - `JWT_EXPIRES_IN` : durée de vie du token d’accès ;
+- `APP_BASE_URL` : URL publique utilisée dans les liens e-mail ;
+- `DATABASE_PROVIDER` : actuellement `sqlite` ;
 - `REFRESH_COOKIE_NAME` : nom du cookie httpOnly de refresh ;
 - `CSRF_COOKIE_NAME` : nom du cookie CSRF lisible côté frontend ;
 - `VITE_CSRF_COOKIE_NAME` : nom attendu côté client pour relire ce cookie ;
+- `EMAIL_DELIVERY_MODE` : `preview` ou `resend` ;
+- `RESEND_API_KEY` : clé API Resend ;
+- `EMAIL_FROM` : expéditeur transactionnel ;
 - `REFRESH_TOKEN_TTL_DAYS` : durée de vie du refresh token ;
 - `EMAIL_VERIFICATION_TOKEN_TTL_HOURS` : durée de vie du token de vérification locale ;
 - `PASSWORD_RESET_TOKEN_TTL_MINUTES` : durée de vie du token de reset local ;
@@ -53,6 +65,9 @@ Variables utiles pour le backend local :
 - `RATE_LIMIT_WINDOW_MS` : fenêtre du rate limiting Express ;
 - `AUTH_RATE_LIMIT_MAX` : plafond sur inscription / connexion ;
 - `WRITE_RATE_LIMIT_MAX` : plafond sur profil / likes / pass / messages / reset.
+- `DEMO_DISCOVERY_ENABLED` : active explicitement les profils fictifs de découverte ;
+- `LOG_LEVEL` : niveau des logs structurés ;
+- `LOG_REQUESTS` : active les logs HTTP minimaux.
 
 ## Scripts
 
@@ -68,6 +83,9 @@ npm run build
 
 # tests Node existants
 npm test
+
+# appliquer / vérifier les migrations
+npm run migrate
 
 # lancer le serveur Express (et servir dist si build présent)
 npm start
@@ -127,6 +145,7 @@ npm run dev -- --host
 - nettoyage des clés corrompues ;
 - réinitialisation complète des données du prototype ;
 - message explicite lorsque le navigateur refuse la persistance locale.
+- suppression définitive de compte avec purge des données côté serveur.
 
 ## Architecture
 
@@ -148,6 +167,11 @@ src/
 
 server/
   controllers/           # contrôleurs Express (auth)
+  email-service.js       # envoi preview / Resend
+  logger.js              # logs structurés JSON
+  migrate.js             # exécution manuelle des migrations
+  migrations/            # migrations SQL versionnées SQLite
+  postgres/schema.sql    # schéma cible PostgreSQL
   services/              # logique métier auth/session/tokens
   validation.js          # validation de payload backend
   http.js                # erreurs HTTP partagées
@@ -161,48 +185,32 @@ server/
 - aucune vérification d’identité ;
 - aucun paiement ;
 - backend local mono-instance, pas encore prêt pour une prod publique ;
-- aucune synchronisation entre appareils ;
+- aucune synchronisation temps réel entre appareils ;
 - aucune messagerie temps réel ;
-- aucun envoi d’e-mail réel : vérification/reset restent des flux locaux de démonstration ;
-- profils de découverte entièrement fictifs.
+- PostgreSQL n’est pas encore branché à l’exécution ;
+- la modération reste minimale et sans interface admin dédiée ;
+- les profils de découverte peuvent rester fictifs si `DEMO_DISCOVERY_ENABLED=true`.
 
 ## Roadmap recommandée
 
-### Backend
+### Étapes restantes avant vraie prod publique
 
-- durcir l’API existante pour un usage public ;
-- séparer services, validation et stockage ;
-- compléter la journalisation minimale et la supervision.
-
-### Authentification
-
-- remplacer les tokens de démonstration par un vrai fournisseur e-mail ;
-- ajouter rotation/monitoring de sessions plus avancés ;
-- renforcer encore la gestion multi-appareils et la révocation globale.
-
-### Base de données
-
-- préparer une base serveur multi-instance ;
-- migrations versionnées ;
-- indexation et audit ;
-- stratégie de sauvegarde.
-
-### Temps réel
-
-- WebSocket ou équivalent ;
-- état en ligne/hors ligne ;
-- indicateurs de lecture ;
-- notifications push.
+- brancher PostgreSQL en exécution réelle ;
+- déployer frontend + API sur une cible stable avec HTTPS ;
+- connecter un vrai monitoring/alerting ;
+- ajouter une interface d’administration/modération ;
+- brancher la messagerie temps réel ;
+- finaliser conformité légale et RGPD.
 
 ## Avertissement sécurité
 
-Ce dépôt reste un **prototype full-stack local**.  
+Ce dépôt reste un **MVP full-stack local durci**.  
 Ne pas y saisir de données sensibles réelles. Avant toute mise en production future, prévoir au minimum :
 
 - authentification et sessions durcies ;
-- e-mails transactionnels réels pour vérification et reset ;
+- `EMAIL_DELIVERY_MODE=resend` avec `RESEND_API_KEY`, `EMAIL_FROM`, `APP_BASE_URL`, `JWT_SECRET` fort et `COOKIE_SECURE=true` ;
 - backend validé côté sécurité ;
-- stockage serveur adapté ;
+- stockage serveur adapté et sauvegardé ;
 - protection contre l’injection, l’abus et le spam ;
 - HTTPS ;
 - politique de confidentialité et conformité légale adaptées.
@@ -211,11 +219,16 @@ Ne pas y saisir de données sensibles réelles. Avant toute mise en production f
 
 - `npm test`
 - `npm run build`
+- `npm audit --omit=dev`
+- smoke test `/api/health`
 
 ## Vérifications à documenter dans la pull request
 
 - résumé des changements UX/UI ;
 - confirmation du fonctionnement frontend/backend local ;
+- confirmation du mode e-mail (`preview` ou `resend`) ;
+- confirmation du mode découverte (`DEMO_DISCOVERY_ENABLED`) ;
 - résultats de `npm test` ;
 - résultats de `npm run build` ;
+- résultats de `npm audit --omit=dev` ;
 - scan des secrets sur les fichiers modifiés.

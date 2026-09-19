@@ -641,6 +641,13 @@ textarea:focus-visible {
   padding: 18px;
 }
 
+.card-secondary-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 0 18px 18px;
+}
+
 .pass-button {
   background: rgba(209, 72, 95, 0.08);
   color: var(--danger);
@@ -799,6 +806,18 @@ textarea:focus-visible {
   min-height: 72px;
 }
 
+.danger-zone {
+  margin-top: 10px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.danger-button {
+  border-color: rgba(209, 72, 95, 0.2);
+  color: var(--danger);
+  background: rgba(209, 72, 95, 0.08);
+}
+
 .form-alert {
   padding: 12px 14px;
   border-radius: var(--radius-md);
@@ -942,6 +961,7 @@ textarea:focus-visible {
   .filter-grid,
   .form-grid,
   .card-actions,
+  .card-secondary-actions,
   .nav.nav-open {
     grid-template-columns: 1fr;
   }

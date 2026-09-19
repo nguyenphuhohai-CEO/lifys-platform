@@ -263,6 +263,175 @@ test('discovery hides private identifiers and reset keeps real-user matches inta
   }
 });
 
+test('delete account purges the user session and blocks future login', async () => {
+  const server = await startTestServer();
+
+  try {
+    const register = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'delete-me@example.com',
+        password: 'supersecret',
+        name: 'Delete Me',
+      }),
+    });
+
+    const authorization = { authorization: 'Bearer ' + register.body.token };
+    const deletion = await request(server.baseUrl, '/api/account', {
+      method: 'DELETE',
+      headers: authorization,
+      body: JSON.stringify({ password: 'supersecret' }),
+    });
+
+    assert.equal(deletion.status, 204);
+
+    const sessionAfterDeletion = await request(server.baseUrl, '/api/auth/session', {
+      headers: authorization,
+    });
+    assert.equal(sessionAfterDeletion.status, 401);
+
+    const loginAfterDeletion = await request(server.baseUrl, '/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'delete-me@example.com',
+        password: 'supersecret',
+      }),
+    });
+    assert.equal(loginAfterDeletion.status, 401);
+  } finally {
+    await server.close();
+  }
+});
+
+test('blocking a real user removes discovery, match and conversation visibility', async () => {
+  const server = await startTestServer({
+    DEMO_DISCOVERY_ENABLED: 'false',
+  });
+
+  try {
+    const registerA = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'block-a@example.com',
+        password: 'supersecret',
+        name: 'Aline',
+        mode: 'professionnel',
+      }),
+    });
+    const registerB = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'block-b@example.com',
+        password: 'supersecret',
+        name: 'Bastien',
+        mode: 'professionnel',
+      }),
+    });
+
+    const authA = { authorization: 'Bearer ' + registerA.body.token };
+    const authB = { authorization: 'Bearer ' + registerB.body.token };
+
+    const profileA = await request(server.baseUrl, '/api/profile', {
+      method: 'PUT',
+      headers: authA,
+      body: JSON.stringify({
+        name: 'Aline',
+        age: 28,
+        city: 'Paris',
+        bio: 'Profil complet pour tester le blocage.',
+        interests: ['design'],
+        mode: 'professionnel',
+        avatar: '',
+      }),
+    });
+    const profileB = await request(server.baseUrl, '/api/profile', {
+      method: 'PUT',
+      headers: authB,
+      body: JSON.stringify({
+        name: 'Bastien',
+        age: 29,
+        city: 'Paris',
+        bio: 'Profil complet pour créer un match réel.',
+        interests: ['design'],
+        mode: 'professionnel',
+        avatar: '',
+      }),
+    });
+
+    await request(server.baseUrl, '/api/interactions/like', {
+      method: 'POST',
+      headers: authA,
+      body: JSON.stringify({ profileId: profileB.body.profile.id }),
+    });
+
+    const matchesBeforeBlock = await request(server.baseUrl, '/api/matches', { headers: authA });
+    assert.equal(matchesBeforeBlock.body.matches.length, 1);
+
+    const blockResponse = await request(server.baseUrl, '/api/interactions/block', {
+      method: 'POST',
+      headers: authA,
+      body: JSON.stringify({ profileId: profileB.body.profile.id, reason: 'user-request' }),
+    });
+
+    assert.equal(blockResponse.status, 201);
+    assert.equal(blockResponse.body.matches.length, 0);
+    assert.equal(blockResponse.body.conversations.length, 0);
+
+    const discoveryAfterBlock = await request(server.baseUrl, '/api/discovery?mode=professionnel', {
+      headers: authA,
+    });
+    assert.equal(discoveryAfterBlock.body.profiles.some((profile) => profile.id === profileB.body.profile.id), false);
+    assert.equal(profileA.status, 200);
+  } finally {
+    await server.close();
+  }
+});
+
+test('reporting a profile creates a moderation report', async () => {
+  const server = await startTestServer({
+    DEMO_DISCOVERY_ENABLED: 'false',
+  });
+
+  try {
+    const reporter = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'reporter@example.com',
+        password: 'supersecret',
+        name: 'Reporter',
+      }),
+    });
+    const target = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'target@example.com',
+        password: 'supersecret',
+        name: 'Target',
+      }),
+    });
+
+    const targetProfile = await request(server.baseUrl, '/api/profile', {
+      method: 'GET',
+      headers: { authorization: 'Bearer ' + target.body.token },
+    });
+
+    const report = await request(server.baseUrl, '/api/reports/profile', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + reporter.body.token },
+      body: JSON.stringify({
+        profileId: targetProfile.body.profile.id,
+        reason: 'safety-review',
+        details: 'Profil à vérifier manuellement.',
+      }),
+    });
+
+    assert.equal(report.status, 201);
+    assert.equal(report.body.report.status, 'open');
+  } finally {
+    await server.close();
+  }
+});
+
 test('login with missing password returns 401 instead of leaking an internal error', async () => {
   const server = await startTestServer();
 
@@ -737,6 +906,22 @@ test('CORS preflight rejects cross-origin requests when no allowlist is configur
   }
 });
 
+test('health endpoint exposes environment and migration metadata', async () => {
+  const server = await startTestServer();
+
+  try {
+    const response = await request(server.baseUrl, '/api/health');
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.ok, true);
+    assert.equal(response.body.environment.emailDeliveryMode, 'preview');
+    assert.equal(response.body.database.provider, 'sqlite');
+    assert.ok(response.body.database.migrationCount >= 2);
+  } finally {
+    await server.close();
+  }
+});
+
 test('config rejects invalid numeric rate limit values', () => {
   assert.throws(
     () => getConfig({ RATE_LIMIT_WINDOW_MS: 'abc' }),
@@ -748,5 +933,16 @@ test('config rejects wildcard CORS with refresh-cookie auth', () => {
   assert.throws(
     () => getConfig({ CORS_ORIGIN: '*' }),
     /CORS_ORIGIN cannot contain \* when refresh-cookie auth is enabled\./,
+  );
+});
+
+test('config enforces resend email delivery in production', () => {
+  assert.throws(
+    () => getConfig({ NODE_ENV: 'production', JWT_SECRET: 'prod-secret', EMAIL_DELIVERY_MODE: 'preview' }),
+    /EMAIL_DELIVERY_MODE must be resend in production\./,
+  );
+  assert.throws(
+    () => getConfig({ EMAIL_DELIVERY_MODE: 'resend' }),
+    /RESEND_API_KEY and EMAIL_FROM are required when EMAIL_DELIVERY_MODE=resend\./,
   );
 });

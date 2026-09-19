@@ -94,17 +94,17 @@ export function createAuthController({ authService, config }) {
 
   return {
     register(req, res, next) {
-      try {
+      Promise.resolve().then(async () => {
         const body = normalizeBody(req.body);
         const email = readRequiredString(body, 'email', { maxLength: 200 });
         const password = readRequiredString(body, 'password', { maxLength: 200 });
         const name = readOptionalString(body, 'name', { maxLength: 120 }) || email.split('@')[0] || 'Profil Lifys';
         const mode = `${body.mode ?? 'amoureux'}`;
-        const result = authService.register({ email, password, name, mode });
+        const result = await authService.register({ email, password, name, mode });
         sendSession(res, result, 201);
-      } catch (error) {
+      }).catch((error) => {
         next(error);
-      }
+      });
     },
 
     login(req, res, next) {
@@ -148,17 +148,19 @@ export function createAuthController({ authService, config }) {
     },
 
     requestEmailVerification(req, res, next) {
-      try {
-        const result = authService.requestEmailVerification(req.auth.userId);
+      Promise.resolve().then(async () => {
+        const result = await authService.requestEmailVerification(req.auth.userId);
         res.json({
           message: result.alreadyVerified
             ? 'Adresse e-mail déjà vérifiée.'
-            : 'Une vérification a été préparée pour votre environnement local.',
+            : config.emailDeliveryMode === 'preview'
+              ? 'Un e-mail de vérification a été préparé en mode preview.'
+              : 'Un e-mail de vérification vient d’être envoyé.',
           ...(result.previewToken ? { previewToken: result.previewToken } : {}),
         });
-      } catch (error) {
+      }).catch((error) => {
         next(error);
-      }
+      });
     },
 
     verifyEmail(req, res, next) {
@@ -177,17 +179,19 @@ export function createAuthController({ authService, config }) {
     },
 
     requestPasswordReset(req, res, next) {
-      try {
+      Promise.resolve().then(async () => {
         const body = normalizeBody(req.body);
         const email = readRequiredString(body, 'email', { maxLength: 200 });
-        const result = authService.requestPasswordReset(email);
+        const result = await authService.requestPasswordReset(email);
         res.json({
-          message: 'Si cet e-mail existe, un lien local de réinitialisation a été préparé.',
+          message: config.emailDeliveryMode === 'preview'
+            ? 'Si cet e-mail existe, un lien de réinitialisation a été préparé en mode preview.'
+            : 'Si cet e-mail existe, un message de réinitialisation vient d’être envoyé.',
           ...(result.previewToken ? { previewToken: result.previewToken } : {}),
         });
-      } catch (error) {
+      }).catch((error) => {
         next(error);
-      }
+      });
     },
 
     resetPassword(req, res, next) {
@@ -208,6 +212,18 @@ export function createAuthController({ authService, config }) {
         return;
       }
       next();
+    },
+
+    deleteAccount(req, res, next) {
+      try {
+        const body = normalizeBody(req.body);
+        const password = readRequiredString(body, 'password', { maxLength: 200 });
+        authService.deleteAccount(req.auth.userId, password);
+        clearRefreshCookie(res);
+        res.status(204).end();
+      } catch (error) {
+        next(error);
+      }
     },
   };
 }

@@ -94,6 +94,16 @@ function App() {
   const [passwordResetPreviewToken, setPasswordResetPreviewToken] = useState('');
   const [emailVerificationToken, setEmailVerificationToken] = useState('');
   const [emailVerificationPreviewToken, setEmailVerificationPreviewToken] = useState('');
+  const [appEnvironment, setAppEnvironment] = useState({
+    emailDeliveryMode: 'preview',
+    demoDiscoveryEnabled: true,
+    databaseProvider: 'sqlite',
+  });
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
+  const [deleteAccountConfirm, setDeleteAccountConfirm] = useState('');
+  const [blockingProfileId, setBlockingProfileId] = useState('');
+  const [reportingProfileId, setReportingProfileId] = useState('');
   const refreshRequestRef = useRef(null);
 
   const showToast = useCallback((toast) => {
@@ -104,6 +114,8 @@ function App() {
     }, 4200);
   }, []);
 
+  const isPreviewEmailMode = appEnvironment.emailDeliveryMode === 'preview';
+
   const handleApiError = useCallback((error, fallbackMessage) => {
     const message = error instanceof ApiError ? error.message : fallbackMessage;
     setPageError(message);
@@ -113,6 +125,44 @@ function App() {
       message,
     });
   }, [showToast]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    api.healthcheck()
+      .then((response) => {
+        if (!cancelled && response?.environment) {
+          setAppEnvironment(response.environment);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const verifyToken = params.get('verifyEmailToken');
+    const resetToken = params.get('resetPasswordToken');
+    let shouldCleanUrl = false;
+
+    if (verifyToken) {
+      setEmailVerificationToken(verifyToken);
+      shouldCleanUrl = true;
+    }
+
+    if (resetToken) {
+      setPasswordResetForm((current) => ({ ...current, token: resetToken }));
+      setAuthMode('login');
+      shouldCleanUrl = true;
+    }
+
+    if (shouldCleanUrl) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   const resetSessionState = useCallback((options = {}) => {
     setToken('');
@@ -132,6 +182,8 @@ function App() {
     setEmailVerificationToken('');
     setEmailVerificationPreviewToken('');
     setPasswordResetPreviewToken('');
+    setDeleteAccountPassword('');
+    setDeleteAccountConfirm('');
     setUiPersistenceWarningShown(false);
     setIsMobileNavOpen(false);
     resetPrototypeStorage([STORAGE_KEYS.auth, STORAGE_KEYS.sessionUi]);
@@ -440,7 +492,7 @@ function App() {
         type: 'success',
         title: authMode === 'register' ? 'Compte créé' : 'Connexion réussie',
         message: authMode === 'register'
-          ? 'Votre session Lifys backend est active. Vérifiez maintenant votre e-mail dans le flux local.'
+          ? 'Votre session Lifys est active. Vérifiez votre e-mail pour finaliser l’activation du compte.'
           : 'Votre session Lifys backend est maintenant active.',
       });
     } catch (error) {
@@ -486,7 +538,7 @@ function App() {
       showToast({
         type: 'success',
         title: 'E-mail vérifié',
-        message: 'Votre adresse e-mail est maintenant confirmée pour ce MVP local.',
+        message: 'Votre adresse e-mail est maintenant confirmée.',
       });
     } catch (error) {
       handleApiError(error, 'Impossible de confirmer cet e-mail.');
@@ -673,6 +725,96 @@ function App() {
     }
   };
 
+  const handleReportProfile = async (profileId, profileName) => {
+    setReportingProfileId(profileId);
+
+    try {
+      const response = await withFreshToken(
+        (nextToken) => api.reportProfile(nextToken, profileId, {
+          reason: 'safety-review',
+          details: `Signalement envoyé depuis l’interface pour le profil ${profileName}.`,
+        }),
+        { refreshView: view },
+      );
+      showToast({
+        type: 'info',
+        title: 'Signalement enregistré',
+        message: response.message,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
+      handleApiError(error, 'Impossible d’enregistrer ce signalement.');
+    } finally {
+      setReportingProfileId('');
+    }
+  };
+
+  const handleBlockProfile = async (profileId, profileName) => {
+    setBlockingProfileId(profileId);
+
+    try {
+      const response = await withFreshToken(
+        (nextToken) => api.blockProfile(nextToken, profileId, 'user-request'),
+        { refreshView: view },
+      );
+      setMatches(response.matches);
+      setConversations(response.conversations);
+      setSelectedConversation((current) => resolveSelectedConversationId(response.conversations, current));
+      await loadDiscovery();
+      showToast({
+        type: 'warning',
+        title: 'Profil bloqué',
+        message: `${profileName} a été retiré de votre découverte, de vos matchs et de vos conversations.`,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
+      handleApiError(error, 'Impossible de bloquer ce profil.');
+    } finally {
+      setBlockingProfileId('');
+    }
+  };
+
+  const handleDeleteAccount = async (event) => {
+    event.preventDefault();
+
+    if (deleteAccountConfirm.trim() !== currentUser?.email) {
+      showToast({
+        type: 'warning',
+        title: 'Confirmation manquante',
+        message: 'Saisissez votre adresse e-mail pour confirmer la suppression définitive du compte.',
+      });
+      return;
+    }
+
+    setDeletingAccount(true);
+
+    try {
+      await withFreshToken((nextToken) => api.deleteAccount(nextToken, deleteAccountPassword), { refreshView: 'profile' });
+      resetSessionState({
+        pageError: '',
+        toast: {
+          type: 'info',
+          title: 'Compte supprimé',
+          message: 'Votre compte et vos données associées ont été supprimés du serveur local.',
+        },
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
+      handleApiError(error, 'Impossible de supprimer ce compte.');
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
   const handleResetPrototype = async () => {
     setResetting(true);
 
@@ -773,10 +915,12 @@ function App() {
           <section className="hero-panel auth-hero">
             <div className="hero-copy">
               <p className="eyebrow">Frontend React + backend Express</p>
-              <h1>Lifys passe du prototype local à un MVP backend concret.</h1>
+              <h1>Lifys passe à un socle full-stack prêt à être durci pour la production.</h1>
               <p>
-                Les comptes, profils, matchs et conversations sont maintenant portés par le backend local.
-                Les profils de découverte restent fictifs tant que la plateforme n’est pas ouverte à de vrais utilisateurs.
+                Les comptes, profils, matchs et conversations sont portés par le backend.
+                {appEnvironment.demoDiscoveryEnabled
+                  ? ' Les profils de découverte fictifs restent activés dans cet environnement tant que le mode démo est autorisé.'
+                  : ' La découverte ne repose plus que sur de vrais comptes créés dans votre environnement.'}
               </p>
               <div className="hero-metrics">
                 <article className="metric-card">
@@ -787,7 +931,7 @@ function App() {
                 <article className="metric-card">
                   <span>Base</span>
                   <strong>SQLite</strong>
-                  <small>persistante en local</small>
+                  <small>{appEnvironment.databaseProvider}</small>
                 </article>
                 <article className="metric-card">
                   <span>Session</span>
@@ -801,7 +945,7 @@ function App() {
               <SectionHeader
                 eyebrow={authMode === 'register' ? 'Créer un compte' : 'Connexion'}
                 title={authMode === 'register' ? 'Commencer sur Lifys' : 'Reprendre votre session'}
-                description="Les comptes utilisateur sont réels dans votre instance locale. Le refresh token est stocké en cookie httpOnly ; les profils de découverte restent fictifs."
+                description={`Le refresh token est stocké en cookie httpOnly.${appEnvironment.demoDiscoveryEnabled ? ' Les profils de découverte fictifs restent activés uniquement en mode démo explicite.' : ''}`}
               />
 
               {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
@@ -844,7 +988,9 @@ function App() {
                   <SectionHeader
                     eyebrow="Mot de passe"
                     title="Préparer une réinitialisation"
-                    description="Flux local de démonstration : un token de reset est généré côté backend sans envoi e-mail réel."
+                    description={isPreviewEmailMode
+                      ? 'Mode preview : un token local s’affiche pour les environnements sans fournisseur e-mail.'
+                      : 'Si le compte existe, un e-mail de réinitialisation sera envoyé.'}
                   />
                   <label>
                     <span>E-mail du compte</span>
@@ -854,7 +1000,7 @@ function App() {
                       onChange={(event) => setPasswordResetRequestEmail(event.target.value)}
                     />
                   </label>
-                  {passwordResetPreviewToken ? <small className="section-description">Token local : {passwordResetPreviewToken}</small> : null}
+                  {passwordResetPreviewToken ? <small className="section-description">Token preview : {passwordResetPreviewToken}</small> : null}
                   <div className="form-actions">
                     <button type="submit" className="secondary-button" disabled={passwordResetSubmitting}>
                       {passwordResetSubmitting ? 'Préparation…' : 'Préparer le reset'}
@@ -866,7 +1012,7 @@ function App() {
                   <SectionHeader
                     eyebrow="Réinitialisation"
                     title="Appliquer un nouveau mot de passe"
-                    description="Collez le token de démo, définissez un nouveau mot de passe, puis une nouvelle session sera ouverte."
+                    description="Collez le token reçu par e-mail — ou le token preview en environnement local — puis définissez un nouveau mot de passe."
                   />
                   <label>
                     <span>Token de reset</span>
@@ -935,9 +1081,11 @@ function App() {
 
         <div className="topbar-actions">
           <span className="prototype-badge">{currentUser.email}</span>
-          <button type="button" className="secondary-button" onClick={handleResetPrototype} disabled={resetting}>
-            {resetting ? 'Réinitialisation…' : 'Réinitialiser'}
-          </button>
+          {appEnvironment.demoDiscoveryEnabled ? (
+            <button type="button" className="secondary-button" onClick={handleResetPrototype} disabled={resetting}>
+              {resetting ? 'Réinitialisation…' : 'Réinitialiser'}
+            </button>
+          ) : null}
           <button type="button" className="secondary-button" onClick={handleLogout}>
             Déconnexion
           </button>
@@ -946,9 +1094,10 @@ function App() {
 
       <main className="page-shell">
         <section className="local-notice" aria-label="Avertissement MVP">
-          <strong>MVP backend local</strong>
-          <span>Les comptes utilisateur, profils, matchs et messages sont persistés dans SQLite sur votre instance locale.</span>
-          <span>Le refresh token est protégé par cookie httpOnly ; les profils de découverte restent fictifs et aucune identité réelle n’est encore vérifiée.</span>
+          <strong>État de plateforme</strong>
+          <span>Les comptes utilisateur, profils, matchs et messages sont persistés côté backend.</span>
+          <span>Le refresh token est protégé par cookie httpOnly et le refresh/logout sont protégés par un jeton CSRF compagnon.</span>
+          <span>{appEnvironment.demoDiscoveryEnabled ? 'Le mode démo découverte reste activé dans cet environnement.' : 'Le mode démo découverte est désactivé dans cet environnement.'}</span>
         </section>
 
         {!currentUser.emailVerified ? (
@@ -956,12 +1105,14 @@ function App() {
             <SectionHeader
               eyebrow="Vérification e-mail"
               title="Adresse non vérifiée"
-              description="Le backend peut maintenant générer un token de vérification local. Aucun envoi d’e-mail réel n’est encore branché."
+              description={isPreviewEmailMode
+                ? 'Mode preview : un token local s’affiche pour les environnements sans fournisseur e-mail.'
+                : 'Un e-mail de vérification peut être renvoyé à tout moment depuis cette page.'}
             />
             <div className="profile-layout">
               <div className="form-actions">
                 <button type="button" className="secondary-button" onClick={handleRequestEmailVerification} disabled={emailVerificationSubmitting}>
-                  {emailVerificationSubmitting ? 'Préparation…' : 'Préparer un token de vérification'}
+                  {emailVerificationSubmitting ? 'Préparation…' : 'Envoyer un e-mail de vérification'}
                 </button>
               </div>
               <form className="profile-form" onSubmit={handleConfirmEmailVerification}>
@@ -969,7 +1120,7 @@ function App() {
                   <span>Token de vérification</span>
                   <input value={emailVerificationToken} onChange={(event) => setEmailVerificationToken(event.target.value)} />
                 </label>
-                {emailVerificationPreviewToken ? <small className="section-description">Token local : {emailVerificationPreviewToken}</small> : null}
+                {emailVerificationPreviewToken ? <small className="section-description">Token preview : {emailVerificationPreviewToken}</small> : null}
                 <div className="form-actions">
                   <button type="submit" className="primary-button" disabled={emailVerificationSubmitting || !emailVerificationToken.trim()}>
                     {emailVerificationSubmitting ? 'Validation…' : 'Confirmer mon e-mail'}
@@ -989,8 +1140,10 @@ function App() {
                 <span className="eyebrow">MVP full-stack local</span>
                 <h1>Une base Lifys désormais connectée à un vrai backend.</h1>
                 <p>
-                  Votre profil, vos likes, vos matchs et vos messages sont servis par Express et stockés en SQLite,
-                  tout en conservant une expérience premium et des profils de découverte fictifs pour la démo.
+                  Votre profil, vos likes, vos matchs et vos messages sont servis par Express et stockés en SQLite.
+                  {appEnvironment.demoDiscoveryEnabled
+                    ? ' Les profils de découverte fictifs restent disponibles uniquement pour les environnements de démonstration.'
+                    : ' La découverte repose uniquement sur les profils réels actuellement créés.'}
                 </p>
 
                 <div className="cta-row">
@@ -1063,7 +1216,7 @@ function App() {
             <SectionHeader
               eyebrow="Découverte"
               title="Profils recommandés"
-              description="La découverte est maintenant pilotée par l’API backend et exclut les profils déjà likés ou passés."
+              description={`La découverte est pilotée par l’API backend et exclut les profils déjà likés, passés ou bloqués.${appEnvironment.demoDiscoveryEnabled ? ' Des profils de démonstration peuvent encore apparaître dans cet environnement.' : ''}`}
               aside={(
                 <div className="header-meta">
                   <span className="counter-badge">{discoveryLoading ? 'Chargement…' : `${profiles.length} profil${profiles.length > 1 ? 's' : ''}`}</span>
@@ -1132,6 +1285,14 @@ function App() {
                     <div className="card-actions">
                       <button type="button" className="pass-button" onClick={() => handlePass(person.id)} aria-label={`Passer le profil de ${person.name}`}>Pass</button>
                       <button type="button" className="like-button" onClick={() => handleLike(person.id)} aria-label={`Liker le profil de ${person.name}`}>Like</button>
+                    </div>
+                    <div className="card-secondary-actions">
+                      <button type="button" className="secondary-button" disabled={reportingProfileId === person.id} onClick={() => handleReportProfile(person.id, person.name)}>
+                        {reportingProfileId === person.id ? 'Signalement…' : 'Signaler'}
+                      </button>
+                      <button type="button" className="secondary-button danger-button" disabled={blockingProfileId === person.id} onClick={() => handleBlockProfile(person.id, person.name)}>
+                        {blockingProfileId === person.id ? 'Blocage…' : 'Bloquer'}
+                      </button>
                     </div>
                   </article>
                 ))}
@@ -1324,6 +1485,30 @@ function App() {
                     <span key={`${item}-${index}`}>{item}</span>
                   ))}
                 </div>
+                <form className="profile-form danger-zone" onSubmit={handleDeleteAccount}>
+                  <SectionHeader
+                    eyebrow="Compte"
+                    title="Suppression définitive"
+                    description="Cette action supprime votre compte, vos profils, matchs, messages, sessions et signalements associés."
+                  />
+                  <label>
+                    <span>Mot de passe actuel</span>
+                    <input type="password" value={deleteAccountPassword} onChange={(event) => setDeleteAccountPassword(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>Confirmez avec votre e-mail</span>
+                    <input value={deleteAccountConfirm} onChange={(event) => setDeleteAccountConfirm(event.target.value)} placeholder={currentUser.email} />
+                  </label>
+                  <div className="form-actions">
+                    <button
+                      type="submit"
+                      className="secondary-button danger-button"
+                      disabled={deletingAccount || !deleteAccountPassword.trim() || !deleteAccountConfirm.trim()}
+                    >
+                      {deletingAccount ? 'Suppression…' : 'Supprimer mon compte'}
+                    </button>
+                  </div>
+                </form>
               </aside>
             </div>
           </section>

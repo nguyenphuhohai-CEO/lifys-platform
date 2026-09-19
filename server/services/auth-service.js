@@ -24,10 +24,10 @@ function addDuration({ days = 0, hours = 0, minutes = 0 }) {
 }
 
 function shouldExposePreview(config) {
-  return config.nodeEnv !== 'production';
+  return config.emailDeliveryMode === 'preview';
 }
 
-export function createAuthService({ database, config }) {
+export function createAuthService({ database, config, emailService, logger }) {
   function buildSessionUser(userId) {
     const profile = database.getProfileByUserId(userId);
     if (!profile) {
@@ -86,7 +86,7 @@ export function createAuthService({ database, config }) {
   }
 
   return {
-    register({ email, password, name, mode }) {
+    async register({ email, password, name, mode }) {
       const normalizedEmail = normalizeEmail(email);
       const initialProfile = sanitizeProfileInput({ name, mode });
       if (!validateEmail(normalizedEmail)) {
@@ -109,6 +109,11 @@ export function createAuthService({ database, config }) {
       });
       const refreshToken = issueRefreshSession(created.userId);
       const emailVerificationToken = issueEmailVerificationToken(created.userId);
+      await emailService.sendVerificationEmail({ to: normalizedEmail, token: emailVerificationToken });
+      logger.info('Verification email workflow prepared', {
+        userId: created.userId,
+        mode: emailService.mode,
+      });
 
       return buildSessionResult(created.userId, refreshToken, shouldExposePreview(config)
         ? { previewEmailVerificationToken: emailVerificationToken }
@@ -158,13 +163,15 @@ export function createAuthService({ database, config }) {
       };
     },
 
-    requestEmailVerification(userId) {
+    async requestEmailVerification(userId) {
       const user = buildSessionUser(userId);
       if (user.emailVerified) {
         return { alreadyVerified: true };
       }
 
       const previewToken = issueEmailVerificationToken(userId);
+      await emailService.sendVerificationEmail({ to: user.email, token: previewToken });
+      logger.info('Verification email requested', { userId, mode: emailService.mode });
       return shouldExposePreview(config) ? { previewToken } : {};
     },
 
@@ -184,14 +191,19 @@ export function createAuthService({ database, config }) {
       };
     },
 
-    requestPasswordReset(email) {
+    async requestPasswordReset(email) {
       const normalizedEmail = normalizeEmail(email);
       const user = database.getUserByEmail(normalizedEmail);
       if (!user) {
+        logger.warn('Password reset requested for missing account', {
+          emailHash: crypto.createHash('sha256').update(normalizedEmail).digest('hex'),
+        });
         return {};
       }
 
       const previewToken = issuePasswordResetToken(user.id);
+      await emailService.sendPasswordResetEmail({ to: normalizedEmail, token: previewToken });
+      logger.info('Password reset email requested', { userId: user.id, mode: emailService.mode });
       return shouldExposePreview(config) ? { previewToken } : {};
     },
 
@@ -207,6 +219,15 @@ export function createAuthService({ database, config }) {
 
       const refreshToken = issueRefreshSession(user.id);
       return buildSessionResult(user.id, refreshToken);
+    },
+
+    deleteAccount(userId, password) {
+      const user = database.getUserById(userId);
+      if (!user || !comparePassword(password, user.password_hash)) {
+        throw createHttpError(401, 'Mot de passe invalide.', 'INVALID_CREDENTIALS');
+      }
+
+      database.deleteUserAccount(userId);
     },
   };
 }

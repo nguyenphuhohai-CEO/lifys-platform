@@ -76,6 +76,9 @@ export const api = {
   logout() {
     return apiRequest('/api/auth/logout', { method: 'POST' });
   },
+  deleteAccount(token, password) {
+    return apiRequest('/api/account', { method: 'DELETE', token, body: { password } });
+  },
   getSession(token) {
     return apiRequest('/api/auth/session', { token });
   },
@@ -116,6 +119,20 @@ export const api = {
   },
   passProfile(token, profileId) {
     return apiRequest('/api/interactions/pass', { method: 'POST', token, body: { profileId } });
+  },
+  blockProfile(token, profileId, reason = '') {
+    return apiRequest('/api/interactions/block', { method: 'POST', token, body: { profileId, reason } });
+  },
+  reportProfile(token, profileId, payload = {}) {
+    return apiRequest('/api/reports/profile', {
+      method: 'POST',
+      token,
+      body: {
+        profileId,
+        reason: payload.reason ?? 'safety-review',
+        details: payload.details ?? '',
+      },
+    });
   },
   getMatches(token) {
     return apiRequest('/api/matches', { token });
