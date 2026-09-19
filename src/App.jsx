@@ -523,10 +523,12 @@ function App() {
     try {
       const response = await api.resetPrototype(token);
       const nextSelectedConversation = response.conversations[0]?.id ?? null;
+      const nextView = view === 'messages' && !nextSelectedConversation ? 'matches' : view;
       applyProfileState(response.profile);
       setMatches(response.matches);
       setConversations(response.conversations);
       setSelectedConversation(nextSelectedConversation);
+      setView(nextView);
       setSearchQuery('');
       setCityQuery('');
       setActiveMode('all');
@@ -534,7 +536,7 @@ function App() {
       resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS);
       const restoredAuth = safeWriteJSON(STORAGE_KEYS.auth, { token });
       const restoredSessionUi = safeWriteJSON(STORAGE_KEYS.sessionUi, {
-        view,
+        view: nextView,
         selectedConversation: nextSelectedConversation,
       });
       if (!restoredAuth) {

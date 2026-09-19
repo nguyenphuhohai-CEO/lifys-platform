@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 
 import express from 'express';
 import { rateLimit } from 'express-rate-limit';
@@ -61,10 +60,6 @@ function getRequestIp(req) {
   return req.ip || req.socket.remoteAddress || 'local';
 }
 
-function hashRateLimitToken(token) {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
-
 function createApiRateLimiter({ windowMs, max, keyGenerator }) {
   return rateLimit({
     windowMs,
@@ -110,12 +105,7 @@ export function createApp(config) {
   const writeRateLimiter = createApiRateLimiter({
     windowMs: config.rateLimitWindowMs,
     max: config.writeRateLimitMax,
-    keyGenerator: (req) => {
-      const authorization = `${req.headers.authorization ?? ''}`.trim();
-      return authorization.startsWith('Bearer ')
-        ? `write-token:${hashRateLimitToken(authorization.slice(7))}`
-        : `write-ip:${getRequestIp(req)}`;
-    },
+    keyGenerator: (req) => `write-user:${req.auth.userId}`,
   });
 
   app.disable('x-powered-by');
@@ -147,7 +137,9 @@ export function createApp(config) {
 
     if (allowedOrigin) {
       res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-      res.setHeader('Vary', 'Origin');
+      if (!allowAll) {
+        res.setHeader('Vary', 'Origin');
+      }
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
     }
@@ -275,7 +267,7 @@ export function createApp(config) {
     res.json({ profile: database.getProfileByUserId(req.auth.userId) });
   });
 
-  app.put('/api/profile', writeRateLimiter, requireAuth, (req, res, next) => {
+  app.put('/api/profile', requireAuth, writeRateLimiter, (req, res, next) => {
     try {
       const profile = sanitizeProfileInput(normalizeBody(req.body));
 
@@ -299,7 +291,7 @@ export function createApp(config) {
     });
   });
 
-  app.post('/api/interactions/like', writeRateLimiter, requireAuth, (req, res, next) => {
+  app.post('/api/interactions/like', requireAuth, writeRateLimiter, (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
@@ -314,7 +306,7 @@ export function createApp(config) {
     }
   });
 
-  app.post('/api/interactions/pass', writeRateLimiter, requireAuth, (req, res, next) => {
+  app.post('/api/interactions/pass', requireAuth, writeRateLimiter, (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
@@ -341,7 +333,7 @@ export function createApp(config) {
     res.json({ conversations: database.listConversationsForUser(req.auth.userId) });
   });
 
-  app.post('/api/conversations/:conversationId/messages', writeRateLimiter, requireAuth, (req, res, next) => {
+  app.post('/api/conversations/:conversationId/messages', requireAuth, writeRateLimiter, (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const text = readRequiredString(body, 'text', { maxLength: 2000 });
@@ -361,7 +353,7 @@ export function createApp(config) {
     }
   });
 
-  app.post('/api/prototype/reset', writeRateLimiter, requireAuth, (req, res) => {
+  app.post('/api/prototype/reset', requireAuth, writeRateLimiter, (req, res) => {
     database.resetUserData(req.auth.userId);
     res.json({
       profile: database.getProfileByUserId(req.auth.userId),

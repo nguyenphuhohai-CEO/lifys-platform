@@ -250,6 +250,26 @@ test('register rejects malformed email structures', async () => {
   }
 });
 
+test('register accepts common tagged emails', async () => {
+  const server = await startTestServer();
+
+  try {
+    const response = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'user+tag@example.com',
+        password: 'supersecret',
+        name: 'Tagged Email',
+      }),
+    });
+
+    assert.equal(response.status, 201);
+    assert.ok(response.body.token);
+  } finally {
+    await server.close();
+  }
+});
+
 test('invalid session token returns a clean 401 payload', async () => {
   const server = await startTestServer();
 
@@ -425,4 +445,11 @@ test('CORS preflight rejects unknown origins and allows the configured one', asy
   } finally {
     await server.close();
   }
+});
+
+test('config rejects invalid numeric rate limit values', () => {
+  assert.throws(
+    () => getConfig({ RATE_LIMIT_WINDOW_MS: 'abc' }),
+    /RATE_LIMIT_WINDOW_MS must be a positive number\./,
+  );
 });
