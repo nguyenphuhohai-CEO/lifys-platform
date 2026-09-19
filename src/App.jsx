@@ -522,22 +522,34 @@ function App() {
 
     try {
       const response = await api.resetPrototype(token);
+      const nextSelectedConversation = response.conversations[0]?.id ?? null;
       applyProfileState(response.profile);
       setMatches(response.matches);
       setConversations(response.conversations);
-      setSelectedConversation(response.conversations[0]?.id ?? null);
+      setSelectedConversation(nextSelectedConversation);
       setSearchQuery('');
       setCityQuery('');
       setActiveMode('all');
       setDraftMessage('');
       resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS);
       const restoredAuth = safeWriteJSON(STORAGE_KEYS.auth, { token });
+      const restoredSessionUi = safeWriteJSON(STORAGE_KEYS.sessionUi, {
+        view,
+        selectedConversation: nextSelectedConversation,
+      });
       if (!restoredAuth) {
         setPageError('Le prototype a été réinitialisé, mais le navigateur a refusé de restaurer la session locale. Un rechargement vous déconnectera.');
         showToast({
           type: 'warning',
           title: 'Session non persistée',
           message: 'Le prototype a été réinitialisé, mais le navigateur a refusé de restaurer le jeton local.',
+        });
+      }
+      if (!restoredSessionUi) {
+        showToast({
+          type: 'warning',
+          title: 'Vue non persistée',
+          message: 'Le prototype a été réinitialisé, mais la vue et la conversation actives n’ont pas pu être restaurées localement.',
         });
       }
       await loadDiscovery(token);

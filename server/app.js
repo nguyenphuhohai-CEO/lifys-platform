@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 import express from 'express';
 import { rateLimit } from 'express-rate-limit';
@@ -60,6 +61,10 @@ function getRequestIp(req) {
   return req.ip || req.socket.remoteAddress || 'local';
 }
 
+function hashRateLimitToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
 function createApiRateLimiter({ windowMs, max, keyGenerator }) {
   return rateLimit({
     windowMs,
@@ -108,7 +113,7 @@ export function createApp(config) {
     keyGenerator: (req) => {
       const authorization = `${req.headers.authorization ?? ''}`.trim();
       return authorization.startsWith('Bearer ')
-        ? `write-token:${authorization.slice(7)}`
+        ? `write-token:${hashRateLimitToken(authorization.slice(7))}`
         : `write-ip:${getRequestIp(req)}`;
     },
   });
@@ -138,9 +143,7 @@ export function createApp(config) {
     const allowAll = allowedOrigins.includes('*');
     const allowedOrigin = allowAll
       ? '*'
-      : (requestOrigin && allowedOrigins.length === 0
-        ? requestOrigin
-        : (requestOrigin && allowedOrigins.includes(requestOrigin) ? requestOrigin : ''));
+      : (requestOrigin && allowedOrigins.includes(requestOrigin) ? requestOrigin : '');
 
     if (allowedOrigin) {
       res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
@@ -150,6 +153,11 @@ export function createApp(config) {
     }
 
     if (req.method === 'OPTIONS') {
+      if (allowedOrigins.length === 0) {
+        res.status(204).end();
+        return;
+      }
+
       if (!allowedOrigin) {
         next(createHttpError(403, 'Origine non autorisée.', 'CORS_ORIGIN_DENIED'));
         return;
