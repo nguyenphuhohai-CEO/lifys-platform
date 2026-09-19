@@ -1,13 +1,13 @@
 # Lifys Platform
 
-Lifys est un **MVP local en React + Vite** pour une expérience de rencontre multi-catégories : **Amical**, **Amoureux**, **Sans lendemain**, **Mariage** et **Professionnel**.
+Lifys est maintenant un **MVP full-stack local** : frontend **React + Vite** connecté à un backend **Express + SQLite + JWT** pour une expérience de rencontre multi-catégories : **Amical**, **Amoureux**, **Sans lendemain**, **Mariage** et **Professionnel**.
 
-L’application reste volontairement **locale et simulée** :
+L’application reste encore volontairement **locale et partiellement simulée** :
 
+- les comptes, profils, matchs et messages sont persistés dans votre instance locale ;
 - les profils de découverte sont fictifs ;
-- les likes, matchs et messages sont stockés dans le navigateur ;
 - aucune vérification d’identité réelle n’est effectuée ;
-- aucun paiement, backend produit ou temps réel n’est présenté comme existant.
+- aucun paiement ou temps réel WebSocket n’est encore présenté comme existant.
 
 ## Aperçu
 
@@ -20,8 +20,8 @@ Le MVP propose :
 - des centres d’intérêt nettoyés et formatés ;
 - une découverte filtrable par catégorie, texte et ville ;
 - des actions Like / Pass accessibles ;
-- des matchs simulés avec accès direct à la messagerie ;
-- des conversations locales avec envoi par `Enter` ;
+- des matchs persistés avec accès direct à la messagerie ;
+- des conversations persistées avec envoi par `Enter` ;
 - des notifications non bloquantes ;
 - une récupération sûre du `localStorage` si des données JSON sont corrompues ;
 - une réinitialisation complète du prototype local.
@@ -30,6 +30,7 @@ Le MVP propose :
 
 ```bash
 npm install
+cp .env.example .env
 ```
 
 ## Scripts
@@ -38,20 +39,23 @@ npm install
 # développement frontend
 npm run dev
 
+# développement backend local
+npm run dev:server
+
 # build de production frontend
 npm run build
 
 # tests Node existants
 npm test
 
-# socle serveur conservé dans le dépôt (non requis pour le MVP local)
-npm run dev:server
+# lancer le serveur Express (et servir dist si build présent)
 npm start
 ```
 
-Pour lancer le MVP local :
+Pour lancer le MVP full-stack local :
 
 ```bash
+npm run dev:server
 npm run dev -- --host
 ```
 
@@ -71,7 +75,7 @@ npm run dev -- --host
 - aperçu en direct ;
 - avatar fallback si l’image est absente ou cassée ;
 - intérêts normalisés sous forme lisible ;
-- persistance locale robuste.
+- persistance backend sur SQLite locale.
 
 ### Découverte
 
@@ -84,7 +88,7 @@ npm run dev -- --host
 
 ### Matchs
 
-- création locale de matchs à partir d’affinités simulées ;
+- création persistée de matchs à partir d’affinités simulées ;
 - explication courte de la raison du match ;
 - action directe vers la messagerie.
 
@@ -93,12 +97,12 @@ npm run dev -- --host
 - liste de conversations ;
 - état vide si rien n’est sélectionné ;
 - envoi au clavier avec `Enter` ;
-- persistance locale des messages ;
+- persistance backend des messages ;
 - meilleure lisibilité des bulles et de la sélection active.
 
 ### Robustesse locale
 
-- lecture JSON sécurisée de `localStorage` avec fallback ;
+- lecture JSON sécurisée de `localStorage` avec fallback pour la session JWT ;
 - nettoyage des clés corrompues ;
 - réinitialisation complète des données du prototype ;
 - message explicite lorsque le navigateur refuse la persistance locale.
@@ -107,33 +111,32 @@ npm run dev -- --host
 
 ```text
 src/
-  App.jsx                 # shell principal et vues du MVP local
+  App.jsx                 # shell principal branché à l’API backend
   components/
     Avatar.jsx            # avatar + fallback initiales
     ToastRegion.jsx       # notifications non bloquantes
   data/
     demoData.js           # catégories et profils fictifs
   lib/
-    api.js                # socle conservé pour une future API
+    api.js                # client API fetch centralisé
   utils/
     app-utils.js          # filtrage, matching, sanitization
     app-utils.test.js     # tests ciblés utilitaires/localStorage
     storage.js            # lecture/écriture/reset localStorage sûrs
   styles.css              # design system et responsive UI
 
-server/                   # base de travail future, non utilisée par le MVP local actuel
+server/                   # API Express, auth JWT et persistance SQLite
 ```
 
-## Limites du MVP local
+## Limites du MVP full-stack local
 
-- aucune authentification réelle ;
+- pas de vérification e-mail ;
 - aucune vérification d’identité ;
 - aucun paiement ;
-- aucun backend produit actif dans l’expérience courante ;
-- aucune base de données utilisée par le frontend MVP ;
+- backend local mono-instance, pas encore prêt pour une prod publique ;
 - aucune synchronisation entre appareils ;
 - aucune messagerie temps réel ;
-- données effaçables par l’utilisateur ou par le navigateur ;
+- stockage JWT encore côté navigateur ;
 - profils de découverte entièrement fictifs.
 
 ## Roadmap recommandée
@@ -167,7 +170,7 @@ server/                   # base de travail future, non utilisée par le MVP loc
 
 ## Avertissement sécurité
 
-Ce dépôt reste un **prototype local**.  
+Ce dépôt reste un **prototype full-stack local**.  
 Ne pas y saisir de données sensibles réelles. Avant toute mise en production future, prévoir au minimum :
 
 - authentification et sessions durcies ;
@@ -185,7 +188,7 @@ Ne pas y saisir de données sensibles réelles. Avant toute mise en production f
 ## Vérifications à documenter dans la pull request
 
 - résumé des changements UX/UI ;
-- confirmation du maintien du fonctionnement local/simulé ;
+- confirmation du fonctionnement frontend/backend local ;
 - résultats de `npm test` ;
 - résultats de `npm run build` ;
 - scan des secrets sur les fichiers modifiés.

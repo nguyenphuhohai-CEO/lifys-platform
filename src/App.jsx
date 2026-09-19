@@ -1,23 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Avatar from './components/Avatar';
 import ToastRegion from './components/ToastRegion';
-import { DEFAULT_MESSAGES, DEMO_PROFILES, MODES, defaultProfile } from './data/demoData';
-import {
-  applyLikeAction,
-  applyPassAction,
-  appendMessageToConversation,
-  ensureConversationForProfile,
-  filterProfiles,
-  getConversationPreview,
-  getModeById,
-  loadInitialState,
-  sanitizeConversations,
-  sanitizeIdList,
-  sanitizeMatches,
-  sanitizeProfile,
-  serializeInterests,
-} from './utils/app-utils';
+import { MODES, defaultProfile } from './data/demoData';
+import { api, ApiError } from './lib/api';
+import { getConversationPreview, getModeById, serializeInterests } from './utils/app-utils';
 import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './utils/storage';
 
 const NAV_ITEMS = [
@@ -31,20 +18,16 @@ const NAV_ITEMS = [
 const PROTOTYPE_STORAGE_KEYS = [
   STORAGE_KEYS.profile,
   STORAGE_KEYS.likes,
-  STORAGE_KEYS.passed,
   STORAGE_KEYS.matches,
   STORAGE_KEYS.messages,
+  STORAGE_KEYS.passed,
 ];
 
-function getInitialPrototypeState() {
-  return loadInitialState({
-    profile: () => safeReadJSON(STORAGE_KEYS.profile, defaultProfile, { sanitize: sanitizeProfile }),
-    likes: () => safeReadJSON(STORAGE_KEYS.likes, [], { sanitize: sanitizeIdList }),
-    passed: () => safeReadJSON(STORAGE_KEYS.passed, [], { sanitize: sanitizeIdList }),
-    matches: () => safeReadJSON(STORAGE_KEYS.matches, [], { sanitize: sanitizeMatches }),
-    messages: () => safeReadJSON(STORAGE_KEYS.messages, DEFAULT_MESSAGES, { sanitize: sanitizeConversations }),
-  });
-}
+const initialAuth = safeReadJSON(STORAGE_KEYS.auth, { token: '' }, {
+  sanitize: (value) => ({
+    token: typeof value?.token === 'string' ? value.token : '',
+  }),
+}).data;
 
 function EmptyState({ title, description, actionLabel, onAction }) {
   return (
@@ -70,31 +53,30 @@ function SectionHeader({ eyebrow, title, description, aside }) {
 }
 
 function App() {
-  const [initialState] = useState(() => getInitialPrototypeState());
-  const hasHydratedRef = useRef(false);
+  const [token, setToken] = useState(initialAuth.token);
+  const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState('home');
   const [activeMode, setActiveMode] = useState('all');
-  const [profile, setProfile] = useState(initialState.profile);
-  const [profileDraft, setProfileDraft] = useState({
-    ...initialState.profile,
-    interests: serializeInterests(initialState.profile.interests),
-  });
+  const [profile, setProfile] = useState(defaultProfile);
+  const [profileDraft, setProfileDraft] = useState(defaultProfile);
   const [profileErrors, setProfileErrors] = useState({});
-  const [likes, setLikes] = useState(initialState.likes);
-  const [passed, setPassed] = useState(initialState.passed);
-  const [matches, setMatches] = useState(initialState.matches);
-  const [conversations, setConversations] = useState(initialState.messages);
-  const [selectedConversation, setSelectedConversation] = useState(initialState.messages[0]?.id ?? null);
+  const [profiles, setProfiles] = useState([]);
+  const [matches, setMatches] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [selectedConversation, setSelectedConversation] = useState(null);
   const [draftMessage, setDraftMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [cityQuery, setCityQuery] = useState('');
   const [toasts, setToasts] = useState([]);
   const [sessionLoading, setSessionLoading] = useState(true);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [messageSending, setMessageSending] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [pageError, setPageError] = useState('');
-  const [storageAvailable, setStorageAvailable] = useState(initialState.storageAvailable);
 
   const showToast = useCallback((toast) => {
     const id = `${toast.type}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -104,95 +86,104 @@ function App() {
     }, 4200);
   }, []);
 
-  const handleStorageFailure = useCallback(() => {
-    setStorageAvailable(false);
-    setPageError('La sauvegarde locale du prototype est indisponible sur ce navigateur. Les données restent simulées et temporaires.');
+  const handleApiError = useCallback((error, fallbackMessage) => {
+    const message = error instanceof ApiError ? error.message : fallbackMessage;
+    setPageError(message);
     showToast({
       type: 'warning',
-      title: 'Sauvegarde locale indisponible',
-      message: 'Votre navigateur a refusé la persistance locale. Les changements restent visibles pendant cette session uniquement.',
-    });
-  }, [showToast]);
-
-  const handleWriteFailure = useCallback(() => {
-    setPageError('Certaines données locales n’ont pas pu être enregistrées. Réessayez ou réinitialisez le prototype.');
-    showToast({
-      type: 'warning',
-      title: 'Écriture locale incomplète',
-      message: 'Le prototype continue de fonctionner, mais une partie des changements n’a pas pu être enregistrée.',
+      title: 'Action interrompue',
+      message,
     });
   }, [showToast]);
 
   useEffect(() => {
-    if (initialState.recoveredKeys.length) {
-      showToast({
-        type: 'warning',
-        title: 'Données locales réparées',
-        message: `Les clés corrompues suivantes ont été réinitialisées : ${initialState.recoveredKeys.join(', ')}.`,
+    if (token) {
+      if (!safeWriteJSON(STORAGE_KEYS.auth, { token })) {
+        showToast({
+          type: 'warning',
+          title: 'Session non persistée',
+          message: 'Le navigateur a refusé la persistance locale du jeton. La session restera active jusqu’au rechargement.',
+        });
+      }
+    } else {
+      resetPrototypeStorage([STORAGE_KEYS.auth]);
+    }
+  }, [showToast, token]);
+
+  const loadDiscovery = useCallback(async (authToken) => {
+    setDiscoveryLoading(true);
+
+    try {
+      const response = await api.getDiscovery(authToken, {
+        activeMode,
+        query: searchQuery,
+        city: cityQuery,
       });
+      setProfiles(response.profiles);
+      setPageError('');
+    } catch (error) {
+      handleApiError(error, 'Impossible de charger la découverte.');
+    } finally {
+      setDiscoveryLoading(false);
     }
+  }, [activeMode, cityQuery, handleApiError, searchQuery]);
 
-    if (!initialState.storageAvailable) {
-      handleStorageFailure();
+  const loadDashboard = useCallback(async (authToken) => {
+    setDashboardLoading(true);
+
+    try {
+      const [sessionData, bootstrapData, discoveryData] = await Promise.all([
+        api.getSession(authToken),
+        api.getBootstrap(authToken),
+        api.getDiscovery(authToken, {
+          activeMode,
+          query: searchQuery,
+          city: cityQuery,
+        }),
+      ]);
+
+      setCurrentUser(sessionData.user);
+      setProfile(bootstrapData.profile);
+      setProfileDraft({
+        ...bootstrapData.profile,
+        interests: serializeInterests(bootstrapData.profile.interests),
+      });
+      setMatches(bootstrapData.matches);
+      setConversations(bootstrapData.conversations);
+      setProfiles(discoveryData.profiles);
+      setSelectedConversation((current) => (
+        bootstrapData.conversations.some((conversation) => conversation.id === current)
+          ? current
+          : bootstrapData.conversations[0]?.id ?? null
+      ));
+      setPageError('');
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setToken('');
+        setCurrentUser(null);
+      }
+      handleApiError(error, 'Impossible de charger votre espace Lifys.');
+    } finally {
+      setDashboardLoading(false);
+      setSessionLoading(false);
     }
-
-    const timeoutId = window.setTimeout(() => setSessionLoading(false), 180);
-    return () => window.clearTimeout(timeoutId);
-  }, [handleStorageFailure, initialState, showToast]);
+  }, [activeMode, cityQuery, handleApiError, searchQuery]);
 
   useEffect(() => {
-    if (!hasHydratedRef.current) {
+    if (!token) {
+      setSessionLoading(false);
+      setCurrentUser(null);
       return;
     }
 
-    if (!safeWriteJSON(STORAGE_KEYS.profile, profile)) {
-      handleWriteFailure();
-    }
-  }, [handleWriteFailure, profile]);
+    loadDashboard(token);
+  }, [loadDashboard, token]);
 
   useEffect(() => {
-    if (!hasHydratedRef.current) {
-      return;
+    if (currentUser && token) {
+      loadDiscovery(token);
     }
-
-    if (!safeWriteJSON(STORAGE_KEYS.likes, likes)) {
-      handleWriteFailure();
-    }
-  }, [handleWriteFailure, likes]);
-
-  useEffect(() => {
-    if (!hasHydratedRef.current) {
-      return;
-    }
-
-    if (!safeWriteJSON(STORAGE_KEYS.passed, passed)) {
-      handleWriteFailure();
-    }
-  }, [handleWriteFailure, passed]);
-
-  useEffect(() => {
-    if (!hasHydratedRef.current) {
-      return;
-    }
-
-    if (!safeWriteJSON(STORAGE_KEYS.matches, matches)) {
-      handleWriteFailure();
-    }
-  }, [handleWriteFailure, matches]);
-
-  useEffect(() => {
-    if (!hasHydratedRef.current) {
-      return;
-    }
-
-    if (!safeWriteJSON(STORAGE_KEYS.messages, conversations)) {
-      handleWriteFailure();
-    }
-  }, [conversations, handleWriteFailure]);
-
-  useEffect(() => {
-    hasHydratedRef.current = true;
-  }, []);
+  }, [activeMode, cityQuery, currentUser, loadDiscovery, searchQuery, token]);
 
   useEffect(() => {
     setProfileDraft((current) => ({
@@ -209,25 +200,8 @@ function App() {
   }, [conversations, selectedConversation]);
 
   const selectedConversationData = conversations.find((conversation) => conversation.id === selectedConversation) ?? null;
+  const availableCities = useMemo(() => [...new Set(profiles.map((item) => item.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [profiles]);
   const completedProfile = Boolean(profile.name && profile.age && profile.city && profile.bio);
-  const availableCities = useMemo(
-    () => [...new Set(DEMO_PROFILES.map((item) => item.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-    [],
-  );
-  const visibleProfiles = useMemo(() => filterProfiles({
-    profiles: DEMO_PROFILES,
-    activeMode,
-    likes,
-    passed,
-    profileMode: profile.mode,
-    query: searchQuery,
-    city: cityQuery,
-  }), [activeMode, cityQuery, likes, passed, profile.mode, searchQuery]);
-
-  const totalMessages = useMemo(
-    () => conversations.reduce((count, conversation) => count + conversation.messages.length, 0),
-    [conversations],
-  );
 
   const validateProfile = () => {
     const errors = {};
@@ -251,18 +225,47 @@ function App() {
     return errors;
   };
 
-  const updateProfileField = (field, value) => {
-    setProfileDraft((current) => ({ ...current, [field]: value }));
-  };
+  const [authMode, setAuthMode] = useState('register');
+  const [authForm, setAuthForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    mode: 'amoureux',
+  });
 
-  const setCurrentView = (nextView) => {
-    setView(nextView);
-    setIsMobileNavOpen(false);
-  };
-
-  const handleProfileSave = (event) => {
+  const handleAuthSubmit = async (event) => {
     event.preventDefault();
-    setProfileSaving(true);
+    setAuthSubmitting(true);
+
+    try {
+      const response = authMode === 'register'
+        ? await api.register(authForm)
+        : await api.login({ email: authForm.email, password: authForm.password });
+
+      setToken(response.token);
+      setCurrentUser(response.user);
+      setView('profile');
+      setAuthForm({
+        name: '',
+        email: '',
+        password: '',
+        mode: 'amoureux',
+      });
+      showToast({
+        type: 'success',
+        title: authMode === 'register' ? 'Compte créé' : 'Connexion réussie',
+        message: 'Votre session Lifys backend est maintenant active.',
+      });
+      setPageError('');
+    } catch (error) {
+      handleApiError(error, 'Impossible de démarrer votre session.');
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleProfileSave = async (event) => {
+    event.preventDefault();
     const errors = validateProfile();
     setProfileErrors(errors);
 
@@ -272,146 +275,151 @@ function App() {
         title: 'Profil incomplet',
         message: 'Corrigez les champs signalés avant l’enregistrement.',
       });
-      setProfileSaving(false);
       return;
     }
 
-    const nextProfile = sanitizeProfile(profileDraft);
-    setProfile(nextProfile);
-    setProfileDraft({
-      ...nextProfile,
-      interests: serializeInterests(nextProfile.interests),
-    });
-    setProfileErrors({});
-    setPageError('');
-    setView('discover');
-    setProfileSaving(false);
-    showToast({
-      type: 'success',
-      title: 'Profil enregistré',
-      message: storageAvailable
-        ? 'Vos préférences sont sauvegardées localement sur cet appareil.'
-        : 'Vos préférences sont à jour pour cette session locale.',
-    });
-  };
+    setProfileSaving(true);
 
-  const handleLike = (profileId) => {
-    const result = applyLikeAction({
-      profileId,
-      profile,
-      likes,
-      passed,
-      matches,
-      conversations,
-    });
-
-    if (!result) {
-      return;
-    }
-
-    setLikes(result.likes);
-    setPassed(result.passed);
-    setPageError('');
-
-    if (result.matched) {
-      setMatches(result.matches);
-      setConversations(result.conversations);
-      setSelectedConversation(result.selectedConversationId);
-      setView('matches');
+    try {
+      const response = await api.updateProfile(token, profileDraft);
+      setProfile(response.profile);
+      setProfileDraft({
+        ...response.profile,
+        interests: serializeInterests(response.profile.interests),
+      });
+      setProfileErrors({});
+      setView('discover');
+      setPageError('');
       showToast({
         type: 'success',
-        title: 'Match local confirmé',
-        message: 'Une conversation simulée a été ouverte dans votre messagerie.',
+        title: 'Profil synchronisé',
+        message: 'Votre profil est maintenant enregistré côté serveur.',
       });
+      await loadDiscovery(token);
+    } catch (error) {
+      handleApiError(error, 'Impossible de sauvegarder le profil.');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handleLike = async (profileId) => {
+    try {
+      const response = await api.likeProfile(token, profileId);
+      await loadDashboard(token);
+
+      if (response.matched) {
+        setSelectedConversation(response.conversationId);
+        showToast({
+          type: 'success',
+          title: 'Match confirmé',
+          message: 'Le backend a créé votre match et ouvert une conversation persistante.',
+        });
+      } else {
+        showToast({
+          type: 'info',
+          title: 'Like enregistré',
+          message: 'Votre intérêt a été sauvegardé côté serveur.',
+        });
+      }
+    } catch (error) {
+      handleApiError(error, 'Impossible d’enregistrer ce like.');
+    }
+  };
+
+  const handlePass = async (profileId) => {
+    try {
+      await api.passProfile(token, profileId);
+      await loadDiscovery(token);
+    } catch (error) {
+      handleApiError(error, 'Impossible d’enregistrer ce pass.');
+    }
+  };
+
+  const handleSendMessage = async () => {
+    const text = draftMessage.trim();
+    if (!text || !selectedConversationData) {
       return;
     }
 
-    showToast({
-      type: 'info',
-      title: 'Like enregistré',
-      message: 'Ce profil fictif a été retiré de votre découverte locale.',
-    });
-  };
+    setMessageSending(true);
 
-  const handlePass = (profileId) => {
-    const result = applyPassAction({
-      profileId,
-      likes,
-      passed,
-      matches,
-      conversations,
-      selectedConversationId: selectedConversation,
-    });
-
-    setLikes(result.likes);
-    setPassed(result.passed);
-    setMatches(result.matches);
-    setConversations(result.conversations);
-    setSelectedConversation(result.selectedConversationId);
-    setPageError('');
-    showToast({
-      type: 'info',
-      title: 'Profil masqué',
-      message: 'Le profil ne sera plus affiché dans cette session locale.',
-    });
-  };
-
-  const handleSendMessage = () => {
-    if (!selectedConversationData) {
-      return;
+    try {
+      const response = await api.sendMessage(token, selectedConversationData.id, text);
+      setConversations((current) => current.map((conversation) => (
+        conversation.id === response.conversation.id ? response.conversation : conversation
+      )));
+      setMatches((current) => current.map((match) => (
+        match.profileId === response.conversation.profileId
+          ? { ...match, lastMessage: text }
+          : match
+      )));
+      setDraftMessage('');
+      setPageError('');
+    } catch (error) {
+      handleApiError(error, 'Impossible d’envoyer le message.');
+    } finally {
+      setMessageSending(false);
     }
-
-    const result = appendMessageToConversation({
-      conversationId: selectedConversationData.id,
-      text: draftMessage,
-      conversations,
-      matches,
-    });
-
-    if (!result) {
-      return;
-    }
-
-    setConversations(result.conversations);
-    setMatches(result.matches);
-    setDraftMessage('');
-    setPageError('');
   };
 
-  const handleResetPrototype = () => {
-    const defaultMessages = sanitizeConversations(DEFAULT_MESSAGES);
-    const resetProfile = { ...defaultProfile };
-
+  const handleResetPrototype = async () => {
     setResetting(true);
-    if (!resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS)) {
-      handleWriteFailure();
+
+    try {
+      const response = await api.resetPrototype(token);
+      setProfile(response.profile);
+      setProfileDraft({
+        ...response.profile,
+        interests: serializeInterests(response.profile.interests),
+      });
+      setMatches(response.matches);
+      setConversations(response.conversations);
+      setSelectedConversation(response.conversations[0]?.id ?? null);
+      setSearchQuery('');
+      setCityQuery('');
+      setActiveMode('all');
+      setDraftMessage('');
+      resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS);
+      safeWriteJSON(STORAGE_KEYS.auth, { token });
+      await loadDiscovery(token);
+      showToast({
+        type: 'success',
+        title: 'Données de démonstration réinitialisées',
+        message: 'Vos interactions serveur ont été nettoyées et votre profil a été réinitialisé.',
+      });
+    } catch (error) {
+      handleApiError(error, 'Impossible de réinitialiser le prototype.');
+    } finally {
       setResetting(false);
-      return;
     }
-    setProfile(resetProfile);
-    setProfileDraft({
-      ...resetProfile,
-      interests: serializeInterests(resetProfile.interests),
-    });
-    setProfileErrors({});
-    setLikes([]);
-    setPassed([]);
+  };
+
+  const handleLogout = () => {
+    setToken('');
+    setCurrentUser(null);
+    setProfile(defaultProfile);
+    setProfileDraft(defaultProfile);
+    setProfiles([]);
     setMatches([]);
-    setConversations(defaultMessages);
-    setSelectedConversation(defaultMessages[0]?.id ?? null);
-    setSearchQuery('');
-    setCityQuery('');
-    setActiveMode('all');
+    setConversations([]);
+    setSelectedConversation(null);
     setDraftMessage('');
     setPageError('');
-    setView('home');
-    setResetting(false);
-
     showToast({
-      type: 'success',
-      title: 'Prototype réinitialisé',
-      message: 'Les données locales ont été effacées et les conversations de démonstration ont été restaurées.',
+      type: 'info',
+      title: 'Session fermée',
+      message: 'Votre jeton local a été supprimé du navigateur.',
     });
+  };
+
+  const updateProfileField = (field, value) => {
+    setProfileDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const setCurrentView = (nextView) => {
+    setView(nextView);
+    setIsMobileNavOpen(false);
   };
 
   if (sessionLoading) {
@@ -419,9 +427,89 @@ function App() {
       <div className="app-shell app-loading">
         <div className="content-panel loading-panel" role="status" aria-live="polite">
           <p className="eyebrow">Chargement</p>
-          <h1>Lifys prépare votre prototype local…</h1>
-          <p className="section-description">Lecture des données simulées, restauration des préférences locales et contrôle des éventuelles corruptions.</p>
+          <h1>Lifys établit la connexion sécurisée…</h1>
+          <p className="section-description">Initialisation de votre session, du backend Express et de la base SQLite.</p>
         </div>
+      </div>
+    );
+  }
+
+  if (!token || !currentUser) {
+    return (
+      <div className="app-shell">
+        <ToastRegion toasts={toasts} onDismiss={(toastId) => setToasts((current) => current.filter((item) => item.id !== toastId))} />
+        <main className="page-shell">
+          <section className="hero-panel auth-hero">
+            <div className="hero-copy">
+              <p className="eyebrow">Frontend React + backend Express</p>
+              <h1>Lifys passe du prototype local à un MVP backend concret.</h1>
+              <p>
+                Les comptes, profils, matchs et conversations sont maintenant portés par le backend local.
+                Les profils de découverte restent fictifs tant que la plateforme n’est pas ouverte à de vrais utilisateurs.
+              </p>
+              <div className="hero-metrics">
+                <article className="metric-card">
+                  <span>Backend</span>
+                  <strong>Express</strong>
+                  <small>API JSON sécurisée</small>
+                </article>
+                <article className="metric-card">
+                  <span>Base</span>
+                  <strong>SQLite</strong>
+                  <small>persistante en local</small>
+                </article>
+                <article className="metric-card">
+                  <span>Session</span>
+                  <strong>JWT</strong>
+                  <small>restaurée après reload</small>
+                </article>
+              </div>
+            </div>
+
+            <div className="content-panel auth-card">
+              <SectionHeader
+                eyebrow={authMode === 'register' ? 'Créer un compte' : 'Connexion'}
+                title={authMode === 'register' ? 'Commencer sur Lifys' : 'Reprendre votre session'}
+                description="Les comptes utilisateur sont réels dans votre instance locale. Les profils de découverte restent des profils fictifs de démonstration."
+              />
+
+              {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
+
+              <form className="profile-form" onSubmit={handleAuthSubmit}>
+                {authMode === 'register' ? (
+                  <label>
+                    <span>Prénom</span>
+                    <input value={authForm.name} onChange={(event) => setAuthForm((current) => ({ ...current, name: event.target.value }))} />
+                  </label>
+                ) : null}
+                <label>
+                  <span>E-mail</span>
+                  <input type="email" value={authForm.email} onChange={(event) => setAuthForm((current) => ({ ...current, email: event.target.value }))} />
+                </label>
+                <label>
+                  <span>Mot de passe</span>
+                  <input type="password" value={authForm.password} onChange={(event) => setAuthForm((current) => ({ ...current, password: event.target.value }))} />
+                </label>
+                {authMode === 'register' ? (
+                  <label>
+                    <span>Catégorie principale</span>
+                    <select value={authForm.mode} onChange={(event) => setAuthForm((current) => ({ ...current, mode: event.target.value }))}>
+                      {MODES.map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+                    </select>
+                  </label>
+                ) : null}
+                <div className="form-actions">
+                  <button type="submit" className="primary-button" disabled={authSubmitting}>
+                    {authSubmitting ? 'Chargement…' : authMode === 'register' ? 'Créer mon compte' : 'Se connecter'}
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => setAuthMode((current) => current === 'register' ? 'login' : 'register')}>
+                    {authMode === 'register' ? 'J’ai déjà un compte' : 'Créer un nouveau compte'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </section>
+        </main>
       </div>
     );
   }
@@ -435,7 +523,7 @@ function App() {
           <span className="brand-icon">❤</span>
           <span>
             <strong>Lifys</strong>
-            <small>Prototype local React + Vite</small>
+            <small>React + Express + SQLite</small>
           </span>
         </button>
 
@@ -463,20 +551,21 @@ function App() {
         </nav>
 
         <div className="topbar-actions">
-          <span className={storageAvailable ? 'prototype-badge' : 'counter-badge muted'}>
-            {storageAvailable ? 'Sauvegarde locale active' : 'Sauvegarde temporaire'}
-          </span>
+          <span className="prototype-badge">{currentUser.email}</span>
           <button type="button" className="secondary-button" onClick={handleResetPrototype} disabled={resetting}>
             {resetting ? 'Réinitialisation…' : 'Réinitialiser'}
+          </button>
+          <button type="button" className="secondary-button" onClick={handleLogout}>
+            Déconnexion
           </button>
         </div>
       </header>
 
       <main className="page-shell">
         <section className="local-notice" aria-label="Avertissement MVP">
-          <strong>MVP local & simulé</strong>
-          <span>Les profils de découverte, matchs et messages sont fictifs ou simulés dans votre navigateur. Aucune identité réelle n’est vérifiée.</span>
-          <span>{storageAvailable ? 'Les données restent sur cet appareil via localStorage.' : 'Le navigateur refuse la persistance : les changements resteront visibles uniquement pendant cette session.'}</span>
+          <strong>MVP backend local</strong>
+          <span>Les comptes utilisateur, profils, matchs et messages sont persistés dans SQLite sur votre instance locale.</span>
+          <span>Les profils de découverte restent fictifs et aucune identité réelle n’est encore vérifiée.</span>
         </section>
 
         {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
@@ -485,11 +574,11 @@ function App() {
           <>
             <section className="hero-panel">
               <div className="hero-copy">
-                <span className="eyebrow">Expérience premium locale</span>
-                <h1>Un MVP Lifys plus chaleureux, fiable et prêt à être présenté.</h1>
+                <span className="eyebrow">MVP full-stack local</span>
+                <h1>Une base Lifys désormais connectée à un vrai backend.</h1>
                 <p>
-                  Explorez cinq catégories — Amical, Amoureux, Sans lendemain, Mariage et Professionnel — dans
-                  une expérience responsive, sobre et entièrement locale.
+                  Votre profil, vos likes, vos matchs et vos messages sont servis par Express et stockés en SQLite,
+                  tout en conservant une expérience premium et des profils de découverte fictifs pour la démo.
                 </p>
 
                 <div className="cta-row">
@@ -502,18 +591,18 @@ function App() {
                 <div className="hero-metrics">
                   <article className="metric-card">
                     <span>Profils</span>
-                    <strong>{visibleProfiles.length}</strong>
-                    <small>correspondances visibles selon vos filtres</small>
+                    <strong>{profiles.length}</strong>
+                    <small>retournés par l’API</small>
                   </article>
                   <article className="metric-card">
                     <span>Matchs</span>
                     <strong>{matches.length}</strong>
-                    <small>enregistrés localement sur cet appareil</small>
+                    <small>persistés en base</small>
                   </article>
                   <article className="metric-card">
                     <span>Messages</span>
-                    <strong>{totalMessages}</strong>
-                    <small>conservés dans votre prototype local</small>
+                    <strong>{conversations.reduce((count, conversation) => count + conversation.messages.length, 0)}</strong>
+                    <small>restaurés après reload</small>
                   </article>
                 </div>
               </div>
@@ -521,18 +610,18 @@ function App() {
               <div className="hero-visual">
                 <div className="mini-card large">
                   <span className="mini-label">Catégorie active</span>
-                  <h3>{getModeById(activeMode === 'all' ? (profile.mode || defaultProfile.mode) : activeMode).label}</h3>
+                  <h3>{getModeById(profile.mode || 'amoureux').label}</h3>
                   <p>{profile.city || 'Ville à compléter'} · {profile.age || '18+'} ans</p>
                 </div>
                 <div className="mini-card">
-                  <span className="mini-label">Profil</span>
-                  <strong>{completedProfile ? 'Prêt à matcher' : 'À compléter'}</strong>
-                  <p>{profile.name || 'Ajoutez votre prénom pour personnaliser le prototype.'}</p>
+                  <span className="mini-label">Compte</span>
+                  <strong>{completedProfile ? 'Actif' : 'À compléter'}</strong>
+                  <p>{currentUser.email}</p>
                 </div>
                 <div className="mini-card">
-                  <span className="mini-label">Positionnement</span>
-                  <strong>Local & démonstratif</strong>
-                  <p>Sans backend requis, sans paiement, sans vérification d’identité.</p>
+                  <span className="mini-label">Stack</span>
+                  <strong>React + Express</strong>
+                  <p>JWT · SQLite · Vite</p>
                 </div>
               </div>
             </section>
@@ -562,10 +651,10 @@ function App() {
             <SectionHeader
               eyebrow="Découverte"
               title="Profils recommandés"
-              description="Filtrez des profils fictifs de démonstration par catégorie, texte ou ville. Les likes et passes restent locaux."
+              description="La découverte est maintenant pilotée par l’API backend et exclut les profils déjà likés ou passés."
               aside={(
                 <div className="header-meta">
-                  <span className="counter-badge">{`${visibleProfiles.length} profil${visibleProfiles.length > 1 ? 's' : ''}`}</span>
+                  <span className="counter-badge">{discoveryLoading ? 'Chargement…' : `${profiles.length} profil${profiles.length > 1 ? 's' : ''}`}</span>
                 </div>
               )}
             />
@@ -595,10 +684,12 @@ function App() {
               </div>
             </div>
 
-            {visibleProfiles.length === 0 ? (
+            {discoveryLoading ? (
+              <EmptyState title="Chargement des profils" description="Le backend prépare vos recommandations." />
+            ) : profiles.length === 0 ? (
               <EmptyState
                 title="Aucun profil disponible"
-                description="Essayez une autre catégorie, élargissez vos filtres ou réinitialisez votre prototype local."
+                description="Essayez une autre catégorie, élargissez vos filtres ou réinitialisez vos interactions."
                 actionLabel="Effacer les filtres"
                 onAction={() => {
                   setSearchQuery('');
@@ -608,7 +699,7 @@ function App() {
               />
             ) : (
               <div className="discover-grid">
-                {visibleProfiles.map((person) => (
+                {profiles.map((person) => (
                   <article key={person.id} className="profile-card">
                     <Avatar className="profile-avatar" src={person.avatar} alt={person.name} fallback={person.name} />
                     <div className="profile-card-body">
@@ -642,11 +733,13 @@ function App() {
             <SectionHeader
               eyebrow="Matchs"
               title="Vos correspondances"
-              description="Chaque match découle d’une affinité simulée : catégorie, ville ou intérêts communs."
+              description="Les matchs sont créés par le backend et restent disponibles au redémarrage de l’application."
             />
 
-            {matches.length === 0 ? (
-              <EmptyState title="Aucun match pour l’instant" description="Commencez par liker des profils pour créer vos premières connexions locales." actionLabel="Voir la découverte" onAction={() => setCurrentView('discover')} />
+            {dashboardLoading ? (
+              <EmptyState title="Chargement des matchs" description="Lecture des correspondances depuis SQLite." />
+            ) : matches.length === 0 ? (
+              <EmptyState title="Aucun match pour l’instant" description="Commencez par liker des profils pour créer vos premières connexions." actionLabel="Voir la découverte" onAction={() => setCurrentView('discover')} />
             ) : (
               <div className="matches-list">
                 {matches.map((match) => (
@@ -656,17 +749,10 @@ function App() {
                       <h3>{match.name}</h3>
                       <p>{match.city || 'Ville non précisée'} · {getModeById(match.mode).label}</p>
                       <small>{match.reason}</small>
-                      <small>{match.lastMessage}</small>
                     </div>
                     <button type="button" className="secondary-button" onClick={() => {
-                      const conversationState = ensureConversationForProfile({
-                        profileId: match.profileId,
-                        conversations,
-                      });
-                      if (conversationState) {
-                        setConversations(conversationState.conversations);
-                        setSelectedConversation(conversationState.conversation.id);
-                      }
+                      const conversation = conversations.find((item) => item.profileId === match.profileId);
+                      setSelectedConversation(conversation?.id ?? null);
                       setCurrentView('messages');
                     }}>
                       Ouvrir la messagerie
@@ -681,10 +767,12 @@ function App() {
         {view === 'messages' && (
           <section className="messages-layout">
             <aside className="content-panel conversation-panel">
-              <SectionHeader eyebrow="Messages" title="Conversations" description="Conversations locales persistées dans le navigateur avec envoi par Entrée." />
+              <SectionHeader eyebrow="Messages" title="Conversations" description="Historique persistant avec envoi par Entrée." />
 
-              {conversations.length === 0 ? (
-                <EmptyState title="Aucune conversation" description="Un match local peut ouvrir automatiquement un canal de discussion simulé." actionLabel="Trouver un match" onAction={() => setCurrentView('discover')} />
+              {dashboardLoading ? (
+                <EmptyState title="Chargement des conversations" description="Récupération de vos messages depuis le backend." />
+              ) : conversations.length === 0 ? (
+                <EmptyState title="Aucune conversation" description="Un match backend ouvre automatiquement un canal de discussion." actionLabel="Trouver un match" onAction={() => setCurrentView('discover')} />
               ) : (
                 <div className="conversation-list">
                   {conversations.map((conversation) => (
@@ -718,7 +806,7 @@ function App() {
 
                   <div className="chat-body" aria-live="polite">
                     {selectedConversationData.messages.length === 0 ? (
-                      <EmptyState title="Aucun message" description="Cette conversation locale est prête à démarrer." />
+                      <EmptyState title="Aucun message" description="Envoyez le premier message pour démarrer la conversation." />
                     ) : selectedConversationData.messages.map((message) => (
                       <div key={message.id} className={message.sender === 'me' ? 'bubble me' : 'bubble them'}>
                         {message.text}
@@ -729,8 +817,7 @@ function App() {
                   <div className="composer">
                     <input
                       type="text"
-                      aria-label="Écrire un message"
-                      placeholder="Écrire un message local…"
+                      placeholder="Écrire un message persistant…"
                       value={draftMessage}
                       onChange={(event) => setDraftMessage(event.target.value)}
                       onKeyDown={(event) => {
@@ -740,13 +827,13 @@ function App() {
                         }
                       }}
                     />
-                    <button type="button" className="primary-button" disabled={!draftMessage.trim()} onClick={handleSendMessage}>
-                      Envoyer
+                    <button type="button" className="primary-button" disabled={messageSending || !draftMessage.trim()} onClick={handleSendMessage}>
+                      {messageSending ? 'Envoi…' : 'Envoyer'}
                     </button>
                   </div>
                 </div>
               ) : (
-                <EmptyState title="Sélectionnez une conversation" description="Choisissez un échange pour afficher vos messages locaux." />
+                <EmptyState title="Sélectionnez une conversation" description="Choisissez un échange pour afficher les messages persistés." />
               )}
             </div>
           </section>
@@ -754,7 +841,7 @@ function App() {
 
         {view === 'profile' && (
           <section className="content-panel profile-panel">
-            <SectionHeader eyebrow="Profil" title="Complétez votre profil" description="Les modifications sont validées puis enregistrées localement sur cet appareil." />
+            <SectionHeader eyebrow="Profil" title="Complétez votre profil" description="Les mises à jour sont validées puis synchronisées vers le backend." />
 
             <div className="profile-layout">
               <form className="profile-form" onSubmit={handleProfileSave} noValidate>
@@ -808,7 +895,7 @@ function App() {
 
                 <div className="form-actions">
                   <button type="submit" className="primary-button" disabled={profileSaving}>
-                    {profileSaving ? 'Enregistrement…' : 'Sauvegarder le profil'}
+                    {profileSaving ? 'Synchronisation…' : 'Sauvegarder le profil'}
                   </button>
                 </div>
               </form>
