@@ -278,7 +278,7 @@ export function applyLikeAction({
 
   const existingMatch = matches.find((match) => match.profileId === profileId);
   const nextMatch = existingMatch ?? createMatch(targetProfile, profile);
-  const conversationState = ensureConversationForProfile({ profileId, conversations, profiles });
+  const conversationState = ensureConversationForProfile({ profileId, conversations, profiles, matches });
 
   return {
     matched: true,
@@ -316,6 +316,7 @@ export function ensureConversationForProfile({
   profileId,
   conversations = [],
   profiles = DEMO_PROFILES,
+  matches = [],
 }) {
   const existingConversation = conversations.find((conversation) => conversation.profileId === profileId);
   if (existingConversation) {
@@ -326,11 +327,27 @@ export function ensureConversationForProfile({
   }
 
   const targetProfile = profiles.find((profile) => profile.id === profileId);
-  if (!targetProfile) {
+  const fallbackMatch = matches.find((match) => match.profileId === profileId);
+  if (!targetProfile && !fallbackMatch) {
     return null;
   }
 
-  const nextConversation = createConversation(targetProfile);
+  const nextConversation = targetProfile
+    ? createConversation(targetProfile)
+    : {
+      id: `conv-${profileId}`,
+      profileId,
+      name: fallbackMatch.name,
+      mode: fallbackMatch.mode,
+      avatar: fallbackMatch.avatar,
+      messages: [
+        {
+          id: `seed-${profileId}`,
+          sender: 'them',
+          text: 'Conversation locale prête à démarrer.',
+        },
+      ],
+    };
 
   return {
     conversation: nextConversation,

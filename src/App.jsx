@@ -381,7 +381,13 @@ function App() {
       setActiveMode('all');
       setDraftMessage('');
       resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS);
-      safeWriteJSON(STORAGE_KEYS.auth, { token });
+      if (!safeWriteJSON(STORAGE_KEYS.auth, { token })) {
+        showToast({
+          type: 'warning',
+          title: 'Session non persistée',
+          message: 'Le prototype a été réinitialisé, mais le navigateur a refusé de restaurer le jeton local.',
+        });
+      }
       await loadDiscovery(token);
       showToast({
         type: 'success',

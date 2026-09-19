@@ -226,3 +226,22 @@ test('ensureConversationForProfile reuses or creates a conversation for a matche
   assert.equal(created.conversation.profileId, 'p7');
   assert.equal(created.conversations.length, 1);
 });
+
+test('ensureConversationForProfile can fallback to existing match data when profile list is unavailable', () => {
+  const created = ensureConversationForProfile({
+    profileId: 'p42',
+    conversations: [],
+    profiles: [],
+    matches: [{
+      id: 'match-p42',
+      profileId: 'p42',
+      name: 'Maya',
+      mode: 'amical',
+      avatar: '',
+    }],
+  });
+
+  assert.equal(created.conversation.profileId, 'p42');
+  assert.equal(created.conversation.name, 'Maya');
+  assert.equal(created.conversations.length, 1);
+});
