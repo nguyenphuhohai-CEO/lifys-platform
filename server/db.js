@@ -6,11 +6,16 @@ import Database from 'better-sqlite3';
 
 import { DEMO_PROFILES, MODES } from '../src/data/demoData.js';
 import { normalizeEmail } from './auth.js';
+import { runMigrations } from './migrations.js';
 
 const MODE_IDS = new Set(MODES.map((mode) => mode.id));
 
 function now() {
   return new Date().toISOString();
+}
+
+function isFutureTimestamp(value) {
+  return typeof value === 'string' && value > now();
 }
 
 function createPublicId(prefix) {
@@ -60,6 +65,7 @@ function serializeProfile(row) {
     userId: row.user_id,
     userPublicId: row.user_public_id,
     email: row.email,
+    emailVerifiedAt: row.email_verified_at ?? null,
     name: row.name,
     age: row.age,
     city: row.city,
@@ -121,104 +127,46 @@ function buildMatchReason(currentProfile, targetProfile, hasReciprocalLike) {
   return 'Affinité démonstrative validée par le moteur de matching.';
 }
 
-export function createDatabase(databaseFile) {
-  fs.mkdirSync(path.dirname(databaseFile), { recursive: true });
-  const db = new Database(databaseFile);
+export function createDatabase(configOrFile) {
+  const config = typeof configOrFile === 'string'
+    ? {
+      databaseFile: configOrFile,
+      databaseProvider: 'sqlite',
+      demoDiscoveryEnabled: true,
+    }
+    : configOrFile;
+
+  fs.mkdirSync(path.dirname(config.databaseFile), { recursive: true });
+  const db = new Database(config.databaseFile);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      public_id TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      is_demo INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS profiles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-      public_id TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL,
-      age INTEGER,
-      city TEXT NOT NULL DEFAULT '',
-      bio TEXT NOT NULL DEFAULT '',
-      interests TEXT NOT NULL DEFAULT '[]',
-      mode TEXT NOT NULL,
-      avatar TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS likes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      created_at TEXT NOT NULL,
-      UNIQUE(user_id, target_user_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS passes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      created_at TEXT NOT NULL,
-      UNIQUE(user_id, target_user_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS matches (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      public_id TEXT NOT NULL UNIQUE,
-      pair_key TEXT NOT NULL UNIQUE,
-      user_one_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      user_two_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      reason TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS conversations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      public_id TEXT NOT NULL UNIQUE,
-      match_id INTEGER NOT NULL UNIQUE REFERENCES matches(id) ON DELETE CASCADE,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      public_id TEXT NOT NULL UNIQUE,
-      conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-      sender_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      content TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-  `);
+  const migrationState = runMigrations(db);
 
   const statements = {
     insertUser: db.prepare(`
-      INSERT INTO users (public_id, email, password_hash, is_demo, created_at)
-      VALUES (@public_id, @email, @password_hash, @is_demo, @created_at)
+      INSERT INTO users (public_id, email, password_hash, email_verified_at, is_demo, created_at)
+      VALUES (@public_id, @email, @password_hash, @email_verified_at, @is_demo, @created_at)
     `),
     insertProfile: db.prepare(`
       INSERT INTO profiles (user_id, public_id, name, age, city, bio, interests, mode, avatar, created_at, updated_at)
       VALUES (@user_id, @public_id, @name, @age, @city, @bio, @interests, @mode, @avatar, @created_at, @updated_at)
     `),
     findUserByEmail: db.prepare(`SELECT * FROM users WHERE email = ?`),
+    findUserById: db.prepare(`SELECT * FROM users WHERE id = ?`),
     findProfileByUserId: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.email_verified_at, users.is_demo
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.user_id = ?
     `),
     findProfileByPublicId: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.email_verified_at, users.is_demo
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.public_id = ?
     `),
     listProfilesExcludingUser: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.email_verified_at, users.is_demo
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.user_id != ?
@@ -230,12 +178,17 @@ export function createDatabase(databaseFile) {
       WHERE user_id = @user_id
     `),
     upsertLike: db.prepare(`INSERT OR IGNORE INTO likes (user_id, target_user_id, created_at) VALUES (?, ?, ?)`),
+    deleteLikeForPair: db.prepare(`DELETE FROM likes WHERE user_id = ? AND target_user_id = ?`),
     deletePassForPair: db.prepare(`DELETE FROM passes WHERE user_id = ? AND target_user_id = ?`),
     upsertPass: db.prepare(`INSERT OR IGNORE INTO passes (user_id, target_user_id, created_at) VALUES (?, ?, ?)`),
     hiddenTargetIds: db.prepare(`
       SELECT target_user_id AS id FROM likes WHERE user_id = ?
       UNION
       SELECT target_user_id AS id FROM passes WHERE user_id = ?
+      UNION
+      SELECT blocked_user_id AS id FROM user_blocks WHERE user_id = ?
+      UNION
+      SELECT user_id AS id FROM user_blocks WHERE blocked_user_id = ?
     `),
     hasReciprocalLike: db.prepare(`SELECT 1 FROM likes WHERE user_id = ? AND target_user_id = ? LIMIT 1`),
     insertMatch: db.prepare(`
@@ -243,6 +196,7 @@ export function createDatabase(databaseFile) {
       VALUES (?, ?, ?, ?, ?, ?)
     `),
     findMatchByPairKey: db.prepare(`SELECT * FROM matches WHERE pair_key = ?`),
+    deleteMatchByPairKey: db.prepare(`DELETE FROM matches WHERE pair_key = ?`),
     insertConversation: db.prepare(`
       INSERT OR IGNORE INTO conversations (public_id, match_id, created_at)
       VALUES (?, ?, ?)
@@ -251,6 +205,49 @@ export function createDatabase(databaseFile) {
     insertMessage: db.prepare(`
       INSERT INTO messages (public_id, conversation_id, sender_user_id, content, created_at)
       VALUES (?, ?, ?, ?, ?)
+    `),
+    insertRefreshToken: db.prepare(`
+      INSERT INTO refresh_tokens (user_id, token_hash, expires_at, created_at, revoked_at)
+      VALUES (?, ?, ?, ?, NULL)
+    `),
+    findRefreshToken: db.prepare(`SELECT * FROM refresh_tokens WHERE token_hash = ?`),
+    revokeRefreshToken: db.prepare(`UPDATE refresh_tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL`),
+    revokeRefreshTokensForUser: db.prepare(`UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`),
+    insertEmailVerificationToken: db.prepare(`
+      INSERT INTO email_verification_tokens (user_id, token_hash, expires_at, created_at, used_at)
+      VALUES (?, ?, ?, ?, NULL)
+    `),
+    findEmailVerificationToken: db.prepare(`SELECT * FROM email_verification_tokens WHERE token_hash = ?`),
+    consumeEmailVerificationToken: db.prepare(`UPDATE email_verification_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL`),
+    invalidateEmailVerificationTokensForUser: db.prepare(`
+      UPDATE email_verification_tokens
+      SET used_at = ?
+      WHERE user_id = ? AND used_at IS NULL
+    `),
+    insertPasswordResetToken: db.prepare(`
+      INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at, used_at)
+      VALUES (?, ?, ?, ?, NULL)
+    `),
+    findPasswordResetToken: db.prepare(`SELECT * FROM password_reset_tokens WHERE token_hash = ?`),
+    consumePasswordResetToken: db.prepare(`UPDATE password_reset_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL`),
+    invalidatePasswordResetTokensForUser: db.prepare(`
+      UPDATE password_reset_tokens
+      SET used_at = ?
+      WHERE user_id = ? AND used_at IS NULL
+    `),
+    markUserEmailVerified: db.prepare(`UPDATE users SET email_verified_at = ? WHERE id = ?`),
+    updateUserPasswordHash: db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`),
+    insertUserBlock: db.prepare(`
+      INSERT OR IGNORE INTO user_blocks (user_id, blocked_user_id, reason, created_at)
+      VALUES (?, ?, ?, ?)
+    `),
+    insertModerationReport: db.prepare(`
+      INSERT INTO moderation_reports (public_id, reporter_user_id, target_user_id, reason, details, status, created_at)
+      VALUES (?, ?, ?, ?, ?, 'open', ?)
+    `),
+    insertAuditLog: db.prepare(`
+      INSERT INTO audit_logs (public_id, actor_user_id, target_user_id, action, metadata, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `),
     listMatchesForUser: db.prepare(`
       SELECT
@@ -265,7 +262,11 @@ export function createDatabase(databaseFile) {
       FROM matches
       JOIN users ON users.id = CASE WHEN matches.user_one_id = @user_id THEN matches.user_two_id ELSE matches.user_one_id END
       JOIN profiles ON profiles.user_id = users.id
+      LEFT JOIN user_blocks AS direct_block ON direct_block.user_id = @user_id AND direct_block.blocked_user_id = users.id
+      LEFT JOIN user_blocks AS reverse_block ON reverse_block.user_id = users.id AND reverse_block.blocked_user_id = @user_id
       WHERE matches.user_one_id = @user_id OR matches.user_two_id = @user_id
+        AND direct_block.id IS NULL
+        AND reverse_block.id IS NULL
       ORDER BY matches.created_at DESC
     `),
     listConversationsForUser: db.prepare(`
@@ -283,7 +284,11 @@ export function createDatabase(databaseFile) {
       JOIN matches ON matches.id = conversations.match_id
       JOIN users ON users.id = CASE WHEN matches.user_one_id = @user_id THEN matches.user_two_id ELSE matches.user_one_id END
       JOIN profiles ON profiles.user_id = users.id
+      LEFT JOIN user_blocks AS direct_block ON direct_block.user_id = @user_id AND direct_block.blocked_user_id = users.id
+      LEFT JOIN user_blocks AS reverse_block ON reverse_block.user_id = users.id AND reverse_block.blocked_user_id = @user_id
       WHERE matches.user_one_id = @user_id OR matches.user_two_id = @user_id
+        AND direct_block.id IS NULL
+        AND reverse_block.id IS NULL
       ORDER BY conversations.created_at DESC
     `),
     listMessagesForConversation: db.prepare(`
@@ -359,9 +364,10 @@ export function createDatabase(databaseFile) {
           AND other_user.is_demo = 1
       )
     `),
+    deleteUser: db.prepare(`DELETE FROM users WHERE id = ?`),
   };
 
-  seedDemoData(db, statements);
+  seedDemoData(db, statements, config);
 
   function createUser({ email, passwordHash, name, mode = 'amoureux' }) {
     const createdAt = now();
@@ -369,6 +375,7 @@ export function createDatabase(databaseFile) {
       public_id: createPublicId('user'),
       email: normalizeEmail(email),
       password_hash: passwordHash,
+      email_verified_at: null,
       is_demo: 0,
       created_at: createdAt,
     });
@@ -395,6 +402,10 @@ export function createDatabase(databaseFile) {
 
   function getUserByEmail(email) {
     return statements.findUserByEmail.get(normalizeEmail(email));
+  }
+
+  function getUserById(userId) {
+    return statements.findUserById.get(userId) ?? null;
   }
 
   function getProfileByUserId(userId) {
@@ -424,7 +435,7 @@ export function createDatabase(databaseFile) {
   }
 
   function listDiscoveryProfiles(userId, filters = {}) {
-    const hiddenUserIds = new Set(statements.hiddenTargetIds.all(userId, userId).map((row) => row.id));
+    const hiddenUserIds = new Set(statements.hiddenTargetIds.all(userId, userId, userId, userId).map((row) => row.id));
     const activeMode = `${filters.activeMode ?? 'all'}`;
     const query = `${filters.query ?? ''}`.trim().toLowerCase();
     const city = `${filters.city ?? ''}`.trim().toLowerCase();
@@ -555,6 +566,83 @@ export function createDatabase(databaseFile) {
     return listConversationsForUser(userId).find((item) => item.id === conversationPublicId) ?? null;
   }
 
+  function createAuditLog({ actorUserId = null, targetUserId = null, action, metadata = {} }) {
+    statements.insertAuditLog.run(
+      createPublicId('audit'),
+      actorUserId,
+      targetUserId,
+      action,
+      JSON.stringify(metadata),
+      now(),
+    );
+  }
+
+  function createRefreshToken(userId, tokenHash, expiresAt) {
+    statements.insertRefreshToken.run(userId, tokenHash, expiresAt, now());
+  }
+
+  function getRefreshToken(tokenHash) {
+    const session = statements.findRefreshToken.get(tokenHash);
+    if (!session || session.revoked_at || !isFutureTimestamp(session.expires_at)) {
+      return null;
+    }
+
+    return session;
+  }
+
+  const rotateRefreshToken = db.transaction((currentTokenHash, nextTokenHash, nextExpiresAt) => {
+    const session = statements.findRefreshToken.get(currentTokenHash);
+    if (!session || session.revoked_at || !isFutureTimestamp(session.expires_at)) {
+      return null;
+    }
+
+    statements.revokeRefreshToken.run(now(), currentTokenHash);
+    statements.insertRefreshToken.run(session.user_id, nextTokenHash, nextExpiresAt, now());
+    return session.user_id;
+  });
+
+  function revokeRefreshToken(tokenHash) {
+    statements.revokeRefreshToken.run(now(), tokenHash);
+  }
+
+  function revokeRefreshTokensForUser(userId) {
+    statements.revokeRefreshTokensForUser.run(now(), userId);
+  }
+
+  function createEmailVerificationToken(userId, tokenHash, expiresAt) {
+    statements.invalidateEmailVerificationTokensForUser.run(now(), userId);
+    statements.insertEmailVerificationToken.run(userId, tokenHash, expiresAt, now());
+  }
+
+  const verifyEmailToken = db.transaction((tokenHash) => {
+    const record = statements.findEmailVerificationToken.get(tokenHash);
+    if (!record || record.used_at || !isFutureTimestamp(record.expires_at)) {
+      return null;
+    }
+
+    const verifiedAt = now();
+    statements.consumeEmailVerificationToken.run(verifiedAt, tokenHash);
+    statements.markUserEmailVerified.run(verifiedAt, record.user_id);
+    return getUserById(record.user_id);
+  });
+
+  function createPasswordResetToken(userId, tokenHash, expiresAt) {
+    statements.invalidatePasswordResetTokensForUser.run(now(), userId);
+    statements.insertPasswordResetToken.run(userId, tokenHash, expiresAt, now());
+  }
+
+  const resetPasswordWithToken = db.transaction((tokenHash, passwordHash) => {
+    const record = statements.findPasswordResetToken.get(tokenHash);
+    if (!record || record.used_at || !isFutureTimestamp(record.expires_at)) {
+      return null;
+    }
+
+    statements.consumePasswordResetToken.run(now(), tokenHash);
+    statements.updateUserPasswordHash.run(passwordHash, record.user_id);
+    statements.revokeRefreshTokensForUser.run(now(), record.user_id);
+    return getUserById(record.user_id);
+  });
+
   const resetUserData = db.transaction((userId) => {
     statements.deleteDemoMessagesForUser.run({ user_id: userId });
     statements.deleteDemoConversationsForUser.run({ user_id: userId });
@@ -574,10 +662,78 @@ export function createDatabase(databaseFile) {
     });
   });
 
+  const blockProfile = db.transaction((userId, profilePublicId, reason = '') => {
+    const targetProfile = getProfileByPublicId(profilePublicId);
+    if (!targetProfile || targetProfile.userId === userId) {
+      return null;
+    }
+
+    statements.insertUserBlock.run(userId, targetProfile.userId, `${reason}`.trim(), now());
+    statements.deleteLikeForPair.run(userId, targetProfile.userId);
+    statements.deleteLikeForPair.run(targetProfile.userId, userId);
+    statements.deletePassForPair.run(userId, targetProfile.userId);
+    statements.deletePassForPair.run(targetProfile.userId, userId);
+    statements.deleteMatchByPairKey.run(pairKey(userId, targetProfile.userId));
+    createAuditLog({
+      actorUserId: userId,
+      targetUserId: targetProfile.userId,
+      action: 'user.blocked',
+      metadata: { profilePublicId: targetProfile.id, reason: `${reason}`.trim() },
+    });
+    return serializePublicProfile(targetProfile);
+  });
+
+  function reportProfile(userId, profilePublicId, reason, details = '') {
+    const targetProfile = getProfileByPublicId(profilePublicId);
+    if (!targetProfile || targetProfile.userId === userId) {
+      return null;
+    }
+
+    const reportId = createPublicId('report');
+    statements.insertModerationReport.run(
+      reportId,
+      userId,
+      targetProfile.userId,
+      `${reason}`.trim(),
+      `${details}`.trim(),
+      now(),
+    );
+    createAuditLog({
+      actorUserId: userId,
+      targetUserId: targetProfile.userId,
+      action: 'profile.reported',
+      metadata: { reportId, profilePublicId: targetProfile.id, reason: `${reason}`.trim() },
+    });
+    return { id: reportId, status: 'open' };
+  }
+
+  const deleteUserAccount = db.transaction((userId) => {
+    const profile = getProfileByUserId(userId);
+    const user = getUserById(userId);
+    if (!profile) {
+      return null;
+    }
+
+    createAuditLog({
+      actorUserId: null,
+      targetUserId: null,
+      action: 'account.deleted',
+      metadata: {
+        deletedUserId: userId,
+        profilePublicId: profile.id,
+        emailHash: user?.email ? crypto.createHash('sha256').update(user.email).digest('hex') : null,
+      },
+    });
+    statements.deleteUser.run(userId);
+    return profile;
+  });
+
   return {
     db,
+    config,
     createUser,
     getUserByEmail,
+    getUserById,
     getProfileByUserId,
     getProfileByPublicId,
     updateUserProfile,
@@ -587,11 +743,39 @@ export function createDatabase(databaseFile) {
     listMatchesForUser,
     listConversationsForUser,
     addMessage,
+    createRefreshToken,
+    getRefreshToken,
+    rotateRefreshToken,
+    revokeRefreshToken,
+    revokeRefreshTokensForUser,
+    createEmailVerificationToken,
+    verifyEmailToken,
+    createPasswordResetToken,
+    resetPasswordWithToken,
     resetUserData,
+    blockProfile,
+    reportProfile,
+    deleteUserAccount,
+    createAuditLog,
+    getMigrationState() {
+      return migrationState.appliedMigrations;
+    },
+    getHealthState() {
+      return {
+        provider: config.databaseProvider,
+        demoDiscoveryEnabled: Boolean(config.demoDiscoveryEnabled),
+        migrationCount: migrationState.appliedMigrations.length,
+        latestMigration: migrationState.latestMigration,
+      };
+    },
   };
 }
 
-function seedDemoData(db, statements) {
+function seedDemoData(db, statements, config) {
+  if (!config.demoDiscoveryEnabled) {
+    return;
+  }
+
   const existing = db.prepare('SELECT COUNT(*) AS count FROM users WHERE is_demo = 1').get();
   if (existing.count > 0) {
     return;
@@ -605,6 +789,7 @@ function seedDemoData(db, statements) {
         public_id: `user-${demoProfile.id}`,
         email: `demo-${demoProfile.id}@lifys.local`,
         password_hash: 'demo-account',
+        email_verified_at: createdAt,
         is_demo: 1,
         created_at: createdAt,
       });

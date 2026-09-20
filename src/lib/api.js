@@ -1,4 +1,17 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+const CSRF_COOKIE_NAME = import.meta.env.VITE_CSRF_COOKIE_NAME ?? 'lifys_csrf_token';
+
+function getBrowserCookie(name) {
+  if (typeof document === 'undefined') {
+    return '';
+  }
+
+  return document.cookie
+    .split(';')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(`${name}=`))
+    ?.slice(name.length + 1) ?? '';
+}
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -11,7 +24,15 @@ export class ApiError extends Error {
 
 async function parseResponse(response) {
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new ApiError('Réponse serveur invalide.', response.status, { code: 'INVALID_JSON_RESPONSE' });
+    }
+  }
 
   if (!response.ok) {
     throw new ApiError(data?.error || 'Une erreur serveur est survenue.', response.status, data);
@@ -21,14 +42,19 @@ async function parseResponse(response) {
 }
 
 export async function apiRequest(path, options = {}) {
+  const method = options.method ?? 'GET';
+  const csrfToken = decodeURIComponent(getBrowserCookie(CSRF_COOKIE_NAME));
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: options.method ?? 'GET',
+    method,
+    credentials: 'include',
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
       ...(options.token ? { Authorization: 'Bearer ' + options.token } : {}),
+      ...(method !== 'GET' && csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
       ...(options.headers ?? {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
   });
 
   return parseResponse(response);
@@ -44,8 +70,32 @@ export const api = {
   login(payload) {
     return apiRequest('/api/auth/login', { method: 'POST', body: payload });
   },
+  refreshSession() {
+    return apiRequest('/api/auth/refresh', { method: 'POST' });
+  },
+  logout() {
+    return apiRequest('/api/auth/logout', { method: 'POST' });
+  },
+  deleteAccount(token, password) {
+    return apiRequest('/api/account', { method: 'DELETE', token, body: { password } });
+  },
   getSession(token) {
     return apiRequest('/api/auth/session', { token });
+  },
+  requestEmailVerification(token) {
+    return apiRequest('/api/auth/verify-email/request', { method: 'POST', token });
+  },
+  confirmEmailVerification(tokenValue) {
+    return apiRequest('/api/auth/verify-email/confirm', { method: 'POST', body: { token: tokenValue } });
+  },
+  requestPasswordReset(email) {
+    return apiRequest('/api/auth/password-reset/request', { method: 'POST', body: { email } });
+  },
+  confirmPasswordReset(tokenValue, password) {
+    return apiRequest('/api/auth/password-reset/confirm', {
+      method: 'POST',
+      body: { token: tokenValue, password },
+    });
   },
   getBootstrap(token) {
     return apiRequest('/api/bootstrap', { token });
@@ -69,6 +119,20 @@ export const api = {
   },
   passProfile(token, profileId) {
     return apiRequest('/api/interactions/pass', { method: 'POST', token, body: { profileId } });
+  },
+  blockProfile(token, profileId, reason = '') {
+    return apiRequest('/api/interactions/block', { method: 'POST', token, body: { profileId, reason } });
+  },
+  reportProfile(token, profileId, payload = {}) {
+    return apiRequest('/api/reports/profile', {
+      method: 'POST',
+      token,
+      body: {
+        profileId,
+        reason: payload.reason ?? 'safety-review',
+        details: payload.details ?? '',
+      },
+    });
   },
   getMatches(token) {
     return apiRequest('/api/matches', { token });

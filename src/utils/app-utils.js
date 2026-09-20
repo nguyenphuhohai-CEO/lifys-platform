@@ -247,8 +247,159 @@ export function createConversation(profileTarget) {
   };
 }
 
+export function applyLikeAction({
+  profileId,
+  profile,
+  likes = [],
+  passed = [],
+  matches = [],
+  conversations = [],
+  profiles = DEMO_PROFILES,
+}) {
+  const targetProfile = profiles.find((item) => item.id === profileId);
+  if (!targetProfile) {
+    return null;
+  }
+
+  const nextLikes = [...new Set([...sanitizeIdList(likes), profileId])];
+  const nextPassed = sanitizeIdList(passed).filter((item) => item !== profileId);
+
+  if (!shouldCreateMatch(targetProfile, profile)) {
+    return {
+      matched: false,
+      targetProfile,
+      likes: nextLikes,
+      passed: nextPassed,
+      matches,
+      conversations,
+      selectedConversationId: conversations.find((conversation) => conversation.profileId === profileId)?.id ?? null,
+    };
+  }
+
+  const existingMatch = matches.find((match) => match.profileId === profileId);
+  const nextMatch = existingMatch ?? createMatch(targetProfile, profile);
+  const nextMatches = existingMatch ? matches : [nextMatch, ...matches];
+  const conversationState = ensureConversationForProfile({ profileId, conversations, profiles, matches: nextMatches });
+
+  if (!conversationState) {
+    return null;
+  }
+
+  return {
+    matched: true,
+    targetProfile,
+    likes: nextLikes,
+    passed: nextPassed,
+    matches: nextMatches,
+    conversations: conversationState.conversations,
+    selectedConversationId: conversationState.conversation.id,
+  };
+}
+
+export function applyPassAction({
+  profileId,
+  likes = [],
+  passed = [],
+  matches = [],
+  conversations = [],
+  selectedConversationId = null,
+}) {
+  const nextConversations = conversations.filter((conversation) => conversation.profileId !== profileId);
+
+  return {
+    likes: sanitizeIdList(likes).filter((item) => item !== profileId),
+    passed: [...new Set([...sanitizeIdList(passed), profileId])],
+    matches: matches.filter((match) => match.profileId !== profileId),
+    conversations: nextConversations,
+    selectedConversationId: nextConversations.some((conversation) => conversation.id === selectedConversationId)
+      ? selectedConversationId
+      : nextConversations[0]?.id ?? null,
+  };
+}
+
+export function ensureConversationForProfile({
+  profileId,
+  conversations = [],
+  profiles = DEMO_PROFILES,
+  matches = [],
+}) {
+  const existingConversation = conversations.find((conversation) => conversation.profileId === profileId);
+  if (existingConversation) {
+    return {
+      conversation: existingConversation,
+      conversations,
+    };
+  }
+
+  const targetProfile = profiles.find((profile) => profile.id === profileId);
+  const fallbackMatch = matches.find((match) => match.profileId === profileId);
+  if (!targetProfile && !fallbackMatch) {
+    return null;
+  }
+
+  const nextConversation = targetProfile
+    ? createConversation(targetProfile)
+    : {
+      id: `conv-${profileId}`,
+      profileId,
+      name: fallbackMatch.name,
+      mode: fallbackMatch.mode,
+      avatar: fallbackMatch.avatar,
+      messages: [],
+    };
+
+  return {
+    conversation: nextConversation,
+    conversations: [nextConversation, ...conversations],
+  };
+}
+
+export function appendMessageToConversation({
+  conversationId,
+  text,
+  conversations = [],
+  matches = [],
+  createId = () => `msg-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+}) {
+  const trimmedText = sanitizeString(text);
+  if (!trimmedText) {
+    return null;
+  }
+
+  const targetConversation = conversations.find((conversation) => conversation.id === conversationId);
+  if (!targetConversation) {
+    return null;
+  }
+
+  const nextMessage = {
+    id: createId(),
+    sender: 'me',
+    text: trimmedText,
+  };
+
+  return {
+    nextMessage,
+    conversations: conversations.map((conversation) => (
+      conversation.id === conversationId
+        ? { ...conversation, messages: [...conversation.messages, nextMessage] }
+        : conversation
+    )),
+    matches: matches.map((match) => (
+      match.profileId === targetConversation.profileId
+        ? { ...match, lastMessage: trimmedText }
+        : match
+    )),
+  };
+}
+
 export function getConversationPreview(conversation) {
   return conversation?.messages?.[conversation.messages.length - 1]?.text ?? 'Aucun message';
+}
+
+export function resolveSelectedConversationId(conversations = [], currentId = null) {
+  return conversations.some((conversation) => conversation.id === currentId)
+    ? currentId
+    : conversations[0]?.id ?? null;
 }
 
 export function loadInitialState(readers) {
