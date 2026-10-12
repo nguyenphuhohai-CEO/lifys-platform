@@ -45,6 +45,12 @@ npm install
 cp .env.example .env
 ```
 
+Pour une configuration de déploiement durcie :
+
+```bash
+cp .env.production.example .env
+```
+
 Variables utiles pour le backend local :
 
 - `JWT_SECRET` : secret JWT à remplacer hors démo ;
@@ -68,6 +74,7 @@ Variables utiles pour le backend local :
 - `DEMO_DISCOVERY_ENABLED` : active explicitement les profils fictifs de découverte ;
 - `LOG_LEVEL` : niveau des logs structurés ;
 - `LOG_REQUESTS` : active les logs HTTP minimaux.
+- `ALLOW_SQLITE_IN_PRODUCTION` : accusé de réception explicite si SQLite reste utilisé en production mono-instance.
 
 ## Scripts
 
@@ -209,6 +216,8 @@ Ne pas y saisir de données sensibles réelles. Avant toute mise en production f
 
 - authentification et sessions durcies ;
 - `EMAIL_DELIVERY_MODE=resend` avec `RESEND_API_KEY`, `EMAIL_FROM`, `APP_BASE_URL`, `JWT_SECRET` fort et `COOKIE_SECURE=true` ;
+- `CORS_ORIGIN` limité au vrai frontend et `DEMO_DISCOVERY_ENABLED=false` ;
+- si SQLite reste utilisé, `ALLOW_SQLITE_IN_PRODUCTION=true` ne vaut que pour un déploiement mono-instance explicitement assumé ;
 - backend validé côté sécurité ;
 - stockage serveur adapté et sauvegardé ;
 - protection contre l’injection, l’abus et le spam ;

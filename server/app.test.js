@@ -946,3 +946,101 @@ test('config enforces resend email delivery in production', () => {
     /RESEND_API_KEY and EMAIL_FROM are required when EMAIL_DELIVERY_MODE=resend\./,
   );
 });
+
+test('config enforces production-safe URL, cookie, demo and sqlite settings', () => {
+  assert.throws(
+    () => getConfig({
+      NODE_ENV: 'production',
+      JWT_SECRET: 'prod-secret',
+      EMAIL_DELIVERY_MODE: 'resend',
+      RESEND_API_KEY: 'resend-key',
+      EMAIL_FROM: 'noreply@example.com',
+      APP_BASE_URL: 'http://app.example.com',
+      COOKIE_SECURE: 'true',
+      CORS_ORIGIN: 'https://app.example.com',
+      DEMO_DISCOVERY_ENABLED: 'false',
+      ALLOW_SQLITE_IN_PRODUCTION: 'true',
+    }),
+    /APP_BASE_URL must use https in production\./,
+  );
+
+  assert.throws(
+    () => getConfig({
+      NODE_ENV: 'production',
+      JWT_SECRET: 'prod-secret',
+      EMAIL_DELIVERY_MODE: 'resend',
+      RESEND_API_KEY: 'resend-key',
+      EMAIL_FROM: 'noreply@example.com',
+      APP_BASE_URL: 'https://app.example.com',
+      COOKIE_SECURE: 'false',
+      CORS_ORIGIN: 'https://app.example.com',
+      DEMO_DISCOVERY_ENABLED: 'false',
+      ALLOW_SQLITE_IN_PRODUCTION: 'true',
+    }),
+    /COOKIE_SECURE must be true in production\./,
+  );
+
+  assert.throws(
+    () => getConfig({
+      NODE_ENV: 'production',
+      JWT_SECRET: 'prod-secret',
+      EMAIL_DELIVERY_MODE: 'resend',
+      RESEND_API_KEY: 'resend-key',
+      EMAIL_FROM: 'noreply@example.com',
+      APP_BASE_URL: 'https://app.example.com',
+      COOKIE_SECURE: 'true',
+      CORS_ORIGIN: '',
+      DEMO_DISCOVERY_ENABLED: 'false',
+      ALLOW_SQLITE_IN_PRODUCTION: 'true',
+    }),
+    /CORS_ORIGIN must be configured in production\./,
+  );
+
+  assert.throws(
+    () => getConfig({
+      NODE_ENV: 'production',
+      JWT_SECRET: 'prod-secret',
+      EMAIL_DELIVERY_MODE: 'resend',
+      RESEND_API_KEY: 'resend-key',
+      EMAIL_FROM: 'noreply@example.com',
+      APP_BASE_URL: 'https://app.example.com',
+      COOKIE_SECURE: 'true',
+      CORS_ORIGIN: 'http://app.example.com',
+      DEMO_DISCOVERY_ENABLED: 'false',
+      ALLOW_SQLITE_IN_PRODUCTION: 'true',
+    }),
+    /CORS_ORIGIN entries must use https in production\./,
+  );
+
+  assert.throws(
+    () => getConfig({
+      NODE_ENV: 'production',
+      JWT_SECRET: 'prod-secret',
+      EMAIL_DELIVERY_MODE: 'resend',
+      RESEND_API_KEY: 'resend-key',
+      EMAIL_FROM: 'noreply@example.com',
+      APP_BASE_URL: 'https://app.example.com',
+      COOKIE_SECURE: 'true',
+      CORS_ORIGIN: 'https://app.example.com',
+      DEMO_DISCOVERY_ENABLED: 'true',
+      ALLOW_SQLITE_IN_PRODUCTION: 'true',
+    }),
+    /DEMO_DISCOVERY_ENABLED must be false in production\./,
+  );
+
+  assert.throws(
+    () => getConfig({
+      NODE_ENV: 'production',
+      JWT_SECRET: 'prod-secret',
+      EMAIL_DELIVERY_MODE: 'resend',
+      RESEND_API_KEY: 'resend-key',
+      EMAIL_FROM: 'noreply@example.com',
+      APP_BASE_URL: 'https://app.example.com',
+      COOKIE_SECURE: 'true',
+      CORS_ORIGIN: 'https://app.example.com',
+      DEMO_DISCOVERY_ENABLED: 'false',
+      ALLOW_SQLITE_IN_PRODUCTION: 'false',
+    }),
+    /ALLOW_SQLITE_IN_PRODUCTION must be true to acknowledge single-instance SQLite production usage\./,
+  );
+});

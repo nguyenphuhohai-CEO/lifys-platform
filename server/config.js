@@ -24,6 +24,27 @@ function parseBoolean(value) {
   return `${value}` === 'true';
 }
 
+function parseUrl(value, name) {
+  try {
+    return new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid absolute URL.`);
+  }
+}
+
+function parseOrigins(value) {
+  return `${value ?? ''}`
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function validateEmailAddress(value, name) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(`${value}`)) {
+    throw new Error(`${name} must be a valid email address.`);
+  }
+}
+
 export function getConfig(overrides = {}) {
   const port = parsePortNumber(overrides.PORT ?? process.env.PORT ?? 3001);
   const databaseFile = overrides.DATABASE_FILE ?? process.env.DATABASE_FILE ?? path.join(rootDir, 'data', 'lifys.sqlite');
@@ -49,6 +70,8 @@ export function getConfig(overrides = {}) {
   const demoDiscoveryEnabled = parseBoolean(overrides.DEMO_DISCOVERY_ENABLED ?? process.env.DEMO_DISCOVERY_ENABLED ?? (nodeEnv === 'production' ? 'false' : 'true'));
   const logLevel = overrides.LOG_LEVEL ?? process.env.LOG_LEVEL ?? 'info';
   const logRequests = parseBoolean(overrides.LOG_REQUESTS ?? process.env.LOG_REQUESTS ?? (nodeEnv === 'test' ? 'false' : 'true'));
+  const allowSqliteInProduction = parseBoolean(overrides.ALLOW_SQLITE_IN_PRODUCTION ?? process.env.ALLOW_SQLITE_IN_PRODUCTION ?? 'false');
+  const allowedOrigins = parseOrigins(corsOrigin);
 
   if (nodeEnv === 'production' && jwtSecret === 'lifys-dev-secret-change-me') {
     throw new Error('JWT_SECRET must be set in production.');
@@ -58,7 +81,7 @@ export function getConfig(overrides = {}) {
     throw new Error('DATABASE_PROVIDER must currently be sqlite.');
   }
 
-  if (`${corsOrigin}`.split(',').map((value) => value.trim()).includes('*')) {
+  if (allowedOrigins.includes('*')) {
     throw new Error('CORS_ORIGIN cannot contain * when refresh-cookie auth is enabled.');
   }
 
@@ -72,6 +95,45 @@ export function getConfig(overrides = {}) {
 
   if (emailDeliveryMode === 'resend' && (!resendApiKey || !emailFrom)) {
     throw new Error('RESEND_API_KEY and EMAIL_FROM are required when EMAIL_DELIVERY_MODE=resend.');
+  }
+
+  if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) {
+    throw new Error('LOG_LEVEL must be one of: debug, info, warn, error.');
+  }
+
+  const parsedAppBaseUrl = parseUrl(appBaseUrl, 'APP_BASE_URL');
+
+  if (emailDeliveryMode === 'resend') {
+    validateEmailAddress(emailFrom, 'EMAIL_FROM');
+  }
+
+  if (nodeEnv === 'production') {
+    if (parsedAppBaseUrl.protocol !== 'https:') {
+      throw new Error('APP_BASE_URL must use https in production.');
+    }
+
+    if (!cookieSecure) {
+      throw new Error('COOKIE_SECURE must be true in production.');
+    }
+
+    if (demoDiscoveryEnabled) {
+      throw new Error('DEMO_DISCOVERY_ENABLED must be false in production.');
+    }
+
+    if (allowedOrigins.length === 0) {
+      throw new Error('CORS_ORIGIN must be configured in production.');
+    }
+
+    for (const origin of allowedOrigins) {
+      const parsedOrigin = parseUrl(origin, 'CORS_ORIGIN');
+      if (parsedOrigin.protocol !== 'https:') {
+        throw new Error('CORS_ORIGIN entries must use https in production.');
+      }
+    }
+
+    if (databaseProvider === 'sqlite' && !allowSqliteInProduction) {
+      throw new Error('ALLOW_SQLITE_IN_PRODUCTION must be true to acknowledge single-instance SQLite production usage.');
+    }
   }
 
   return {
@@ -99,5 +161,6 @@ export function getConfig(overrides = {}) {
     demoDiscoveryEnabled,
     logLevel,
     logRequests,
+    allowSqliteInProduction,
   };
 }
