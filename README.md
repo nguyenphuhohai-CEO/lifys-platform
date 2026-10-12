@@ -58,6 +58,7 @@ Variables utiles pour le backend local :
 - `JWT_SECRET` : secret JWT à remplacer hors démo ;
 - `JWT_EXPIRES_IN` : durée de vie du token d’accès ;
 - `APP_BASE_URL` : URL publique utilisée dans les liens e-mail ;
+- `VITE_API_BASE_URL` : URL de l’API Express quand le frontend Vite tourne sur une origine différente ;
 - `DATABASE_PROVIDER` : actuellement `sqlite` ;
 - `REFRESH_COOKIE_NAME` : nom du cookie httpOnly de refresh ;
 - `CSRF_COOKIE_NAME` : nom du cookie CSRF lisible côté frontend ;
