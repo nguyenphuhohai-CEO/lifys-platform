@@ -18,15 +18,17 @@ async function startTestServer(overrides = {}) {
     STATIC_DIR: path.join(tempDir, 'dist'),
     ...overrides,
   });
-  const { app } = createApp(config);
+  const { app, database } = await createApp(config);
   const server = createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
 
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
+    database,
     async close() {
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+      await database.close?.();
       fs.rmSync(tempDir, { recursive: true, force: true });
     },
   };
@@ -427,6 +429,76 @@ test('reporting a profile creates a moderation report', async () => {
 
     assert.equal(report.status, 201);
     assert.equal(report.body.report.status, 'open');
+  } finally {
+    await server.close();
+  }
+});
+
+test('admin can list and resolve moderation reports', async () => {
+  const server = await startTestServer({
+    DEMO_DISCOVERY_ENABLED: 'false',
+  });
+
+  try {
+    const admin = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'admin@example.com',
+        password: 'supersecret',
+        name: 'Admin',
+      }),
+    });
+    const reporter = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'queue-reporter@example.com',
+        password: 'supersecret',
+        name: 'Queue Reporter',
+      }),
+    });
+    const target = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'queue-target@example.com',
+        password: 'supersecret',
+        name: 'Queue Target',
+      }),
+    });
+
+    const adminUser = await server.database.getUserByEmail('admin@example.com');
+    await server.database.updateUserRole(adminUser.id, 'admin');
+
+    const targetProfile = await request(server.baseUrl, '/api/profile', {
+      headers: { authorization: 'Bearer ' + target.body.token },
+    });
+    const report = await request(server.baseUrl, '/api/reports/profile', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + reporter.body.token },
+      body: JSON.stringify({
+        profileId: targetProfile.body.profile.id,
+        reason: 'safety-review',
+        details: 'A vérifier côté modération.',
+      }),
+    });
+
+    const openReports = await request(server.baseUrl, '/api/admin/reports?status=open', {
+      headers: { authorization: 'Bearer ' + admin.body.token },
+    });
+    assert.equal(openReports.status, 200);
+    assert.equal(openReports.body.reports.length, 1);
+    assert.equal(openReports.body.reports[0].id, report.body.report.id);
+
+    const resolved = await request(server.baseUrl, `/api/admin/reports/${report.body.report.id}`, {
+      method: 'PATCH',
+      headers: { authorization: 'Bearer ' + admin.body.token },
+      body: JSON.stringify({
+        status: 'resolved',
+        resolutionNote: 'Traité par la modération.',
+      }),
+    });
+    assert.equal(resolved.status, 200);
+    assert.equal(resolved.body.report.status, 'resolved');
+    assert.equal(resolved.body.report.resolutionNote, 'Traité par la modération.');
   } finally {
     await server.close();
   }
@@ -916,7 +988,7 @@ test('health endpoint exposes environment and migration metadata', async () => {
     assert.equal(response.body.ok, true);
     assert.equal(response.body.environment.emailDeliveryMode, 'preview');
     assert.equal(response.body.database.provider, 'sqlite');
-    assert.ok(response.body.database.migrationCount >= 2);
+    assert.ok(response.body.database.migrationCount >= 3);
   } finally {
     await server.close();
   }
@@ -1042,5 +1114,22 @@ test('config enforces production-safe URL, cookie, demo and sqlite settings', ()
       ALLOW_SQLITE_IN_PRODUCTION: 'false',
     }),
     /ALLOW_SQLITE_IN_PRODUCTION must be true to acknowledge single-instance SQLite production usage\./,
+  );
+
+  assert.throws(
+    () => getConfig({
+      NODE_ENV: 'production',
+      DATABASE_PROVIDER: 'postgres',
+      JWT_SECRET: 'prod-secret',
+      EMAIL_DELIVERY_MODE: 'resend',
+      RESEND_API_KEY: 'resend-key',
+      EMAIL_FROM: 'noreply@example.com',
+      APP_BASE_URL: 'https://app.example.com',
+      COOKIE_SECURE: 'true',
+      CORS_ORIGIN: 'https://app.example.com',
+      DEMO_DISCOVERY_ENABLED: 'false',
+      DATABASE_URL: '',
+    }),
+    /DATABASE_URL must be configured when DATABASE_PROVIDER=postgres\./,
   );
 });

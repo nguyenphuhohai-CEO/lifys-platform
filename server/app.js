@@ -76,13 +76,16 @@ function getCookieValue(req, cookieName) {
     ?.slice(cookieName.length + 1) ?? '';
 }
 
-export function createApp(config) {
+const moderationStatuses = new Set(['open', 'reviewing', 'resolved', 'rejected']);
+
+export async function createApp(config) {
   const logger = createLogger(config);
-  const database = createDatabase(config);
+  const database = await createDatabase(config);
   const emailService = createEmailService({ config, logger });
   const authService = createAuthService({ database, config, emailService, logger });
   const authController = createAuthController({ authService, config });
   const app = express();
+  app.set('trust proxy', config.trustProxy);
   const allowedOrigins = parseCorsOrigins(config.corsOrigin);
   const authRateLimiter = createApiRateLimiter({
     windowMs: config.rateLimitWindowMs,
@@ -165,12 +168,24 @@ export function createApp(config) {
     next(error);
   });
   app.use((req, res, next) => {
+    const forwardedProto = `${req.headers['x-forwarded-proto'] ?? ''}`.split(',')[0].trim();
+    const isHttps = req.secure || forwardedProto === 'https';
+    if (config.forceHttps && !isHttps) {
+      const target = `${config.appBaseUrl}${req.originalUrl}`;
+      res.redirect(308, target);
+      return;
+    }
+
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
     res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    if (config.nodeEnv === 'production') {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+      res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https:; font-src 'self' https: data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+    }
     next();
   });
   app.use('/api', (req, res, next) => {
@@ -188,7 +203,7 @@ export function createApp(config) {
         res.setHeader('Access-Control-Allow-Credentials', 'true');
       }
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
     }
 
     if (req.method === 'OPTIONS') {
@@ -209,7 +224,7 @@ export function createApp(config) {
     next();
   });
 
-  function requireAuth(req, _res, next) {
+  async function requireAuth(req, _res, next) {
     const authorization = req.headers.authorization ?? '';
     const isBearerToken = authorization.startsWith('Bearer ');
     const token = isBearerToken ? authorization.slice(7) : '';
@@ -226,18 +241,35 @@ export function createApp(config) {
 
     try {
       const payload = verifyToken(token, config);
-      const profile = database.getProfileByUserId(payload.userId);
+      const [profile, user] = await Promise.all([
+        database.getProfileByUserId(payload.userId),
+        database.getUserById(payload.userId),
+      ]);
 
-      if (!profile) {
+      if (!profile || !user) {
         next(createHttpError(401, 'Session introuvable.', 'SESSION_NOT_FOUND'));
         return;
       }
 
-      req.auth = { token, userId: payload.userId, email: payload.email, profile };
+      req.auth = {
+        token,
+        userId: payload.userId,
+        email: payload.email,
+        role: user.role ?? payload.role ?? 'member',
+        profile,
+      };
       next();
     } catch {
       next(createHttpError(401, 'Session expirée ou invalide.', 'SESSION_INVALID'));
     }
+  }
+
+  function requireModerator(req, _res, next) {
+    if (!['admin', 'moderator'].includes(req.auth?.role)) {
+      next(createHttpError(403, 'Accès modération refusé.', 'MODERATION_FORBIDDEN'));
+      return;
+    }
+    next();
   }
 
   app.get('/api/health', (_req, res) => {
@@ -248,6 +280,8 @@ export function createApp(config) {
         emailDeliveryMode: config.emailDeliveryMode,
         demoDiscoveryEnabled: config.demoDiscoveryEnabled,
         databaseProvider: config.databaseProvider,
+        forceHttps: config.forceHttps,
+        trustProxy: config.trustProxy,
       },
       database: database.getHealthState(),
     });
@@ -265,19 +299,19 @@ export function createApp(config) {
   app.post('/api/auth/password-reset/confirm', authRateLimiter, authController.resetPassword);
   app.delete('/api/account', protectedRouteRateLimiter, requireAuth, writeRateLimiter, authController.deleteAccount);
 
-  app.get('/api/bootstrap', protectedRouteRateLimiter, requireAuth, (req, res) => {
+  app.get('/api/bootstrap', protectedRouteRateLimiter, requireAuth, async (req, res) => {
     res.json({
-      profile: database.getProfileByUserId(req.auth.userId),
-      matches: database.listMatchesForUser(req.auth.userId),
-      conversations: database.listConversationsForUser(req.auth.userId),
+      profile: await database.getProfileByUserId(req.auth.userId),
+      matches: await database.listMatchesForUser(req.auth.userId),
+      conversations: await database.listConversationsForUser(req.auth.userId),
     });
   });
 
-  app.get('/api/profile', protectedRouteRateLimiter, requireAuth, (req, res) => {
-    res.json({ profile: database.getProfileByUserId(req.auth.userId) });
+  app.get('/api/profile', protectedRouteRateLimiter, requireAuth, async (req, res) => {
+    res.json({ profile: await database.getProfileByUserId(req.auth.userId) });
   });
 
-  app.put('/api/profile', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res, next) => {
+  app.put('/api/profile', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res, next) => {
     try {
       const profile = sanitizeProfileInput(normalizeBody(req.body));
 
@@ -285,15 +319,15 @@ export function createApp(config) {
         throw createHttpError(400, 'Nom, âge, ville et bio sont requis.', 'PROFILE_INCOMPLETE');
       }
 
-      res.json({ profile: database.updateUserProfile(req.auth.userId, profile) });
+      res.json({ profile: await database.updateUserProfile(req.auth.userId, profile) });
     } catch (error) {
       next(error);
     }
   });
 
-  app.get('/api/discovery', protectedRouteRateLimiter, requireAuth, (req, res) => {
+  app.get('/api/discovery', protectedRouteRateLimiter, requireAuth, async (req, res) => {
     res.json({
-      profiles: database.listDiscoveryProfiles(req.auth.userId, {
+      profiles: await database.listDiscoveryProfiles(req.auth.userId, {
         activeMode: req.query.mode ?? 'all',
         query: req.query.query ?? '',
         city: req.query.city ?? '',
@@ -301,7 +335,7 @@ export function createApp(config) {
     });
   });
 
-  app.post('/api/interactions/like', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res, next) => {
+  app.post('/api/interactions/like', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
@@ -310,13 +344,13 @@ export function createApp(config) {
         throw createHttpError(400, 'profileId est requis.', 'PROFILE_ID_REQUIRED');
       }
 
-      res.json(database.likeProfile(req.auth.userId, profileId));
+      res.json(await database.likeProfile(req.auth.userId, profileId));
     } catch (error) {
       next(error);
     }
   });
 
-  app.post('/api/interactions/pass', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res, next) => {
+  app.post('/api/interactions/pass', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
@@ -325,7 +359,7 @@ export function createApp(config) {
         throw createHttpError(400, 'profileId est requis.', 'PROFILE_ID_REQUIRED');
       }
 
-      if (!database.passProfile(req.auth.userId, profileId)) {
+      if (!(await database.passProfile(req.auth.userId, profileId))) {
         throw createHttpError(404, 'Profil introuvable.', 'PROFILE_NOT_FOUND');
       }
 
@@ -335,12 +369,12 @@ export function createApp(config) {
     }
   });
 
-  app.post('/api/interactions/block', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res, next) => {
+  app.post('/api/interactions/block', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
       const reason = `${body.reason ?? ''}`.trim().slice(0, 200);
-      const blockedProfile = database.blockProfile(req.auth.userId, profileId, reason);
+      const blockedProfile = await database.blockProfile(req.auth.userId, profileId, reason);
 
       if (!blockedProfile) {
         throw createHttpError(404, 'Profil introuvable.', 'PROFILE_NOT_FOUND');
@@ -348,21 +382,21 @@ export function createApp(config) {
 
       res.status(201).json({
         blockedProfile,
-        matches: database.listMatchesForUser(req.auth.userId),
-        conversations: database.listConversationsForUser(req.auth.userId),
+        matches: await database.listMatchesForUser(req.auth.userId),
+        conversations: await database.listConversationsForUser(req.auth.userId),
       });
     } catch (error) {
       next(error);
     }
   });
 
-  app.post('/api/reports/profile', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res, next) => {
+  app.post('/api/reports/profile', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
       const reason = readRequiredString(body, 'reason', { maxLength: 120 });
       const details = `${body.details ?? ''}`.trim().slice(0, 1000);
-      const report = database.reportProfile(req.auth.userId, profileId, reason, details);
+      const report = await database.reportProfile(req.auth.userId, profileId, reason, details);
 
       if (!report) {
         throw createHttpError(404, 'Profil introuvable.', 'PROFILE_NOT_FOUND');
@@ -377,15 +411,15 @@ export function createApp(config) {
     }
   });
 
-  app.get('/api/matches', protectedRouteRateLimiter, requireAuth, (req, res) => {
-    res.json({ matches: database.listMatchesForUser(req.auth.userId) });
+  app.get('/api/matches', protectedRouteRateLimiter, requireAuth, async (req, res) => {
+    res.json({ matches: await database.listMatchesForUser(req.auth.userId) });
   });
 
-  app.get('/api/conversations', protectedRouteRateLimiter, requireAuth, (req, res) => {
-    res.json({ conversations: database.listConversationsForUser(req.auth.userId) });
+  app.get('/api/conversations', protectedRouteRateLimiter, requireAuth, async (req, res) => {
+    res.json({ conversations: await database.listConversationsForUser(req.auth.userId) });
   });
 
-  app.post('/api/conversations/:conversationId/messages', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res, next) => {
+  app.post('/api/conversations/:conversationId/messages', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res, next) => {
     try {
       const body = normalizeBody(req.body);
       const text = readRequiredString(body, 'text', { maxLength: 2000 });
@@ -394,7 +428,7 @@ export function createApp(config) {
         throw createHttpError(400, 'Le message est vide.', 'MESSAGE_EMPTY');
       }
 
-      const conversation = database.addMessage(req.auth.userId, req.params.conversationId, text);
+      const conversation = await database.addMessage(req.auth.userId, req.params.conversationId, text);
       if (!conversation) {
         throw createHttpError(404, 'Conversation introuvable.', 'CONVERSATION_NOT_FOUND');
       }
@@ -406,18 +440,56 @@ export function createApp(config) {
   });
 
   if (config.demoDiscoveryEnabled) {
-    app.post('/api/prototype/reset', protectedRouteRateLimiter, requireAuth, writeRateLimiter, (req, res) => {
-      database.resetUserData(req.auth.userId);
+    app.post('/api/prototype/reset', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res) => {
+      await database.resetUserData(req.auth.userId);
       res.json({
-        profile: database.getProfileByUserId(req.auth.userId),
-        matches: database.listMatchesForUser(req.auth.userId),
-        conversations: database.listConversationsForUser(req.auth.userId),
+        profile: await database.getProfileByUserId(req.auth.userId),
+        matches: await database.listMatchesForUser(req.auth.userId),
+        conversations: await database.listConversationsForUser(req.auth.userId),
       });
     });
   }
 
+  app.get('/api/admin/reports', protectedRouteRateLimiter, requireAuth, requireModerator, async (req, res) => {
+    const status = `${req.query.status ?? 'open'}`.trim() || 'open';
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 50) || 50));
+    res.json({
+      reports: await database.listModerationReports(status, limit),
+    });
+  });
+
+  app.patch('/api/admin/reports/:reportId', protectedRouteRateLimiter, requireAuth, requireModerator, writeRateLimiter, async (req, res, next) => {
+    try {
+      const body = normalizeBody(req.body);
+      const status = readRequiredString(body, 'status', { maxLength: 40 });
+      const resolutionNote = `${body.resolutionNote ?? ''}`.trim().slice(0, 1000);
+      if (!moderationStatuses.has(status)) {
+        throw createHttpError(400, 'Statut de modération invalide.', 'MODERATION_STATUS_INVALID');
+      }
+
+      const report = await database.resolveModerationReport(req.params.reportId, req.auth.userId, status, resolutionNote);
+      if (!report) {
+        throw createHttpError(404, 'Signalement introuvable.', 'REPORT_NOT_FOUND');
+      }
+
+      res.json({ report });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   if (fs.existsSync(config.staticDir)) {
-    app.use(express.static(config.staticDir));
+    app.use(express.static(config.staticDir, {
+      maxAge: config.staticAssetMaxAgeSeconds * 1000,
+      setHeaders(res, filePath) {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-store');
+          return;
+        }
+
+        res.setHeader('Cache-Control', `public, max-age=${config.staticAssetMaxAgeSeconds}, immutable`);
+      },
+    }));
     app.get(/^(?!\/api\/).*/, (req, res) => {
       res.sendFile(path.join(config.staticDir, 'index.html'));
     });

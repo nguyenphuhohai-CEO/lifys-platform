@@ -127,7 +127,7 @@ function buildMatchReason(currentProfile, targetProfile, hasReciprocalLike) {
   return 'Affinité démonstrative validée par le moteur de matching.';
 }
 
-export function createDatabase(configOrFile) {
+function createSqliteDatabase(configOrFile) {
   const config = typeof configOrFile === 'string'
     ? {
       databaseFile: configOrFile,
@@ -144,8 +144,8 @@ export function createDatabase(configOrFile) {
 
   const statements = {
     insertUser: db.prepare(`
-      INSERT INTO users (public_id, email, password_hash, email_verified_at, is_demo, created_at)
-      VALUES (@public_id, @email, @password_hash, @email_verified_at, @is_demo, @created_at)
+      INSERT INTO users (public_id, email, password_hash, email_verified_at, is_demo, role, created_at)
+      VALUES (@public_id, @email, @password_hash, @email_verified_at, @is_demo, @role, @created_at)
     `),
     insertProfile: db.prepare(`
       INSERT INTO profiles (user_id, public_id, name, age, city, bio, interests, mode, avatar, created_at, updated_at)
@@ -248,6 +248,77 @@ export function createDatabase(configOrFile) {
     insertAuditLog: db.prepare(`
       INSERT INTO audit_logs (public_id, actor_user_id, target_user_id, action, metadata, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
+    `),
+    updateUserRole: db.prepare(`UPDATE users SET role = ? WHERE id = ?`),
+    listModerationReports: db.prepare(`
+      SELECT
+        reports.public_id,
+        reports.reason,
+        reports.details,
+        reports.status,
+        reports.resolution_note,
+        reports.created_at,
+        reports.handled_at,
+        target_user.public_id AS target_user_public_id,
+        target_user.is_demo AS target_is_demo,
+        target_profile.public_id AS target_profile_public_id,
+        target_profile.name AS target_name,
+        target_profile.mode AS target_mode,
+        target_profile.city AS target_city,
+        reporter_user.public_id AS reporter_user_public_id,
+        reporter_user.is_demo AS reporter_is_demo,
+        reporter_profile.public_id AS reporter_profile_public_id,
+        reporter_profile.name AS reporter_name,
+        reporter_profile.mode AS reporter_mode,
+        reporter_profile.city AS reporter_city,
+        handled_by.public_id AS handled_by_user_public_id,
+        handled_by.email AS handled_by_email
+      FROM moderation_reports AS reports
+      JOIN users AS target_user ON target_user.id = reports.target_user_id
+      JOIN profiles AS target_profile ON target_profile.user_id = target_user.id
+      JOIN users AS reporter_user ON reporter_user.id = reports.reporter_user_id
+      JOIN profiles AS reporter_profile ON reporter_profile.user_id = reporter_user.id
+      LEFT JOIN users AS handled_by ON handled_by.id = reports.handled_by_user_id
+      WHERE (@status = 'all' OR reports.status = @status)
+      ORDER BY reports.created_at DESC
+      LIMIT @limit
+    `),
+    resolveModerationReport: db.prepare(`
+      UPDATE moderation_reports
+      SET status = @status, resolution_note = @resolution_note, handled_at = @handled_at, handled_by_user_id = @handled_by_user_id
+      WHERE public_id = @public_id
+    `),
+    findModerationReportByPublicId: db.prepare(`
+      SELECT
+        reports.public_id,
+        reports.reason,
+        reports.details,
+        reports.status,
+        reports.resolution_note,
+        reports.created_at,
+        reports.handled_at,
+        target_user.public_id AS target_user_public_id,
+        target_user.is_demo AS target_is_demo,
+        target_profile.public_id AS target_profile_public_id,
+        target_profile.name AS target_name,
+        target_profile.mode AS target_mode,
+        target_profile.city AS target_city,
+        reporter_user.public_id AS reporter_user_public_id,
+        reporter_user.is_demo AS reporter_is_demo,
+        reporter_profile.public_id AS reporter_profile_public_id,
+        reporter_profile.name AS reporter_name,
+        reporter_profile.mode AS reporter_mode,
+        reporter_profile.city AS reporter_city,
+        handled_by.public_id AS handled_by_user_public_id,
+        handled_by.email AS handled_by_email
+      FROM moderation_reports AS reports
+      JOIN users AS target_user ON target_user.id = reports.target_user_id
+      JOIN profiles AS target_profile ON target_profile.user_id = target_user.id
+      JOIN users AS reporter_user ON reporter_user.id = reports.reporter_user_id
+      JOIN profiles AS reporter_profile ON reporter_profile.user_id = reporter_user.id
+      LEFT JOIN users AS handled_by ON handled_by.id = reports.handled_by_user_id
+      WHERE reports.public_id = ?
+      LIMIT 1
     `),
     listMatchesForUser: db.prepare(`
       SELECT
@@ -369,7 +440,7 @@ export function createDatabase(configOrFile) {
 
   seedDemoData(db, statements, config);
 
-  function createUser({ email, passwordHash, name, mode = 'amoureux' }) {
+  function createUser({ email, passwordHash, name, mode = 'amoureux', role = 'member' }) {
     const createdAt = now();
     const userResult = statements.insertUser.run({
       public_id: createPublicId('user'),
@@ -377,6 +448,7 @@ export function createDatabase(configOrFile) {
       password_hash: passwordHash,
       email_verified_at: null,
       is_demo: 0,
+      role,
       created_at: createdAt,
     });
 
@@ -406,6 +478,11 @@ export function createDatabase(configOrFile) {
 
   function getUserById(userId) {
     return statements.findUserById.get(userId) ?? null;
+  }
+
+  function updateUserRole(userId, role) {
+    statements.updateUserRole.run(role, userId);
+    return getUserById(userId);
   }
 
   function getProfileByUserId(userId) {
@@ -707,6 +784,64 @@ export function createDatabase(configOrFile) {
     return { id: reportId, status: 'open' };
   }
 
+  function mapModerationReport(row) {
+    return {
+      id: row.public_id,
+      reason: row.reason,
+      details: row.details,
+      status: row.status,
+      resolutionNote: row.resolution_note ?? '',
+      createdAt: row.created_at,
+      handledAt: row.handled_at ?? null,
+      target: {
+        userPublicId: row.target_user_public_id,
+        profileId: row.target_profile_public_id,
+        name: row.target_name,
+        mode: row.target_mode,
+        city: row.target_city,
+        isDemo: Boolean(row.target_is_demo),
+      },
+      reporter: {
+        userPublicId: row.reporter_user_public_id,
+        profileId: row.reporter_profile_public_id,
+        name: row.reporter_name,
+        mode: row.reporter_mode,
+        city: row.reporter_city,
+        isDemo: Boolean(row.reporter_is_demo),
+      },
+      handledBy: row.handled_by_user_public_id
+        ? {
+          userPublicId: row.handled_by_user_public_id,
+          email: row.handled_by_email,
+        }
+        : null,
+    };
+  }
+
+  function listModerationReports(status = 'open', limit = 50) {
+    return statements.listModerationReports.all({ status, limit }).map(mapModerationReport);
+  }
+
+  function resolveModerationReport(reportPublicId, moderatorUserId, status, resolutionNote = '') {
+    const result = statements.resolveModerationReport.run({
+      public_id: reportPublicId,
+      status,
+      resolution_note: `${resolutionNote}`.trim(),
+      handled_at: now(),
+      handled_by_user_id: moderatorUserId,
+    });
+    if (!result.changes) {
+      return null;
+    }
+    createAuditLog({
+      actorUserId: moderatorUserId,
+      action: 'moderation.report.updated',
+      metadata: { reportId: reportPublicId, status, resolutionNote: `${resolutionNote}`.trim() },
+    });
+    const report = statements.findModerationReportByPublicId.get(reportPublicId);
+    return report ? mapModerationReport(report) : null;
+  }
+
   const deleteUserAccount = db.transaction((userId) => {
     const profile = getProfileByUserId(userId);
     const user = getUserById(userId);
@@ -732,6 +867,7 @@ export function createDatabase(configOrFile) {
     db,
     config,
     createUser,
+    updateUserRole,
     getUserByEmail,
     getUserById,
     getProfileByUserId,
@@ -755,6 +891,8 @@ export function createDatabase(configOrFile) {
     resetUserData,
     blockProfile,
     reportProfile,
+    listModerationReports,
+    resolveModerationReport,
     deleteUserAccount,
     createAuditLog,
     getMigrationState() {
@@ -767,6 +905,9 @@ export function createDatabase(configOrFile) {
         migrationCount: migrationState.appliedMigrations.length,
         latestMigration: migrationState.latestMigration,
       };
+    },
+    async close() {
+      db.close();
     },
   };
 }
@@ -791,6 +932,7 @@ function seedDemoData(db, statements, config) {
         password_hash: 'demo-account',
         email_verified_at: createdAt,
         is_demo: 1,
+        role: 'member',
         created_at: createdAt,
       });
 
@@ -811,4 +953,21 @@ function seedDemoData(db, statements, config) {
   });
 
   transaction();
+}
+
+export async function createDatabase(configOrFile) {
+  const config = typeof configOrFile === 'string'
+    ? {
+      databaseFile: configOrFile,
+      databaseProvider: 'sqlite',
+      demoDiscoveryEnabled: true,
+    }
+    : configOrFile;
+
+  if (config.databaseProvider === 'postgres') {
+    const { createPostgresDatabase } = await import('./postgres-db.js');
+    return createPostgresDatabase(config);
+  }
+
+  return createSqliteDatabase(config);
 }

@@ -108,43 +108,43 @@ export function createAuthController({ authService, config }) {
     },
 
     login(req, res, next) {
-      try {
+      Promise.resolve().then(async () => {
         const body = normalizeBody(req.body);
         const email = readRequiredString(body, 'email', { maxLength: 200 });
         const password = readOptionalString(body, 'password', { maxLength: 200 });
-        const result = authService.login({ email, password });
+        const result = await authService.login({ email, password });
         sendSession(res, result);
-      } catch (error) {
+      }).catch((error) => {
         next(error);
-      }
+      });
     },
 
     refresh(req, res, next) {
-      try {
-        const result = authService.refresh(getRefreshTokenFromRequest(req));
+      Promise.resolve().then(async () => {
+        const result = await authService.refresh(getRefreshTokenFromRequest(req));
         sendSession(res, result);
-      } catch (error) {
+      }).catch((error) => {
         clearRefreshCookie(res);
         next(error);
-      }
+      });
     },
 
     logout(req, res, next) {
-      try {
-        authService.logout(getRefreshTokenFromRequest(req));
+      Promise.resolve().then(async () => {
+        await authService.logout(getRefreshTokenFromRequest(req));
         clearRefreshCookie(res);
         res.status(204).end();
-      } catch (error) {
+      }).catch((error) => {
         next(error);
-      }
+      });
     },
 
     session(req, res, next) {
-      try {
-        res.json(authService.getSession(req.auth.userId, req.auth.token));
-      } catch (error) {
+      Promise.resolve().then(async () => {
+        res.json(await authService.getSession(req.auth.userId, req.auth.token));
+      }).catch((error) => {
         next(error);
-      }
+      });
     },
 
     requestEmailVerification(req, res, next) {
@@ -164,18 +164,18 @@ export function createAuthController({ authService, config }) {
     },
 
     verifyEmail(req, res, next) {
-      try {
+      Promise.resolve().then(async () => {
         const body = normalizeBody(req.body);
         const token = readRequiredString(body, 'token', { maxLength: 300 });
-        const result = authService.verifyEmail(token);
+        const result = await authService.verifyEmail(token);
         res.json({
           message: 'Adresse e-mail vérifiée.',
           user: result.user,
           emailVerified: true,
         });
-      } catch (error) {
+      }).catch((error) => {
         next(error);
-      }
+      });
     },
 
     requestPasswordReset(req, res, next) {
@@ -195,15 +195,15 @@ export function createAuthController({ authService, config }) {
     },
 
     resetPassword(req, res, next) {
-      try {
+      Promise.resolve().then(async () => {
         const body = normalizeBody(req.body);
         const token = readRequiredString(body, 'token', { maxLength: 300 });
         const password = readRequiredString(body, 'password', { maxLength: 200 });
-        const result = authService.resetPassword({ token, password });
+        const result = await authService.resetPassword({ token, password });
         sendSession(res, result);
-      } catch (error) {
+      }).catch((error) => {
         next(error);
-      }
+      });
     },
 
     requireRefreshCookie(req, _res, next) {
@@ -215,15 +215,15 @@ export function createAuthController({ authService, config }) {
     },
 
     deleteAccount(req, res, next) {
-      try {
+      Promise.resolve().then(async () => {
         const body = normalizeBody(req.body);
         const password = readRequiredString(body, 'password', { maxLength: 200 });
-        authService.deleteAccount(req.auth.userId, password);
+        await authService.deleteAccount(req.auth.userId, password);
         clearRefreshCookie(res);
         res.status(204).end();
-      } catch (error) {
+      }).catch((error) => {
         next(error);
-      }
+      });
     },
   };
 }

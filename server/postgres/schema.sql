@@ -5,6 +5,7 @@ CREATE TABLE users (
   password_hash TEXT NOT NULL,
   email_verified_at TIMESTAMPTZ,
   is_demo BOOLEAN NOT NULL DEFAULT FALSE,
+  role TEXT NOT NULL DEFAULT 'member',
   created_at TIMESTAMPTZ NOT NULL
 );
 
@@ -109,6 +110,9 @@ CREATE TABLE moderation_reports (
   reason TEXT NOT NULL,
   details TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'open',
+  resolution_note TEXT NOT NULL DEFAULT '',
+  handled_at TIMESTAMPTZ,
+  handled_by_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL
 );
 
@@ -125,6 +129,8 @@ CREATE TABLE audit_logs (
 CREATE INDEX idx_profiles_user_id ON profiles(user_id);
 CREATE INDEX idx_messages_conversation_created ON messages(conversation_id, created_at);
 CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id, revoked_at, expires_at);
+CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_user_blocks_user ON user_blocks(user_id, blocked_user_id);
 CREATE INDEX idx_moderation_reports_target ON moderation_reports(target_user_id, status, created_at);
+CREATE INDEX idx_moderation_reports_status_created ON moderation_reports(status, created_at);
 CREATE INDEX idx_audit_logs_action_created ON audit_logs(action, created_at);

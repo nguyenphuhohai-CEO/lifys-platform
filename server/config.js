@@ -24,6 +24,27 @@ function parseBoolean(value) {
   return `${value}` === 'true';
 }
 
+function parseTrustProxy(value, nodeEnv) {
+  if (value === undefined || value === null || `${value}`.trim() === '') {
+    return nodeEnv === 'production';
+  }
+
+  const normalized = `${value}`.trim().toLowerCase();
+  if (normalized === 'true') {
+    return true;
+  }
+  if (normalized === 'false') {
+    return false;
+  }
+
+  const numeric = Number(normalized);
+  if (Number.isInteger(numeric) && numeric >= 0) {
+    return numeric;
+  }
+
+  return `${value}`.trim();
+}
+
 function parseUrl(value, name) {
   try {
     return new URL(value);
@@ -46,13 +67,15 @@ function validateEmailAddress(value, name) {
 }
 
 export function getConfig(overrides = {}) {
+  const nodeEnv = overrides.NODE_ENV ?? process.env.NODE_ENV ?? 'development';
   const port = parsePortNumber(overrides.PORT ?? process.env.PORT ?? 3001);
   const databaseFile = overrides.DATABASE_FILE ?? process.env.DATABASE_FILE ?? path.join(rootDir, 'data', 'lifys.sqlite');
   const databaseProvider = overrides.DATABASE_PROVIDER ?? process.env.DATABASE_PROVIDER ?? 'sqlite';
+  const databaseUrl = overrides.DATABASE_URL ?? process.env.DATABASE_URL ?? '';
+  const databaseSsl = parseBoolean(overrides.DATABASE_SSL ?? process.env.DATABASE_SSL ?? (nodeEnv === 'production' && databaseProvider === 'postgres' ? 'true' : 'false'));
   const jwtSecret = overrides.JWT_SECRET ?? process.env.JWT_SECRET ?? 'lifys-dev-secret-change-me';
   const jwtExpiresIn = overrides.JWT_EXPIRES_IN ?? process.env.JWT_EXPIRES_IN ?? '15m';
   const staticDir = overrides.STATIC_DIR ?? process.env.STATIC_DIR ?? path.join(rootDir, 'dist');
-  const nodeEnv = overrides.NODE_ENV ?? process.env.NODE_ENV ?? 'development';
   const appBaseUrl = overrides.APP_BASE_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:5173';
   const corsOrigin = overrides.CORS_ORIGIN ?? process.env.CORS_ORIGIN ?? '';
   const rateLimitWindowMs = parsePositiveNumber(overrides.RATE_LIMIT_WINDOW_MS ?? process.env.RATE_LIMIT_WINDOW_MS ?? 60000, 'RATE_LIMIT_WINDOW_MS');
@@ -71,14 +94,17 @@ export function getConfig(overrides = {}) {
   const logLevel = overrides.LOG_LEVEL ?? process.env.LOG_LEVEL ?? 'info';
   const logRequests = parseBoolean(overrides.LOG_REQUESTS ?? process.env.LOG_REQUESTS ?? (nodeEnv === 'test' ? 'false' : 'true'));
   const allowSqliteInProduction = parseBoolean(overrides.ALLOW_SQLITE_IN_PRODUCTION ?? process.env.ALLOW_SQLITE_IN_PRODUCTION ?? 'false');
+  const trustProxy = parseTrustProxy(overrides.TRUST_PROXY ?? process.env.TRUST_PROXY, nodeEnv);
+  const forceHttps = parseBoolean(overrides.FORCE_HTTPS ?? process.env.FORCE_HTTPS ?? (nodeEnv === 'production' ? 'true' : 'false'));
+  const staticAssetMaxAgeSeconds = parsePositiveNumber(overrides.STATIC_ASSET_MAX_AGE_SECONDS ?? process.env.STATIC_ASSET_MAX_AGE_SECONDS ?? 86400, 'STATIC_ASSET_MAX_AGE_SECONDS');
   const allowedOrigins = parseOrigins(corsOrigin);
 
   if (nodeEnv === 'production' && jwtSecret === 'lifys-dev-secret-change-me') {
     throw new Error('JWT_SECRET must be set in production.');
   }
 
-  if (!['sqlite'].includes(databaseProvider)) {
-    throw new Error('DATABASE_PROVIDER must currently be sqlite.');
+  if (!['sqlite', 'postgres'].includes(databaseProvider)) {
+    throw new Error('DATABASE_PROVIDER must be sqlite or postgres.');
   }
 
   if (allowedOrigins.includes('*')) {
@@ -134,12 +160,18 @@ export function getConfig(overrides = {}) {
     if (databaseProvider === 'sqlite' && !allowSqliteInProduction) {
       throw new Error('ALLOW_SQLITE_IN_PRODUCTION must be true to acknowledge single-instance SQLite production usage.');
     }
+
+    if (databaseProvider === 'postgres' && !databaseUrl) {
+      throw new Error('DATABASE_URL must be configured when DATABASE_PROVIDER=postgres.');
+    }
   }
 
   return {
     port,
     databaseFile,
     databaseProvider,
+    databaseUrl,
+    databaseSsl,
     jwtSecret,
     jwtExpiresIn,
     staticDir,
@@ -162,5 +194,8 @@ export function getConfig(overrides = {}) {
     logLevel,
     logRequests,
     allowSqliteInProduction,
+    trustProxy,
+    forceHttps,
+    staticAssetMaxAgeSeconds,
   };
 }

@@ -1,6 +1,6 @@
 # Lifys Platform
 
-Lifys est maintenant un **MVP full-stack local durci** : frontend **React + Vite** connecté à un backend **Express + SQLite + JWT** pour une expérience de rencontre multi-catégories : **Amical**, **Amoureux**, **Sans lendemain**, **Mariage** et **Professionnel**.
+Lifys est maintenant un **MVP full-stack durci** : frontend **React + Vite** connecté à un backend **Express + JWT** avec exécution **SQLite locale** ou **PostgreSQL** pour une expérience de rencontre multi-catégories : **Amical**, **Amoureux**, **Sans lendemain**, **Mariage** et **Professionnel**.
 
 L’application reste encore volontairement **locale et partiellement simulée** :
 
@@ -36,7 +36,11 @@ Le MVP propose :
 - des migrations SQL versionnées et un schéma cible PostgreSQL ;
 - une suppression de compte avec purge serveur ;
 - des actions de blocage / signalement minimales ;
+- une file de modération admin minimale ;
+- un seed admin/modérateur pour l’exploitation ;
 - une healthcheck enrichie et des logs structurés.
+- un runtime PostgreSQL optionnel pour le déploiement public ;
+- un conteneur multi-stage, un `docker-compose.public.yml`, un reverse proxy Nginx et une CI/CD GitHub Actions.
 
 ## Installation
 
@@ -59,7 +63,9 @@ Variables utiles pour le backend local :
 - `JWT_EXPIRES_IN` : durée de vie du token d’accès ;
 - `APP_BASE_URL` : URL publique utilisée dans les liens e-mail ;
 - `VITE_API_BASE_URL` : URL de l’API Express quand le frontend Vite tourne sur une origine différente ;
-- `DATABASE_PROVIDER` : actuellement `sqlite` ;
+- `DATABASE_PROVIDER` : `sqlite` en local ou `postgres` pour le déploiement public ;
+- `DATABASE_URL` : URL PostgreSQL quand `DATABASE_PROVIDER=postgres` ;
+- `DATABASE_SSL` : active SSL côté client PostgreSQL ;
 - `REFRESH_COOKIE_NAME` : nom du cookie httpOnly de refresh ;
 - `CSRF_COOKIE_NAME` : nom du cookie CSRF lisible côté frontend ;
 - `VITE_CSRF_COOKIE_NAME` : nom attendu côté client pour relire ce cookie ;
@@ -78,6 +84,9 @@ Variables utiles pour le backend local :
 - `LOG_LEVEL` : niveau des logs structurés ;
 - `LOG_REQUESTS` : active les logs HTTP minimaux.
 - `ALLOW_SQLITE_IN_PRODUCTION` : accusé de réception explicite si SQLite reste utilisé en production mono-instance.
+- `TRUST_PROXY` : active la confiance proxy Express derrière Nginx / load balancer ;
+- `FORCE_HTTPS` : redirige les requêtes HTTP vers `APP_BASE_URL` ;
+- `STATIC_ASSET_MAX_AGE_SECONDS` : durée de cache des assets statiques servis par Express.
 
 ## Scripts
 
@@ -96,6 +105,9 @@ npm test
 
 # appliquer / vérifier les migrations
 npm run migrate
+
+# créer / promouvoir un compte admin ou moderator
+ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=change-me ADMIN_ROLE=admin npm run seed:admin
 
 # lancer le serveur Express (et servir dist si build présent)
 npm start
@@ -157,6 +169,22 @@ npm run dev -- --host
 - message explicite lorsque le navigateur refuse la persistance locale.
 - suppression définitive de compte avec purge des données côté serveur.
 
+### Modération & exploitation
+
+- rôles `member`, `moderator`, `admin` ;
+- listing des signalements via `GET /api/admin/reports` ;
+- traitement des signalements via `PATCH /api/admin/reports/:reportId` ;
+- script `npm run seed:admin` pour créer ou promouvoir un compte d’exploitation.
+
+### Déploiement public
+
+- runtime PostgreSQL activable via `DATABASE_PROVIDER=postgres` ;
+- support reverse proxy avec `TRUST_PROXY` et `FORCE_HTTPS` ;
+- cache statique configuré via `STATIC_ASSET_MAX_AGE_SECONDS` ;
+- `Dockerfile` multi-stage ;
+- `docker-compose.public.yml` avec app + PostgreSQL + Nginx ;
+- workflows GitHub Actions pour CI et publication d’image GHCR.
+
 ## Architecture
 
 ```text
@@ -187,17 +215,25 @@ server/
   http.js                # erreurs HTTP partagées
   app.js                 # API Express
   auth.js                # helpers JWT / mot de passe
-  db.js                  # persistance SQLite
+  db.js                  # factory SQLite/PostgreSQL
+  postgres-db.js         # adaptateur runtime PostgreSQL
+  seed-admin.js          # bootstrap admin/modérateur
+
+deploy/
+  nginx.public.conf      # reverse proxy / compression / forwarded headers
+
+.github/workflows/
+  ci.yml                 # tests + build
+  publish-image.yml      # publication GHCR
 ```
 
 ## Limites du MVP full-stack local
 
 - aucune vérification d’identité ;
 - aucun paiement ;
-- backend local mono-instance, pas encore prêt pour une prod publique ;
+- une vraie prod publique demande encore secrets, domaine, HTTPS, observabilité et conformité ;
 - aucune synchronisation temps réel entre appareils ;
 - aucune messagerie temps réel ;
-- PostgreSQL n’est pas encore branché à l’exécution ;
 - la modération reste minimale et sans interface admin dédiée ;
 - les profils de découverte peuvent rester fictifs si `DEMO_DISCOVERY_ENABLED=true`.
 
@@ -205,12 +241,35 @@ server/
 
 ### Étapes restantes avant vraie prod publique
 
-- brancher PostgreSQL en exécution réelle ;
 - déployer frontend + API sur une cible stable avec HTTPS ;
 - connecter un vrai monitoring/alerting ;
-- ajouter une interface d’administration/modération ;
+- ajouter une interface d’administration/modération frontend ;
 - brancher la messagerie temps réel ;
 - finaliser conformité légale et RGPD.
+
+## Déploiement public recommandé
+
+### Via conteneurs
+
+```bash
+cp .env.production.example .env
+docker compose -f docker-compose.public.yml up --build -d
+```
+
+### Préparer le premier compte d’exploitation
+
+```bash
+ADMIN_EMAIL=admin@example.com \
+ADMIN_PASSWORD='change-me-now' \
+ADMIN_ROLE=admin \
+npm run seed:admin
+```
+
+### Endpoints d’exploitation
+
+- `GET /api/health`
+- `GET /api/admin/reports?status=open`
+- `PATCH /api/admin/reports/:reportId`
 
 ## Avertissement sécurité
 
