@@ -5,6 +5,7 @@ import ToastRegion from './components/ToastRegion';
 import { MODES, defaultProfile } from './data/demoData';
 import { api, ApiError } from './lib/api';
 import { getConversationPreview, getModeById, serializeInterests } from './utils/app-utils';
+import { answerLocalPrompt } from './utils/local-ai';
 import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './utils/storage';
 
 const NAV_ITEMS = [
@@ -12,6 +13,7 @@ const NAV_ITEMS = [
   { id: 'discover', label: 'Découvrir' },
   { id: 'matches', label: 'Matchs' },
   { id: 'messages', label: 'Messages' },
+  { id: 'assistant', label: 'Coach local' },
   { id: 'profile', label: 'Profil' },
 ];
 
@@ -57,6 +59,14 @@ function App() {
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [draftMessage, setDraftMessage] = useState('');
+  const [assistantDraft, setAssistantDraft] = useState('');
+  const [assistantMessages, setAssistantMessages] = useState([
+    {
+      id: 'assistant-welcome',
+      sender: 'assistant',
+      text: 'Bonjour ! Je peux vous aider à améliorer votre profil, repérer des affinités ou trouver une idée de premier message.',
+    },
+  ]);
   const [searchQuery, setSearchQuery] = useState('');
   const [cityQuery, setCityQuery] = useState('');
   const [toasts, setToasts] = useState([]);
@@ -335,6 +345,24 @@ function App() {
     } finally {
       setMessageSending(false);
     }
+  };
+
+  const handleAssistantSubmit = (event) => {
+    event.preventDefault();
+    const prompt = assistantDraft.trim();
+
+    if (!prompt) {
+      return;
+    }
+
+    const answer = answerLocalPrompt(prompt, { profile, profiles });
+    const messageId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    setAssistantMessages((current) => [
+      ...current,
+      { id: `${messageId}-user`, sender: 'user', text: prompt },
+      { id: `${messageId}-assistant`, sender: 'assistant', text: answer },
+    ]);
+    setAssistantDraft('');
   };
 
   const handleResetPrototype = async () => {
@@ -805,6 +833,46 @@ function App() {
                 <EmptyState title="Sélectionnez une conversation" description="Choisissez un échange pour afficher les messages stockés en base." />
               )}
             </div>
+          </section>
+        )}
+
+        {view === 'assistant' && (
+          <section className="content-panel local-assistant">
+            <SectionHeader
+              eyebrow="Assistant local"
+              title="Coach Lifys"
+              description="Des conseils sur votre profil, vos affinités et vos premiers messages."
+            />
+
+            <div className="local-ai-notice">
+              <strong>Vos échanges restent dans cette page.</strong>
+              <span>Les réponses sont générées par des règles locales à partir des profils chargés ; aucun modèle externe ni service IA n’est utilisé.</span>
+            </div>
+
+            <div className="assistant-messages" role="log" aria-label="Conversation avec le coach local" aria-live="polite">
+              {assistantMessages.map((message) => (
+                <div key={message.id} className={`bubble ${message.sender === 'user' ? 'me' : 'them'}`}>
+                  {message.text}
+                </div>
+              ))}
+            </div>
+
+            <div className="assistant-prompts" aria-label="Exemples de questions">
+              <button type="button" className="pill" onClick={() => setAssistantDraft('Comment améliorer mon profil ?')}>Améliorer mon profil</button>
+              <button type="button" className="pill" onClick={() => setAssistantDraft('Quels profils pourraient me correspondre ?')}>Trouver des affinités</button>
+              <button type="button" className="pill" onClick={() => setAssistantDraft('Comment démarrer une conversation ?')}>Trouver une accroche</button>
+            </div>
+
+            <form className="composer" onSubmit={handleAssistantSubmit}>
+              <input
+                type="text"
+                aria-label="Votre question au coach local"
+                placeholder="Posez une question…"
+                value={assistantDraft}
+                onChange={(event) => setAssistantDraft(event.target.value)}
+              />
+              <button type="submit" className="primary-button" disabled={!assistantDraft.trim()}>Envoyer</button>
+            </form>
           </section>
         )}
 

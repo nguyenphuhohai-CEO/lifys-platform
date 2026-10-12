@@ -23,6 +23,7 @@ Le dépôt livre :
 - des likes / passes stockés côté serveur ;
 - des matchs persistés ;
 - une messagerie persistante ;
+- un coach local pour les conseils de profil, les affinités et les premiers messages ;
 - une réinitialisation de l’espace de démonstration ;
 - un fallback robuste pour les quelques données encore stockées dans `localStorage` côté client (jeton/session).
 
@@ -121,6 +122,12 @@ npm test
 - conversations persistées en base ;
 - envoi avec `Enter` ;
 - récupération après redémarrage du serveur.
+
+### Coach local
+
+- conseils de profil, recommandations d’affinités et idées de premiers messages ;
+- réponses calculées dans le navigateur à partir des profils chargés, sans appel à un service IA externe ;
+- assistant heuristique de démonstration, et non modèle génératif.
 
 ## Architecture
 
