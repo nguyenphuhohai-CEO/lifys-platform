@@ -51,6 +51,8 @@ Pour une configuration de déploiement durcie :
 cp .env.production.example .env
 ```
 
+Définissez ensuite `NODE_ENV=production` dans l’environnement du processus serveur (systemd, Docker, PaaS, reverse proxy launch command), plutôt que dans le fichier `.env` consommé aussi par Vite.
+
 Variables utiles pour le backend local :
 
 - `JWT_SECRET` : secret JWT à remplacer hors démo ;
