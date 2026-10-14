@@ -238,7 +238,7 @@ server/
   seed-admin.js          # bootstrap admin/modérateur
 
 deploy/
-  nginx.public.conf      # reverse proxy / compression / forwarded headers
+  nginx.public.conf      # template reverse proxy / TLS / ACME / forwarded headers
 
 .github/workflows/
   ci.yml                 # tests + build
@@ -257,13 +257,12 @@ deploy/
 
 ## Roadmap recommandée
 
-### Étapes restantes avant vraie prod publique
+### Étapes restantes après mise en prod publique
 
-- déployer frontend + API sur une cible stable avec HTTPS ;
-- connecter un vrai monitoring/alerting ;
 - enrichir les workflows de modération (assignation, historique, preuves, audit trail) ;
 - brancher la messagerie temps réel ;
-- finaliser conformité légale et RGPD.
+- finaliser conformité légale et RGPD ;
+- industrialiser l’observabilité selon votre plateforme cible.
 
 ## Déploiement public recommandé
 
@@ -271,14 +270,24 @@ deploy/
 
 ```bash
 cp .env.production.example .env
+mkdir -p deploy/certs deploy/acme backups
 docker compose -f docker-compose.public.yml up --build -d
 ```
 
 Par défaut, l’exemple privilégie un **déploiement same-origin** derrière Nginx :
 
+- définissez `APP_DOMAIN` sur le vrai domaine public ;
 - laissez `VITE_API_BASE_URL=` vide pour que le frontend appelle `/api` sur le même domaine ;
 - gardez `CORS_ORIGIN` aligné avec `APP_BASE_URL` ;
 - n’utilisez une URL API distincte que si vous la fournissez explicitement **au build**.
+
+Le reverse proxy public livré gère :
+
+- écoute `80/443` ;
+- redirection HTTP → HTTPS ;
+- terminaison TLS via `TLS_CERT_PATH` / `TLS_KEY_PATH` ;
+- webroot ACME `deploy/acme/` ;
+- endpoint `https://<domaine>/healthz`.
 
 Pour la publication GHCR via GitHub Actions, renseignez si nécessaire les variables de dépôt :
 
@@ -300,10 +309,15 @@ npm run seed:admin
 - `GET /api/admin/reports?status=open`
 - `PATCH /api/admin/reports/:reportId`
 
+### Guides d’exploitation
+
+- `DEPLOYMENT.md` : déploiement, rollback, bootstrap exploitation
+- `OPERATIONS.md` : logs, monitoring, alerting, backups, restauration
+
 ## Avertissement sécurité
 
 Ce dépôt reste un **MVP full-stack local durci**.  
-Ne pas y saisir de données sensibles réelles. Avant toute mise en production future, prévoir au minimum :
+Ne pas y saisir de données sensibles réelles. Avant toute exploitation publique, prévoir au minimum :
 
 - authentification et sessions durcies ;
 - `EMAIL_DELIVERY_MODE=resend` avec `RESEND_API_KEY`, `EMAIL_FROM`, `APP_BASE_URL`, `JWT_SECRET` fort et `COOKIE_SECURE=true` ;

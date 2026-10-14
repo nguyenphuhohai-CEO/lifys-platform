@@ -25,7 +25,7 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN}
       DEMO_DISCOVERY_ENABLED: false
       TRUST_PROXY: true
-      FORCE_HTTPS: ${FORCE_HTTPS:-false}
+      FORCE_HTTPS: ${FORCE_HTTPS:-true}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_REQUESTS: ${LOG_REQUESTS:-true}
       STATIC_ASSET_MAX_AGE_SECONDS: ${STATIC_ASSET_MAX_AGE_SECONDS:-86400}
@@ -33,12 +33,16 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health',{headers:{'x-forwarded-proto':'https'}}).then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 20s
     restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   postgres:
     image: postgres:17-bookworm
@@ -53,17 +57,65 @@ services:
       retries: 10
     volumes:
       - lifys-postgres:/var/lib/postgresql/data
+      - ./backups:/backups
     restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  backup:
+    image: postgres:17-bookworm
+    profiles: ["ops"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://lifys:${POSTGRES_PASSWORD}@postgres:5432/lifys}
+    volumes:
+      - ./backups:/backups
+    entrypoint:
+      - /bin/sh
+      - -lc
+    command: >
+      mkdir -p /backups &&
+      pg_dump --format=custom --clean --if-exists
+      --file "/backups/lifys-$$(date +%F-%H%M%S).dump"
+      "$$DATABASE_URL"
+    restart: "no"
 
   nginx:
     image: nginx:1.29-alpine
     depends_on:
       - app
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      TLS_CERT_PATH: ${TLS_CERT_PATH:-/etc/nginx/certs/fullchain.pem}
+      TLS_KEY_PATH: ${TLS_KEY_PATH:-/etc/nginx/certs/privkey.pem}
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./deploy/nginx.public.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx.public.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./deploy/certs:/etc/nginx/certs:ro
+      - ./deploy/acme:/var/www/certbot
+    command: >
+      /bin/sh -lc
+      "envsubst '$$APP_DOMAIN $$TLS_CERT_PATH $$TLS_KEY_PATH'
+      < /etc/nginx/templates/default.conf.template
+      > /etc/nginx/conf.d/default.conf &&
+      exec nginx -g 'daemon off;'"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 volumes:
   lifys-postgres:
