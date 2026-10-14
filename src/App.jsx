@@ -5,6 +5,7 @@ import ToastRegion from './components/ToastRegion';
 import { MODES, defaultProfile } from './data/demoData';
 import { api, ApiError } from './lib/api';
 import { getConversationPreview, getModeById, resolveSelectedConversationId, serializeInterests } from './utils/app-utils';
+import { buildLocalCoachInsights } from './utils/local-ai';
 import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './utils/storage';
 
 const NAV_ITEMS = [
@@ -13,6 +14,7 @@ const NAV_ITEMS = [
   { id: 'matches', label: 'Matchs' },
   { id: 'messages', label: 'Messages' },
   { id: 'profile', label: 'Profil' },
+  { id: 'admin', label: 'Pilotage' },
 ];
 
 const NAV_VIEW_IDS = new Set(NAV_ITEMS.map((item) => item.id));
@@ -54,6 +56,56 @@ function SectionHeader({ eyebrow, title, description, aside }) {
       </div>
       {aside}
     </div>
+  );
+}
+
+function CoachPanel({ coach, onNavigate }) {
+  return (
+    <section className="content-panel coach-panel">
+      <SectionHeader
+        eyebrow="Coach local"
+        title="Priorités produit et relation"
+        description={`Analyse locale sans appel externe. Profil complété à ${coach.profileHealth.score}%.`}
+      />
+
+      <div className="coach-summary">
+        <div className={`coach-summary-card ${coach.summary.tone}`}>
+          <strong>{coach.summary.title}</strong>
+          <p>{coach.summary.message}</p>
+          {coach.summary.actionLabel && coach.summary.actionView ? (
+            <button type="button" className="secondary-button" onClick={() => onNavigate(coach.summary.actionView)}>
+              {coach.summary.actionLabel}
+            </button>
+          ) : null}
+        </div>
+        <div className="coach-metrics">
+          <article className="mini-card">
+            <span className="mini-label">Profil</span>
+            <strong>{coach.profileHealth.score}%</strong>
+            <p>{coach.profileHealth.completed}/{coach.profileHealth.total} critères clés</p>
+          </article>
+          <article className="mini-card">
+            <span className="mini-label">Actions</span>
+            <strong>{coach.insights.length}</strong>
+            <p>pistes activables immédiatement</p>
+          </article>
+        </div>
+      </div>
+
+      <div className="coach-grid">
+        {coach.insights.map((item) => (
+          <article key={item.id} className={`coach-tip ${item.tone}`}>
+            <strong>{item.title}</strong>
+            <p>{item.message}</p>
+            {item.actionLabel && item.actionView ? (
+              <button type="button" className="secondary-button" onClick={() => onNavigate(item.actionView)}>
+                {item.actionLabel}
+              </button>
+            ) : null}
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -104,6 +156,11 @@ function App() {
   const [deleteAccountConfirm, setDeleteAccountConfirm] = useState('');
   const [blockingProfileId, setBlockingProfileId] = useState('');
   const [reportingProfileId, setReportingProfileId] = useState('');
+  const [moderationReports, setModerationReports] = useState([]);
+  const [moderationStatusFilter, setModerationStatusFilter] = useState('open');
+  const [moderationLoading, setModerationLoading] = useState(false);
+  const [moderationUpdatingId, setModerationUpdatingId] = useState('');
+  const [moderationNotes, setModerationNotes] = useState({});
   const refreshRequestRef = useRef(null);
 
   const showToast = useCallback((toast) => {
@@ -115,6 +172,18 @@ function App() {
   }, []);
 
   const isPreviewEmailMode = appEnvironment.emailDeliveryMode === 'preview';
+  const canModerate = ['admin', 'moderator'].includes(currentUser?.role ?? '');
+  const visibleNavItems = canModerate ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.id !== 'admin');
+  const runtimeDatabaseLabel = appEnvironment.databaseProvider === 'postgres' ? 'PostgreSQL' : 'SQLite';
+  const completedProfile = Boolean(profile.name && profile.age && profile.city && profile.bio);
+  const coach = useMemo(() => buildLocalCoachInsights({
+    currentUser,
+    profile,
+    profiles,
+    matches,
+    conversations,
+    appEnvironment,
+  }), [appEnvironment, conversations, currentUser, matches, profile, profiles]);
 
   const handleApiError = useCallback((error, fallbackMessage) => {
     const message = error instanceof ApiError ? error.message : fallbackMessage;
@@ -373,6 +442,32 @@ function App() {
     }
   }, [activeMode, applyProfileState, cityQuery, handleApiError, handleUnauthorized, searchQuery, view, withFreshToken]);
 
+  const loadModerationReports = useCallback(async () => {
+    if (!canModerate) {
+      setModerationReports([]);
+      return;
+    }
+
+    setModerationLoading(true);
+
+    try {
+      const response = await withFreshToken((nextToken) => api.getModerationReports(nextToken, {
+        status: moderationStatusFilter,
+        limit: 100,
+      }), { refreshView: 'admin' });
+      setModerationReports(response.reports);
+      setPageError('');
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
+      handleApiError(error, 'Impossible de charger la file de modération.');
+    } finally {
+      setModerationLoading(false);
+    }
+  }, [canModerate, handleApiError, handleUnauthorized, moderationStatusFilter, withFreshToken]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -419,6 +514,17 @@ function App() {
   }, [activeMode, cityQuery, currentUser, loadDiscovery, searchQuery, token]);
 
   useEffect(() => {
+    if (!canModerate && view === 'admin') {
+      setView('home');
+      return;
+    }
+
+    if (canModerate && token && view === 'admin') {
+      loadModerationReports();
+    }
+  }, [canModerate, loadModerationReports, token, view]);
+
+  useEffect(() => {
     setProfileDraft((current) => ({
       ...current,
       ...profile,
@@ -434,7 +540,6 @@ function App() {
 
   const selectedConversationData = conversations.find((conversation) => conversation.id === selectedConversation) ?? null;
   const availableCities = useMemo(() => [...new Set(profiles.map((item) => item.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [profiles]);
-  const completedProfile = Boolean(profile.name && profile.age && profile.city && profile.bio);
 
   const validateProfile = () => {
     const errors = {};
@@ -780,6 +885,33 @@ function App() {
     }
   };
 
+  const handleModerationUpdate = async (reportId, status) => {
+    setModerationUpdatingId(reportId);
+
+    try {
+      const response = await withFreshToken((nextToken) => api.updateModerationReport(nextToken, reportId, {
+        status,
+        resolutionNote: moderationNotes[reportId] ?? '',
+      }), { refreshView: 'admin' });
+      setModerationReports((current) => current.map((report) => (
+        report.id === reportId ? response.report : report
+      )));
+      showToast({
+        type: 'success',
+        title: 'Signalement mis à jour',
+        message: `Le signalement ${reportId} est maintenant marqué comme ${status}.`,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
+      handleApiError(error, 'Impossible de mettre à jour ce signalement.');
+    } finally {
+      setModerationUpdatingId('');
+    }
+  };
+
   const handleDeleteAccount = async (event) => {
     event.preventDefault();
 
@@ -901,7 +1033,7 @@ function App() {
         <div className="content-panel loading-panel" role="status" aria-live="polite">
           <p className="eyebrow">Chargement</p>
           <h1>Lifys établit la connexion sécurisée…</h1>
-          <p className="section-description">Initialisation de votre session, du backend Express et de la base SQLite.</p>
+          <p className="section-description">Initialisation de votre session, du backend Express et de la base {runtimeDatabaseLabel}.</p>
         </div>
       </div>
     );
@@ -930,7 +1062,7 @@ function App() {
                 </article>
                 <article className="metric-card">
                   <span>Base</span>
-                  <strong>SQLite</strong>
+                  <strong>{runtimeDatabaseLabel}</strong>
                   <small>{appEnvironment.databaseProvider}</small>
                 </article>
                 <article className="metric-card">
@@ -1052,7 +1184,7 @@ function App() {
           <span className="brand-icon">❤</span>
           <span>
             <strong>Lifys</strong>
-            <small>React + Express + SQLite</small>
+            <small>{`React + Express + ${runtimeDatabaseLabel}`}</small>
           </span>
         </button>
 
@@ -1067,7 +1199,7 @@ function App() {
         </button>
 
         <nav id="lifys-main-nav" className={isMobileNavOpen ? 'nav nav-open' : 'nav'} aria-label="Navigation principale">
-          {NAV_ITEMS.map((item) => (
+          {visibleNavItems.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -1081,6 +1213,7 @@ function App() {
 
         <div className="topbar-actions">
           <span className="prototype-badge">{currentUser.email}</span>
+          {canModerate ? <span className="counter-badge muted">{currentUser.role}</span> : null}
           {appEnvironment.demoDiscoveryEnabled ? (
             <button type="button" className="secondary-button" onClick={handleResetPrototype} disabled={resetting}>
               {resetting ? 'Réinitialisation…' : 'Réinitialiser'}
@@ -1097,6 +1230,7 @@ function App() {
           <strong>État de plateforme</strong>
           <span>Les comptes utilisateur, profils, matchs et messages sont persistés côté backend.</span>
           <span>Le refresh token est protégé par cookie httpOnly et le refresh/logout sont protégés par un jeton CSRF compagnon.</span>
+          <span>Aucune vérification d’identité réelle n’est encore réalisée sur ce MVP.</span>
           <span>{appEnvironment.demoDiscoveryEnabled ? 'Le mode démo découverte reste activé dans cet environnement.' : 'Le mode démo découverte est désactivé dans cet environnement.'}</span>
         </section>
 
@@ -1140,7 +1274,8 @@ function App() {
                 <span className="eyebrow">MVP full-stack local</span>
                 <h1>Une base Lifys désormais connectée à un vrai backend.</h1>
                 <p>
-                  Votre profil, vos likes, vos matchs et vos messages sont servis par Express et stockés en SQLite.
+                  Votre profil, vos likes, vos matchs et vos messages sont servis par Express et stockés côté backend.
+                  {` Runtime base active : ${runtimeDatabaseLabel}.`}
                   {appEnvironment.demoDiscoveryEnabled
                     ? ' Les profils de découverte fictifs restent disponibles uniquement pour les environnements de démonstration.'
                     : ' La découverte repose uniquement sur les profils réels actuellement créés.'}
@@ -1186,10 +1321,12 @@ function App() {
                 <div className="mini-card">
                   <span className="mini-label">Stack</span>
                   <strong>React + Express</strong>
-                  <p>JWT · SQLite · Vite</p>
+                  <p>{`JWT · ${runtimeDatabaseLabel} · Vite`}</p>
                 </div>
               </div>
             </section>
+
+            <CoachPanel coach={coach} onNavigate={setCurrentView} />
 
             <section className="mode-grid" aria-label="Choix de catégorie">
               {MODES.map((mode) => (
@@ -1310,7 +1447,7 @@ function App() {
             />
 
             {dashboardLoading ? (
-              <EmptyState title="Chargement des matchs" description="Lecture des correspondances depuis SQLite." />
+              <EmptyState title="Chargement des matchs" description={`Lecture des correspondances depuis ${runtimeDatabaseLabel}.`} />
             ) : matches.length === 0 ? (
               <EmptyState title="Aucun match pour l’instant" description="Commencez par liker des profils pour créer vos premières connexions." actionLabel="Voir la découverte" onAction={() => setView('discover')} />
             ) : (
@@ -1511,6 +1648,97 @@ function App() {
                 </form>
               </aside>
             </div>
+          </section>
+        )}
+
+        {view === 'admin' && canModerate && (
+          <section className="content-panel moderation-panel">
+            <SectionHeader
+              eyebrow="Pilotage"
+              title="Console de modération"
+              description="Suivez les signalements entrants, documentez leur traitement et gardez une visibilité claire sur l’exploitation."
+              aside={(
+                <div className="header-meta">
+                  <span className="counter-badge">{moderationReports.length} signalement{moderationReports.length > 1 ? 's' : ''}</span>
+                </div>
+              )}
+            />
+
+            <div className="discover-toolbar moderation-toolbar">
+              <div className="mode-pills" aria-label="Filtre de statut de modération">
+                {['open', 'reviewing', 'resolved', 'rejected', 'all'].map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    className={moderationStatusFilter === status ? 'pill active' : 'pill'}
+                    onClick={() => setModerationStatusFilter(status)}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="secondary-button" onClick={loadModerationReports} disabled={moderationLoading}>
+                {moderationLoading ? 'Actualisation…' : 'Actualiser'}
+              </button>
+            </div>
+
+            {moderationLoading ? (
+              <EmptyState title="Chargement des signalements" description="Lecture de la file de modération depuis le backend." />
+            ) : moderationReports.length === 0 ? (
+              <EmptyState title="Aucun signalement" description="La file de modération est vide pour ce filtre." />
+            ) : (
+              <div className="moderation-list">
+                {moderationReports.map((report) => (
+                  <article key={report.id} className="moderation-item">
+                    <div className="moderation-header">
+                      <div>
+                        <p className="eyebrow">Signalement {report.id}</p>
+                        <h3>{report.target.name}</h3>
+                        <p className="section-description">
+                          {report.target.city || 'Ville non précisée'} · {getModeById(report.target.mode).label}
+                        </p>
+                      </div>
+                      <span className={`tag moderation-status ${report.status}`}>{report.status}</span>
+                    </div>
+
+                    <div className="moderation-grid">
+                      <div className="mini-card">
+                        <span className="mini-label">Reporter</span>
+                        <strong>{report.reporter.name}</strong>
+                        <p>{report.reason}</p>
+                      </div>
+                      <div className="mini-card">
+                        <span className="mini-label">Détail</span>
+                        <strong>{report.details || 'Sans détail complémentaire'}</strong>
+                        <p>{report.handledAt ? `Traité le ${new Date(report.handledAt).toLocaleString('fr-FR')}` : 'En attente de traitement'}</p>
+                      </div>
+                    </div>
+
+                    <label className="moderation-note">
+                      <span>Note de traitement</span>
+                      <textarea
+                        rows="3"
+                        value={moderationNotes[report.id] ?? report.resolutionNote ?? ''}
+                        onChange={(event) => setModerationNotes((current) => ({ ...current, [report.id]: event.target.value }))}
+                        placeholder="Décision, contexte, action menée…"
+                      />
+                    </label>
+
+                    <div className="moderation-actions">
+                      <button type="button" className="secondary-button" disabled={moderationUpdatingId === report.id} onClick={() => handleModerationUpdate(report.id, 'reviewing')}>
+                        En revue
+                      </button>
+                      <button type="button" className="primary-button" disabled={moderationUpdatingId === report.id} onClick={() => handleModerationUpdate(report.id, 'resolved')}>
+                        Résoudre
+                      </button>
+                      <button type="button" className="secondary-button danger-button" disabled={moderationUpdatingId === report.id} onClick={() => handleModerationUpdate(report.id, 'rejected')}>
+                        Rejeter
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         )}
       </main>

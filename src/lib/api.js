@@ -134,6 +134,23 @@ export const api = {
       },
     });
   },
+  getModerationReports(token, filters = {}) {
+    const search = new URLSearchParams({
+      status: filters.status ?? 'open',
+      limit: `${filters.limit ?? 50}`,
+    });
+    return apiRequest(`/api/admin/reports?${search.toString()}`, { token });
+  },
+  updateModerationReport(token, reportId, payload = {}) {
+    return apiRequest(`/api/admin/reports/${reportId}`, {
+      method: 'PATCH',
+      token,
+      body: {
+        status: payload.status ?? 'reviewing',
+        resolutionNote: payload.resolutionNote ?? '',
+      },
+    });
+  },
   getMatches(token) {
     return apiRequest('/api/matches', { token });
   },

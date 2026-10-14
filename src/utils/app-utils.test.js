@@ -19,6 +19,7 @@ import {
   serializeInterests,
   shouldCreateMatch,
 } from './app-utils.js';
+import { buildLocalCoachInsights, buildProfileHealth } from './local-ai.js';
 import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './storage.js';
 
 function createMockStorage() {
@@ -268,4 +269,38 @@ test('resolveSelectedConversationId keeps a valid selection and falls back safel
   assert.equal(resolveSelectedConversationId(conversations, 'conv-b'), 'conv-b');
   assert.equal(resolveSelectedConversationId(conversations, 'missing'), 'conv-a');
   assert.equal(resolveSelectedConversationId([], 'conv-b'), null);
+});
+
+test('buildProfileHealth scores completion across critical fields', () => {
+  assert.equal(buildProfileHealth(defaultProfile).score, 0);
+  assert.equal(buildProfileHealth({
+    name: 'Aya',
+    age: 29,
+    city: 'Paris',
+    bio: 'Bio suffisamment détaillée pour dépasser le seuil de qualité attendu par le coach local.',
+    interests: 'Musique, Sport, Voyage',
+  }).score, 100);
+});
+
+test('buildLocalCoachInsights returns actionable next steps without external AI', () => {
+  const result = buildLocalCoachInsights({
+    currentUser: { emailVerified: false },
+    profile: {
+      name: 'Aya',
+      age: 29,
+      city: 'Paris',
+      bio: 'Bio courte',
+      interests: 'Musique',
+      mode: 'amoureux',
+    },
+    profiles: [],
+    matches: [],
+    conversations: [],
+    appEnvironment: { demoDiscoveryEnabled: true },
+  });
+
+  assert.equal(result.summary.id, 'email-verification');
+  assert.ok(result.insights.some((item) => item.id === 'profile-quality'));
+  assert.ok(result.insights.some((item) => item.id === 'discovery-filters'));
+  assert.ok(result.insights.some((item) => item.id === 'matching'));
 });
