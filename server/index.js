@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 
+import './load-env.js';
 import { createApp } from './app.js';
 import { getConfig } from './config.js';
 import { createLogger } from './logger.js';

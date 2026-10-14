@@ -52,6 +52,19 @@ npm install
 cp .env.example .env
 ```
 
+Test local full-stack en une commande :
+
+```bash
+npm run dev:local
+```
+
+Cette commande :
+
+- crée automatiquement `.env` depuis `.env.example` si besoin ;
+- lance le backend Express sur `http://localhost:3001` ;
+- lance le frontend Vite sur `http://localhost:5173` ;
+- charge `.env` et `.env.local` côté scripts serveur locaux.
+
 Pour une configuration de déploiement durcie :
 
 ```bash

@@ -1,3 +1,4 @@
+import './load-env.js';
 import { hashPassword, normalizeEmail, validateEmail, validatePassword } from './auth.js';
 import { getConfig } from './config.js';
 import { createDatabase } from './db.js';

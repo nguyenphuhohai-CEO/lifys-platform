@@ -1,3 +1,4 @@
+import './load-env.js';
 import { createDatabase } from './db.js';
 import { getConfig } from './config.js';
 
