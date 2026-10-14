@@ -31,14 +31,15 @@ Le MVP propose :
 - un jeton CSRF en cookie compagnon pour protéger les endpoints de session basés cookie ;
 - une vérification e-mail avec envoi configurable et fallback preview explicite ;
 - une réinitialisation de mot de passe avec envoi configurable et fallback preview explicite ;
-- un rate limiting minimal sur auth et écritures sensibles côté Express.
+- un rate limiting minimal sur auth et écritures sensibles côté Express ;
 - un envoi d’e-mails configurable via Resend avec fallback preview explicite hors production ;
 - des migrations SQL versionnées et un schéma cible PostgreSQL ;
 - une suppression de compte avec purge serveur ;
 - des actions de blocage / signalement minimales ;
-- une file de modération admin minimale ;
+- une console frontend de modération pour `admin` / `moderator` ;
+- un coach local orienté produit/profil sans appel externe ;
 - un seed admin/modérateur pour l’exploitation ;
-- une healthcheck enrichie et des logs structurés.
+- une healthcheck enrichie et des logs structurés ;
 - un runtime PostgreSQL optionnel pour le déploiement public ;
 - un conteneur multi-stage, un `docker-compose.public.yml`, un reverse proxy Nginx et une CI/CD GitHub Actions.
 
@@ -161,12 +162,18 @@ npm run dev -- --host
 - persistance backend des messages ;
 - meilleure lisibilité des bulles et de la sélection active.
 
+### Coach local
+
+- recommandations locales calculées dans le navigateur ;
+- priorisation des actions profil / découverte / messages ;
+- aucun appel IA externe.
+
 ### Robustesse locale
 
 - lecture JSON sécurisée de `localStorage` avec fallback pour l’état de navigation local ;
 - nettoyage des clés corrompues ;
 - réinitialisation complète des données du prototype ;
-- message explicite lorsque le navigateur refuse la persistance locale.
+- message explicite lorsque le navigateur refuse la persistance locale ;
 - suppression définitive de compte avec purge des données côté serveur.
 
 ### Modération & exploitation
@@ -174,6 +181,7 @@ npm run dev -- --host
 - rôles `member`, `moderator`, `admin` ;
 - listing des signalements via `GET /api/admin/reports` ;
 - traitement des signalements via `PATCH /api/admin/reports/:reportId` ;
+- console frontend de revue avec notes et changement d’état ;
 - script `npm run seed:admin` pour créer ou promouvoir un compte d’exploitation.
 
 ### Déploiement public
@@ -200,6 +208,7 @@ src/
   utils/
     app-utils.js          # filtrage, matching, sanitization
     app-utils.test.js     # tests ciblés utilitaires/localStorage
+    local-ai.js           # coach local déterministe sans appel externe
     storage.js            # lecture/écriture/reset localStorage sûrs
   styles.css              # design system et responsive UI
 
@@ -234,7 +243,7 @@ deploy/
 - une vraie prod publique demande encore secrets, domaine, HTTPS, observabilité et conformité ;
 - aucune synchronisation temps réel entre appareils ;
 - aucune messagerie temps réel ;
-- la modération reste minimale et sans interface admin dédiée ;
+- la modération reste minimale malgré une console de pilotage locale ;
 - les profils de découverte peuvent rester fictifs si `DEMO_DISCOVERY_ENABLED=true`.
 
 ## Roadmap recommandée
@@ -243,7 +252,7 @@ deploy/
 
 - déployer frontend + API sur une cible stable avec HTTPS ;
 - connecter un vrai monitoring/alerting ;
-- ajouter une interface d’administration/modération frontend ;
+- enrichir les workflows de modération (assignation, historique, preuves, audit trail) ;
 - brancher la messagerie temps réel ;
 - finaliser conformité légale et RGPD.
 

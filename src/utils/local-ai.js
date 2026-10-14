@@ -1,4 +1,4 @@
-import { getModeById, normalizeInterests } from './app-utils';
+import { getModeById, normalizeInterests } from './app-utils.js';
 
 function hasLongBio(profile) {
   return `${profile?.bio ?? ''}`.trim().length >= 80;

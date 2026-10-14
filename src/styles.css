@@ -1097,13 +1097,18 @@ textarea:focus-visible {
   }
 
   .match-item,
-  .local-notice,
-  .moderation-header {
+  .local-notice {
     grid-template-columns: 1fr;
   }
 
   .match-item {
     justify-items: start;
+  }
+
+  .moderation-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .cta-row,
