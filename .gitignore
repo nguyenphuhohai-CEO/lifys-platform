@@ -4,4 +4,5 @@ data/
 .env
 deploy/certs/
 deploy/acme/
+deploy/letsencrypt/
 backups/

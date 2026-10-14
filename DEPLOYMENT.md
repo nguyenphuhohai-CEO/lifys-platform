@@ -1,5 +1,7 @@
 # Déploiement public Lifys
 
+> Variante cible exacte recommandée : `deploy/ubuntu-24.04/README.md`
+
 ## Pré-requis
 
 - un domaine public pointant vers l’hôte (`APP_DOMAIN`) ;
@@ -30,6 +32,14 @@ cp .env.production.example .env
 mkdir -p deploy/certs deploy/acme backups
 docker compose -f docker-compose.public.yml up --build -d
 ```
+
+Pour un serveur cible réel **Hetzner / OVH sur Ubuntu 24.04**, suivez plutôt la procédure détaillée dans :
+
+- `deploy/ubuntu-24.04/README.md`
+- `deploy/ubuntu-24.04/setup-vps.sh`
+- `deploy/ubuntu-24.04/deploy.sh`
+- `deploy/ubuntu-24.04/bootstrap-tls.sh`
+- `deploy/ubuntu-24.04/install-systemd-jobs.sh`
 
 ## Vérifications post-déploiement
 
@@ -81,4 +91,3 @@ docker compose -f docker-compose.public.yml up -d --build
 docker compose -f docker-compose.public.yml run --rm backup
 ls -lh backups/
 ```
-

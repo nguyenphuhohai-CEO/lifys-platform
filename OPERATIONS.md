@@ -1,5 +1,7 @@
 # Exploitation publique Lifys
 
+> Cible serveur exacte documentée : `deploy/ubuntu-24.04/README.md`
+
 ## Santé de service
 
 - application : `https://<APP_DOMAIN>/healthz`
@@ -57,6 +59,12 @@ docker compose -f docker-compose.public.yml exec -T postgres \
 
 Montez `./backups:/backups` sur l’hôte et externalisez ce répertoire dans votre stratégie de sauvegarde hors-machine.
 
+Sur la cible Ubuntu 24.04 Hetzner / OVH, la planification peut être installée automatiquement via :
+
+```bash
+sudo bash /opt/lifys-platform/deploy/ubuntu-24.04/install-systemd-jobs.sh /etc/lifys/server.env
+```
+
 ## Rotation / rétention recommandée
 
 - conserver plusieurs dumps horodatés ;
@@ -76,4 +84,3 @@ Montez `./backups:/backups` sur l’hôte et externalisez ce répertoire dans vo
 3. exécuter une sauvegarde si la base est encore saine
 4. revenir à l’image précédente si nécessaire
 5. revalider `/healthz`
-

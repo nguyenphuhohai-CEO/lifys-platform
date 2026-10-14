@@ -239,6 +239,7 @@ server/
 
 deploy/
   nginx.public.conf      # template reverse proxy / TLS / ACME / forwarded headers
+  ubuntu-24.04/          # cible VPS Ubuntu 24.04 Hetzner/OVH + scripts ops
 
 .github/workflows/
   ci.yml                 # tests + build
@@ -313,6 +314,7 @@ npm run seed:admin
 
 - `DEPLOYMENT.md` : déploiement, rollback, bootstrap exploitation
 - `OPERATIONS.md` : logs, monitoring, alerting, backups, restauration
+- `deploy/ubuntu-24.04/README.md` : cible exacte Hetzner/OVH Ubuntu 24.04
 
 ## Avertissement sécurité
 
