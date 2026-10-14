@@ -36,6 +36,7 @@ docker compose -f docker-compose.public.yml up --build -d
 Pour un serveur cible réel **Hetzner / OVH sur Ubuntu 24.04**, suivez plutôt la procédure détaillée dans :
 
 - `deploy/ubuntu-24.04/README.md`
+- `deploy/ubuntu-24.04/prepare-domain-config.sh`
 - `deploy/ubuntu-24.04/setup-vps.sh`
 - `deploy/ubuntu-24.04/deploy.sh`
 - `deploy/ubuntu-24.04/bootstrap-tls.sh`

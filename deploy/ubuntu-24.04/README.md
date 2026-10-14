@@ -13,6 +13,28 @@ Cette variante prépare une cible unique explicite :
 
 ## Variables serveur
 
+Option la plus rapide pour un vrai domaine : générer directement les deux fichiers prêts à l’emploi.
+
+```bash
+sudo mkdir -p /etc/lifys
+sudo bash deploy/ubuntu-24.04/prepare-domain-config.sh \
+  --domain lifys.example \
+  --email ops@lifys.example \
+  --resend-key re_xxxxxxxxx \
+  --server-env /etc/lifys/server.env \
+  --app-env /opt/lifys-platform/.env
+```
+
+Ce générateur :
+
+- crée `/etc/lifys/server.env` ;
+- crée `/opt/lifys-platform/.env` ;
+- génère un `JWT_SECRET` fort ;
+- génère un `POSTGRES_PASSWORD` fort ;
+- force un déploiement `same-origin` prêt pour le vrai domaine.
+
+## Variables serveur manuelles
+
 Copiez ce fichier :
 
 ```bash
@@ -52,7 +74,7 @@ Ce script :
 sudo bash deploy/ubuntu-24.04/deploy.sh /etc/lifys/server.env
 ```
 
-Ensuite, créez le fichier applicatif :
+Si vous n’avez pas déjà utilisé `prepare-domain-config.sh`, créez ensuite le fichier applicatif :
 
 ```bash
 cd /opt/lifys-platform
@@ -111,4 +133,23 @@ ADMIN_EMAIL=admin@example.com \
 ADMIN_PASSWORD='change-me-now' \
 ADMIN_ROLE=admin \
 npm run seed:admin
+```
+
+## Flux one-shot recommandé
+
+Sur un vrai serveur Ubuntu 24.04 :
+
+```bash
+sudo mkdir -p /etc/lifys
+sudo bash deploy/ubuntu-24.04/prepare-domain-config.sh \
+  --domain lifys.example \
+  --email ops@lifys.example \
+  --resend-key re_xxxxxxxxx \
+  --server-env /etc/lifys/server.env \
+  --app-env /opt/lifys-platform/.env
+
+sudo bash deploy/ubuntu-24.04/setup-vps.sh /etc/lifys/server.env
+sudo bash deploy/ubuntu-24.04/deploy.sh /etc/lifys/server.env
+sudo bash /opt/lifys-platform/deploy/ubuntu-24.04/bootstrap-tls.sh /etc/lifys/server.env
+sudo bash /opt/lifys-platform/deploy/ubuntu-24.04/install-systemd-jobs.sh /etc/lifys/server.env
 ```

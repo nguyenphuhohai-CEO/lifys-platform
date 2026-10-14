@@ -315,6 +315,7 @@ npm run seed:admin
 - `DEPLOYMENT.md` : déploiement, rollback, bootstrap exploitation
 - `OPERATIONS.md` : logs, monitoring, alerting, backups, restauration
 - `deploy/ubuntu-24.04/README.md` : cible exacte Hetzner/OVH Ubuntu 24.04
+- `deploy/ubuntu-24.04/prepare-domain-config.sh` : génération one-shot des fichiers prêts pour le vrai domaine
 
 ## Avertissement sécurité
 

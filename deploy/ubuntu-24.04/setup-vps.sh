@@ -69,8 +69,7 @@ systemctl enable --now unattended-upgrades
 
 echo "Server bootstrap complete."
 echo "Next steps:"
-echo "1. Copy the repository to ${APP_DIR} or run deploy/ubuntu-24.04/deploy.sh"
-echo "2. Create ${APP_DIR}/.env from .env.production.example"
+echo "1. If needed, generate ${ENV_FILE} and ${APP_DIR}/.env with deploy/ubuntu-24.04/prepare-domain-config.sh"
+echo "2. Copy the repository to ${APP_DIR} or run deploy/ubuntu-24.04/deploy.sh"
 echo "3. Run deploy/ubuntu-24.04/bootstrap-tls.sh ${ENV_FILE}"
 echo "4. Run deploy/ubuntu-24.04/install-systemd-jobs.sh ${ENV_FILE}"
-

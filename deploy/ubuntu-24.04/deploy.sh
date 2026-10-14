@@ -18,7 +18,11 @@ source "$ENV_FILE"
 : "${COMPOSE_FILE:=docker-compose.public.yml}"
 
 if [ ! -d "$APP_DIR/.git" ]; then
-  sudo -u "$APP_USER" git clone --branch "$APP_BRANCH" "$REPO_REMOTE" "$APP_DIR"
+  install -d -o "$APP_USER" -g "${APP_GROUP:-$APP_USER}" "$APP_DIR"
+  sudo -u "$APP_USER" git -C "$APP_DIR" init
+  sudo -u "$APP_USER" git -C "$APP_DIR" remote add origin "$REPO_REMOTE"
+  sudo -u "$APP_USER" git -C "$APP_DIR" fetch origin "$APP_BRANCH"
+  sudo -u "$APP_USER" git -C "$APP_DIR" checkout -B "$APP_BRANCH" "origin/$APP_BRANCH"
 else
   sudo -u "$APP_USER" git -C "$APP_DIR" fetch origin "$APP_BRANCH"
   sudo -u "$APP_USER" git -C "$APP_DIR" checkout "$APP_BRANCH"
@@ -38,4 +42,3 @@ fi
 cd "$APP_DIR"
 docker compose -f "$COMPOSE_FILE" up -d --build
 docker compose -f "$COMPOSE_FILE" ps
-
