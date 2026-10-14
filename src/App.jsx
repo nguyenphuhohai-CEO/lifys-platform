@@ -184,6 +184,7 @@ function App() {
     conversations,
     appEnvironment,
   }), [appEnvironment, conversations, currentUser, matches, profile, profiles]);
+  const environmentLabel = appEnvironment.demoDiscoveryEnabled ? 'Environnement de démonstration' : 'Déploiement public';
 
   const handleApiError = useCallback((error, fallbackMessage) => {
     const message = error instanceof ApiError ? error.message : fallbackMessage;
@@ -1226,7 +1227,7 @@ function App() {
       </header>
 
       <main className="page-shell">
-        <section className="local-notice" aria-label="Avertissement MVP">
+        <section className="local-notice" aria-label="État de plateforme">
           <strong>État de plateforme</strong>
           <span>Les comptes utilisateur, profils, matchs et messages sont persistés côté backend.</span>
           <span>Le refresh token est protégé par cookie httpOnly et le refresh/logout sont protégés par un jeton CSRF compagnon.</span>
@@ -1271,14 +1272,14 @@ function App() {
           <>
             <section className="hero-panel">
               <div className="hero-copy">
-                <span className="eyebrow">MVP full-stack local</span>
-                <h1>Une base Lifys désormais connectée à un vrai backend.</h1>
+                <span className="eyebrow">{environmentLabel}</span>
+                <h1>Lifys est prêt à être exploité sur une infrastructure publique maîtrisée.</h1>
                 <p>
                   Votre profil, vos likes, vos matchs et vos messages sont servis par Express et stockés côté backend.
                   {` Runtime base active : ${runtimeDatabaseLabel}.`}
                   {appEnvironment.demoDiscoveryEnabled
                     ? ' Les profils de découverte fictifs restent disponibles uniquement pour les environnements de démonstration.'
-                    : ' La découverte repose uniquement sur les profils réels actuellement créés.'}
+                    : ' La découverte repose uniquement sur les profils réels actuellement créés, avec une posture compatible déploiement public.'}
                 </p>
 
                 <div className="cta-row">

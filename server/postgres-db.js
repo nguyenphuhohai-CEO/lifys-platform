@@ -184,7 +184,10 @@ export async function createPostgresDatabase(config) {
   const { DEMO_PROFILES } = await import('../src/data/demoData.js');
   const pool = new Pool({
     connectionString: config.databaseUrl,
-    ssl: config.databaseSsl ? { rejectUnauthorized: false } : false,
+    ssl: config.databaseSsl ? { rejectUnauthorized: config.databaseSslRejectUnauthorized } : false,
+    max: config.databasePoolMax,
+    idleTimeoutMillis: config.databasePoolIdleTimeoutMs,
+    connectionTimeoutMillis: config.databasePoolConnectionTimeoutMs,
   });
 
   await ensurePostgresSchema(pool);

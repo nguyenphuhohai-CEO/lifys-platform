@@ -2,6 +2,12 @@ FROM node:24-bookworm-slim AS build
 
 WORKDIR /app
 
+ARG VITE_API_BASE_URL=
+ARG VITE_CSRF_COOKIE_NAME=lifys_csrf_token
+
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_CSRF_COOKIE_NAME=${VITE_CSRF_COOKIE_NAME}
+
 COPY package*.json ./
 RUN npm ci
 

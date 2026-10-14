@@ -73,6 +73,10 @@ export function getConfig(overrides = {}) {
   const databaseProvider = overrides.DATABASE_PROVIDER ?? process.env.DATABASE_PROVIDER ?? 'sqlite';
   const databaseUrl = overrides.DATABASE_URL ?? process.env.DATABASE_URL ?? '';
   const databaseSsl = parseBoolean(overrides.DATABASE_SSL ?? process.env.DATABASE_SSL ?? (nodeEnv === 'production' && databaseProvider === 'postgres' ? 'true' : 'false'));
+  const databaseSslRejectUnauthorized = parseBoolean(overrides.DATABASE_SSL_REJECT_UNAUTHORIZED ?? process.env.DATABASE_SSL_REJECT_UNAUTHORIZED ?? (nodeEnv === 'production' ? 'true' : 'false'));
+  const databasePoolMax = parsePositiveNumber(overrides.DATABASE_POOL_MAX ?? process.env.DATABASE_POOL_MAX ?? 10, 'DATABASE_POOL_MAX');
+  const databasePoolIdleTimeoutMs = parsePositiveNumber(overrides.DATABASE_POOL_IDLE_TIMEOUT_MS ?? process.env.DATABASE_POOL_IDLE_TIMEOUT_MS ?? 30000, 'DATABASE_POOL_IDLE_TIMEOUT_MS');
+  const databasePoolConnectionTimeoutMs = parsePositiveNumber(overrides.DATABASE_POOL_CONNECTION_TIMEOUT_MS ?? process.env.DATABASE_POOL_CONNECTION_TIMEOUT_MS ?? 10000, 'DATABASE_POOL_CONNECTION_TIMEOUT_MS');
   const jwtSecret = overrides.JWT_SECRET ?? process.env.JWT_SECRET ?? 'lifys-dev-secret-change-me';
   const jwtExpiresIn = overrides.JWT_EXPIRES_IN ?? process.env.JWT_EXPIRES_IN ?? '15m';
   const staticDir = overrides.STATIC_DIR ?? process.env.STATIC_DIR ?? path.join(rootDir, 'dist');
@@ -172,6 +176,10 @@ export function getConfig(overrides = {}) {
     databaseProvider,
     databaseUrl,
     databaseSsl,
+    databaseSslRejectUnauthorized,
+    databasePoolMax,
+    databasePoolIdleTimeoutMs,
+    databasePoolConnectionTimeoutMs,
     jwtSecret,
     jwtExpiresIn,
     staticDir,

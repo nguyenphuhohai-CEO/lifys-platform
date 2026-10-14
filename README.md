@@ -1,6 +1,6 @@
 # Lifys Platform
 
-Lifys est maintenant un **MVP full-stack durci** : frontend **React + Vite** connecté à un backend **Express + JWT** avec exécution **SQLite locale** ou **PostgreSQL** pour une expérience de rencontre multi-catégories : **Amical**, **Amoureux**, **Sans lendemain**, **Mariage** et **Professionnel**.
+Lifys est maintenant un **MVP full-stack durci** : frontend **React + Vite** connecté à un backend **Express + JWT** avec exécution **SQLite locale** ou **PostgreSQL** pour une expérience de rencontre multi-catégories : **Amical**, **Amoureux**, **Sans lendemain**, **Mariage** et **Professionnel**, exploitable aussi en **déploiement public maîtrisé**.
 
 L’application reste encore volontairement **locale et partiellement simulée** :
 
@@ -42,6 +42,8 @@ Le MVP propose :
 - une healthcheck enrichie et des logs structurés ;
 - un runtime PostgreSQL optionnel pour le déploiement public ;
 - un conteneur multi-stage, un `docker-compose.public.yml`, un reverse proxy Nginx et une CI/CD GitHub Actions.
+- un healthcheck conteneur applicatif et un arrêt propre du serveur ;
+- des variables de build frontend injectables dans l’image GHCR pour le déploiement public.
 
 ## Installation
 
@@ -63,13 +65,17 @@ Variables utiles pour le backend local :
 - `JWT_SECRET` : secret JWT à remplacer hors démo ;
 - `JWT_EXPIRES_IN` : durée de vie du token d’accès ;
 - `APP_BASE_URL` : URL publique utilisée dans les liens e-mail ;
-- `VITE_API_BASE_URL` : URL de l’API Express quand le frontend Vite tourne sur une origine différente ;
+- `VITE_API_BASE_URL` : URL de l’API Express injectée **au build frontend** ; laissez vide pour un déploiement same-origin derrière reverse proxy ;
 - `DATABASE_PROVIDER` : `sqlite` en local ou `postgres` pour le déploiement public ;
 - `DATABASE_URL` : URL PostgreSQL quand `DATABASE_PROVIDER=postgres` ;
 - `DATABASE_SSL` : active SSL côté client PostgreSQL ;
+- `DATABASE_SSL_REJECT_UNAUTHORIZED` : active la validation stricte du certificat PostgreSQL ;
+- `DATABASE_POOL_MAX` : taille max du pool PostgreSQL ;
+- `DATABASE_POOL_IDLE_TIMEOUT_MS` : délai avant libération d’une connexion idle PostgreSQL ;
+- `DATABASE_POOL_CONNECTION_TIMEOUT_MS` : délai max d’ouverture d’une connexion PostgreSQL ;
 - `REFRESH_COOKIE_NAME` : nom du cookie httpOnly de refresh ;
 - `CSRF_COOKIE_NAME` : nom du cookie CSRF lisible côté frontend ;
-- `VITE_CSRF_COOKIE_NAME` : nom attendu côté client pour relire ce cookie ;
+- `VITE_CSRF_COOKIE_NAME` : nom attendu côté client pour relire ce cookie au build frontend ;
 - `EMAIL_DELIVERY_MODE` : `preview` ou `resend` ;
 - `RESEND_API_KEY` : clé API Resend ;
 - `EMAIL_FROM` : expéditeur transactionnel ;
@@ -188,7 +194,10 @@ npm run dev -- --host
 
 - runtime PostgreSQL activable via `DATABASE_PROVIDER=postgres` ;
 - support reverse proxy avec `TRUST_PROXY` et `FORCE_HTTPS` ;
+- validation stricte de certificat PostgreSQL configurable ;
+- tuning du pool PostgreSQL via variables d’environnement ;
 - cache statique configuré via `STATIC_ASSET_MAX_AGE_SECONDS` ;
+- build frontend publiable avec `VITE_API_BASE_URL` / `VITE_CSRF_COOKIE_NAME` ;
 - `Dockerfile` multi-stage ;
 - `docker-compose.public.yml` avec app + PostgreSQL + Nginx ;
 - workflows GitHub Actions pour CI et publication d’image GHCR.
@@ -264,6 +273,17 @@ deploy/
 cp .env.production.example .env
 docker compose -f docker-compose.public.yml up --build -d
 ```
+
+Par défaut, l’exemple privilégie un **déploiement same-origin** derrière Nginx :
+
+- laissez `VITE_API_BASE_URL=` vide pour que le frontend appelle `/api` sur le même domaine ;
+- gardez `CORS_ORIGIN` aligné avec `APP_BASE_URL` ;
+- n’utilisez une URL API distincte que si vous la fournissez explicitement **au build**.
+
+Pour la publication GHCR via GitHub Actions, renseignez si nécessaire les variables de dépôt :
+
+- `VITE_API_BASE_URL`
+- `VITE_CSRF_COOKIE_NAME`
 
 ### Préparer le premier compte d’exploitation
 

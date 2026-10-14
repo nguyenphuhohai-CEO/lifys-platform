@@ -78,6 +78,18 @@ textarea:focus-visible {
   min-height: 100vh;
 }
 
+.fatal-error-panel {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.fatal-error-panel .content-panel {
+  width: min(720px, 100%);
+  padding: 32px;
+}
+
 .topbar,
 .content-panel,
 .hero-panel,

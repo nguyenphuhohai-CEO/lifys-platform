@@ -1133,3 +1133,25 @@ test('config enforces production-safe URL, cookie, demo and sqlite settings', ()
     /DATABASE_URL must be configured when DATABASE_PROVIDER=postgres\./,
   );
 });
+
+test('config exposes hardened postgres ssl and pool defaults', () => {
+  const config = getConfig({
+    NODE_ENV: 'production',
+    DATABASE_PROVIDER: 'postgres',
+    DATABASE_URL: '******example.com:5432/lifys',
+    JWT_SECRET: 'prod-secret',
+    EMAIL_DELIVERY_MODE: 'resend',
+    RESEND_API_KEY: 'resend-key',
+    EMAIL_FROM: 'noreply@example.com',
+    APP_BASE_URL: 'https://app.example.com',
+    COOKIE_SECURE: 'true',
+    CORS_ORIGIN: 'https://app.example.com',
+    DEMO_DISCOVERY_ENABLED: 'false',
+  });
+
+  assert.equal(config.databaseSsl, true);
+  assert.equal(config.databaseSslRejectUnauthorized, true);
+  assert.equal(config.databasePoolMax, 10);
+  assert.equal(config.databasePoolIdleTimeoutMs, 30000);
+  assert.equal(config.databasePoolConnectionTimeoutMs, 10000);
+});
