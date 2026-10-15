@@ -150,6 +150,8 @@ function App() {
     emailDeliveryMode: 'preview',
     demoDiscoveryEnabled: true,
     databaseProvider: 'sqlite',
+    localTestAccountEnabled: false,
+    localTestAccount: null,
   });
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
@@ -1082,6 +1084,12 @@ function App() {
               />
 
               {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
+              {appEnvironment.localTestAccountEnabled && appEnvironment.localTestAccount ? (
+                <div className="form-alert" role="status">
+                  <strong>Compte de test local</strong><br />
+                  {appEnvironment.localTestAccount.email} / {appEnvironment.localTestAccount.password}
+                </div>
+              ) : null}
 
               <form className="profile-form" onSubmit={handleAuthSubmit}>
                 {authMode === 'register' ? (
@@ -1110,6 +1118,22 @@ function App() {
                   <button type="submit" className="primary-button" disabled={authSubmitting}>
                     {authSubmitting ? 'Chargement…' : authMode === 'register' ? 'Créer mon compte' : 'Se connecter'}
                   </button>
+                  {appEnvironment.localTestAccountEnabled && appEnvironment.localTestAccount ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        setAuthMode('login');
+                        setAuthForm((current) => ({
+                          ...current,
+                          email: appEnvironment.localTestAccount.email,
+                          password: appEnvironment.localTestAccount.password,
+                        }));
+                      }}
+                    >
+                      Utiliser le compte test
+                    </button>
+                  ) : null}
                   <button type="button" className="secondary-button" onClick={() => setAuthMode((current) => current === 'register' ? 'login' : 'register')}>
                     {authMode === 'register' ? 'J’ai déjà un compte' : 'Créer un nouveau compte'}
                   </button>

@@ -101,6 +101,7 @@ export function getConfig(overrides = {}) {
   const trustProxy = parseTrustProxy(overrides.TRUST_PROXY ?? process.env.TRUST_PROXY, nodeEnv);
   const forceHttps = parseBoolean(overrides.FORCE_HTTPS ?? process.env.FORCE_HTTPS ?? (nodeEnv === 'production' ? 'true' : 'false'));
   const staticAssetMaxAgeSeconds = parsePositiveNumber(overrides.STATIC_ASSET_MAX_AGE_SECONDS ?? process.env.STATIC_ASSET_MAX_AGE_SECONDS ?? 86400, 'STATIC_ASSET_MAX_AGE_SECONDS');
+  const localTestAccountEnabled = parseBoolean(overrides.LOCAL_TEST_ACCOUNT_ENABLED ?? process.env.LOCAL_TEST_ACCOUNT_ENABLED ?? (nodeEnv === 'development' ? 'true' : 'false'));
   const allowedOrigins = parseOrigins(corsOrigin);
 
   if (nodeEnv === 'production' && jwtSecret === 'lifys-dev-secret-change-me') {
@@ -205,5 +206,6 @@ export function getConfig(overrides = {}) {
     trustProxy,
     forceHttps,
     staticAssetMaxAgeSeconds,
+    localTestAccountEnabled,
   };
 }

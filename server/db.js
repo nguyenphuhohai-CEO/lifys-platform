@@ -5,7 +5,8 @@ import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 
 import { DEMO_PROFILES, MODES } from '../src/data/demoData.js';
-import { normalizeEmail } from './auth.js';
+import { hashPassword, normalizeEmail } from './auth.js';
+import { LOCAL_TEST_ACCOUNT } from './local-test-account.js';
 import { runMigrations } from './migrations.js';
 
 const MODE_IDS = new Set(MODES.map((mode) => mode.id));
@@ -439,6 +440,7 @@ function createSqliteDatabase(configOrFile) {
   };
 
   seedDemoData(db, statements, config);
+  seedLocalTestAccount(db, statements, config);
 
   function createUser({ email, passwordHash, name, mode = 'amoureux', role = 'member' }) {
     const createdAt = now();
@@ -950,6 +952,46 @@ function seedDemoData(db, statements, config) {
         updated_at: createdAt,
       });
     }
+  });
+
+  transaction();
+}
+
+function seedLocalTestAccount(db, statements, config) {
+  if (!config.localTestAccountEnabled) {
+    return;
+  }
+
+  const existingUser = statements.findUserByEmail.get(normalizeEmail(LOCAL_TEST_ACCOUNT.email));
+  if (existingUser) {
+    return;
+  }
+
+  const transaction = db.transaction(() => {
+    const createdAt = now();
+    const userResult = statements.insertUser.run({
+      public_id: 'user-local-test',
+      email: normalizeEmail(LOCAL_TEST_ACCOUNT.email),
+      password_hash: hashPassword(LOCAL_TEST_ACCOUNT.password),
+      email_verified_at: createdAt,
+      is_demo: 0,
+      role: 'member',
+      created_at: createdAt,
+    });
+
+    statements.insertProfile.run({
+      user_id: userResult.lastInsertRowid,
+      public_id: 'profile-local-test',
+      name: LOCAL_TEST_ACCOUNT.name,
+      age: LOCAL_TEST_ACCOUNT.age,
+      city: LOCAL_TEST_ACCOUNT.city,
+      bio: LOCAL_TEST_ACCOUNT.bio,
+      interests: JSON.stringify(normalizeInterests(LOCAL_TEST_ACCOUNT.interests)),
+      mode: LOCAL_TEST_ACCOUNT.mode,
+      avatar: '',
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
   });
 
   transaction();

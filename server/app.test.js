@@ -782,6 +782,34 @@ test('register accepts common tagged emails', async () => {
   }
 });
 
+test('development health exposes and seeds the default local test account', async () => {
+  const server = await startTestServer({
+    NODE_ENV: 'development',
+    LOCAL_TEST_ACCOUNT_ENABLED: 'true',
+  });
+
+  try {
+    const health = await request(server.baseUrl, '/api/health');
+    assert.equal(health.status, 200);
+    assert.equal(health.body.environment.localTestAccountEnabled, true);
+    assert.equal(health.body.environment.localTestAccount.email, 'test@lifys.local');
+
+    const login = await request(server.baseUrl, '/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'test@lifys.local',
+        password: 'test12345',
+      }),
+    });
+
+    assert.equal(login.status, 200);
+    assert.equal(login.body.user.email, 'test@lifys.local');
+    assert.equal(login.body.user.emailVerified, true);
+  } finally {
+    await server.close();
+  }
+});
+
 test('invalid session token returns a clean 401 payload', async () => {
   const server = await startTestServer();
 

@@ -10,6 +10,7 @@ import { createAuthController } from './controllers/auth-controller.js';
 import { createEmailService } from './email-service.js';
 import { createDatabase, sanitizeProfileInput } from './db.js';
 import { createHttpError } from './http.js';
+import { LOCAL_TEST_ACCOUNT } from './local-test-account.js';
 import { createLogger } from './logger.js';
 import { createAuthService } from './services/auth-service.js';
 import { normalizeBody, readRequiredString } from './validation.js';
@@ -282,6 +283,13 @@ export async function createApp(config) {
         databaseProvider: config.databaseProvider,
         forceHttps: config.forceHttps,
         trustProxy: config.trustProxy,
+        localTestAccountEnabled: config.localTestAccountEnabled,
+        localTestAccount: config.localTestAccountEnabled
+          ? {
+            email: LOCAL_TEST_ACCOUNT.email,
+            password: LOCAL_TEST_ACCOUNT.password,
+          }
+          : null,
       },
       database: database.getHealthState(),
     });

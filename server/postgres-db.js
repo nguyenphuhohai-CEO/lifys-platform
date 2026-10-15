@@ -2,7 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-import { normalizeEmail } from './auth.js';
+import { hashPassword, normalizeEmail } from './auth.js';
+import { LOCAL_TEST_ACCOUNT } from './local-test-account.js';
 
 const schemaFile = path.resolve(new URL('./postgres/schema.sql', import.meta.url).pathname);
 const MODE_IDS = new Set(['amical', 'amoureux', 'sans-lendemain', 'mariage', 'professionnel']);
@@ -250,6 +251,57 @@ export async function createPostgresDatabase(config) {
   }
 
   await seedDemoData();
+  await seedLocalTestAccount();
+
+  async function seedLocalTestAccount() {
+    if (!config.localTestAccountEnabled) {
+      return;
+    }
+
+    const existingUser = await query('SELECT id FROM users WHERE email = $1 LIMIT 1', [normalizeEmail(LOCAL_TEST_ACCOUNT.email)]);
+    if (existingUser.rows[0]) {
+      return;
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const createdAt = now();
+      const insertedUser = await client.query(`
+        INSERT INTO users (public_id, email, password_hash, email_verified_at, is_demo, role, created_at)
+        VALUES ($1, $2, $3, $4, FALSE, 'member', $5)
+        RETURNING id
+      `, [
+        'user-local-test',
+        normalizeEmail(LOCAL_TEST_ACCOUNT.email),
+        hashPassword(LOCAL_TEST_ACCOUNT.password),
+        createdAt,
+        createdAt,
+      ]);
+
+      await client.query(`
+        INSERT INTO profiles (user_id, public_id, name, age, city, bio, interests, mode, avatar, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, '', $9, $9)
+      `, [
+        insertedUser.rows[0].id,
+        'profile-local-test',
+        LOCAL_TEST_ACCOUNT.name,
+        LOCAL_TEST_ACCOUNT.age,
+        LOCAL_TEST_ACCOUNT.city,
+        LOCAL_TEST_ACCOUNT.bio,
+        JSON.stringify(normalizeInterests(LOCAL_TEST_ACCOUNT.interests)),
+        LOCAL_TEST_ACCOUNT.mode,
+        createdAt,
+      ]);
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 
   async function getUserByEmail(email) {
     const result = await query('SELECT * FROM users WHERE email = $1 LIMIT 1', [normalizeEmail(email)]);

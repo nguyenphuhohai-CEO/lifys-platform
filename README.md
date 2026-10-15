@@ -65,6 +65,12 @@ Cette commande :
 - lance le frontend Vite sur `http://localhost:5173` ;
 - charge `.env` et `.env.local` côté scripts serveur locaux.
 
+Compte de test local par défaut en développement :
+
+- e-mail : `test@lifys.local`
+- mot de passe : `test12345`
+- activé par `LOCAL_TEST_ACCOUNT_ENABLED=true`
+
 Pour une configuration de déploiement durcie :
 
 ```bash
