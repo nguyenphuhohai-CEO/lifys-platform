@@ -152,6 +152,8 @@ function App() {
     databaseProvider: 'sqlite',
     localTestAccountEnabled: false,
     localTestAccount: null,
+    localAdminAccountEnabled: false,
+    localAdminAccount: null,
   });
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
@@ -1090,6 +1092,12 @@ function App() {
                   {appEnvironment.localTestAccount.email} / {appEnvironment.localTestAccount.password}
                 </div>
               ) : null}
+              {appEnvironment.localAdminAccountEnabled && appEnvironment.localAdminAccount ? (
+                <div className="form-alert" role="status">
+                  <strong>Compte admin local</strong><br />
+                  {appEnvironment.localAdminAccount.email} / {appEnvironment.localAdminAccount.password}
+                </div>
+              ) : null}
 
               <form className="profile-form" onSubmit={handleAuthSubmit}>
                 {authMode === 'register' ? (
@@ -1132,6 +1140,22 @@ function App() {
                       }}
                     >
                       Utiliser le compte test
+                    </button>
+                  ) : null}
+                  {appEnvironment.localAdminAccountEnabled && appEnvironment.localAdminAccount ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        setAuthMode('login');
+                        setAuthForm((current) => ({
+                          ...current,
+                          email: appEnvironment.localAdminAccount.email,
+                          password: appEnvironment.localAdminAccount.password,
+                        }));
+                      }}
+                    >
+                      Utiliser le compte admin
                     </button>
                   ) : null}
                   <button type="button" className="secondary-button" onClick={() => setAuthMode((current) => current === 'register' ? 'login' : 'register')}>

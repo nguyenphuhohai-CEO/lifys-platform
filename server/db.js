@@ -6,7 +6,7 @@ import Database from 'better-sqlite3';
 
 import { DEMO_PROFILES, MODES } from '../src/data/demoData.js';
 import { hashPassword, normalizeEmail } from './auth.js';
-import { LOCAL_TEST_ACCOUNT } from './local-test-account.js';
+import { LOCAL_ADMIN_ACCOUNT, LOCAL_TEST_ACCOUNT } from './local-test-account.js';
 import { runMigrations } from './migrations.js';
 
 const MODE_IDS = new Set(MODES.map((mode) => mode.id));
@@ -441,6 +441,7 @@ function createSqliteDatabase(configOrFile) {
 
   seedDemoData(db, statements, config);
   seedLocalTestAccount(db, statements, config);
+  seedLocalAdminAccount(db, statements, config);
 
   function createUser({ email, passwordHash, name, mode = 'amoureux', role = 'member' }) {
     const createdAt = now();
@@ -988,6 +989,47 @@ function seedLocalTestAccount(db, statements, config) {
       bio: LOCAL_TEST_ACCOUNT.bio,
       interests: JSON.stringify(normalizeInterests(LOCAL_TEST_ACCOUNT.interests)),
       mode: LOCAL_TEST_ACCOUNT.mode,
+      avatar: '',
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+  });
+
+  transaction();
+}
+
+function seedLocalAdminAccount(db, statements, config) {
+  if (!config.localAdminAccountEnabled) {
+    return;
+  }
+
+  const existingUser = statements.findUserByEmail.get(normalizeEmail(LOCAL_ADMIN_ACCOUNT.email));
+  if (existingUser) {
+    statements.updateUserRole.run(LOCAL_ADMIN_ACCOUNT.role, existingUser.id);
+    return;
+  }
+
+  const transaction = db.transaction(() => {
+    const createdAt = now();
+    const userResult = statements.insertUser.run({
+      public_id: 'user-local-admin',
+      email: normalizeEmail(LOCAL_ADMIN_ACCOUNT.email),
+      password_hash: hashPassword(LOCAL_ADMIN_ACCOUNT.password),
+      email_verified_at: createdAt,
+      is_demo: 0,
+      role: LOCAL_ADMIN_ACCOUNT.role,
+      created_at: createdAt,
+    });
+
+    statements.insertProfile.run({
+      user_id: userResult.lastInsertRowid,
+      public_id: 'profile-local-admin',
+      name: LOCAL_ADMIN_ACCOUNT.name,
+      age: LOCAL_ADMIN_ACCOUNT.age,
+      city: LOCAL_ADMIN_ACCOUNT.city,
+      bio: LOCAL_ADMIN_ACCOUNT.bio,
+      interests: JSON.stringify(normalizeInterests(LOCAL_ADMIN_ACCOUNT.interests)),
+      mode: LOCAL_ADMIN_ACCOUNT.mode,
       avatar: '',
       created_at: createdAt,
       updated_at: createdAt,

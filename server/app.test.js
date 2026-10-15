@@ -786,6 +786,7 @@ test('development health exposes and seeds the default local test account', asyn
   const server = await startTestServer({
     NODE_ENV: 'development',
     LOCAL_TEST_ACCOUNT_ENABLED: 'true',
+    LOCAL_ADMIN_ACCOUNT_ENABLED: 'true',
   });
 
   try {
@@ -793,6 +794,8 @@ test('development health exposes and seeds the default local test account', asyn
     assert.equal(health.status, 200);
     assert.equal(health.body.environment.localTestAccountEnabled, true);
     assert.equal(health.body.environment.localTestAccount.email, 'test@lifys.local');
+    assert.equal(health.body.environment.localAdminAccountEnabled, true);
+    assert.equal(health.body.environment.localAdminAccount.email, 'admin@lifys.local');
 
     const login = await request(server.baseUrl, '/api/auth/login', {
       method: 'POST',
@@ -805,6 +808,27 @@ test('development health exposes and seeds the default local test account', asyn
     assert.equal(login.status, 200);
     assert.equal(login.body.user.email, 'test@lifys.local');
     assert.equal(login.body.user.emailVerified, true);
+
+    const adminLogin = await request(server.baseUrl, '/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'admin@lifys.local',
+        password: 'admin12345',
+      }),
+    });
+
+    assert.equal(adminLogin.status, 200);
+    assert.equal(adminLogin.body.user.email, 'admin@lifys.local');
+    assert.equal(adminLogin.body.user.role, 'admin');
+
+    const reports = await request(server.baseUrl, '/api/admin/reports?status=open&limit=10', {
+      headers: {
+        authorization: 'Bearer ' + adminLogin.body.token,
+      },
+    });
+
+    assert.equal(reports.status, 200);
+    assert.ok(Array.isArray(reports.body.reports));
   } finally {
     await server.close();
   }

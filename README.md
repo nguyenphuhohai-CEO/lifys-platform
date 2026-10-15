@@ -71,6 +71,12 @@ Compte de test local par défaut en développement :
 - mot de passe : `test12345`
 - activé par `LOCAL_TEST_ACCOUNT_ENABLED=true`
 
+Compte admin local par défaut en développement :
+
+- e-mail : `admin@lifys.local`
+- mot de passe : `admin12345`
+- activé par `LOCAL_ADMIN_ACCOUNT_ENABLED=true`
+
 Pour une configuration de déploiement durcie :
 
 ```bash

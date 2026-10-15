@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import { hashPassword, normalizeEmail } from './auth.js';
-import { LOCAL_TEST_ACCOUNT } from './local-test-account.js';
+import { LOCAL_ADMIN_ACCOUNT, LOCAL_TEST_ACCOUNT } from './local-test-account.js';
 
 const schemaFile = path.resolve(new URL('./postgres/schema.sql', import.meta.url).pathname);
 const MODE_IDS = new Set(['amical', 'amoureux', 'sans-lendemain', 'mariage', 'professionnel']);
@@ -252,6 +252,7 @@ export async function createPostgresDatabase(config) {
 
   await seedDemoData();
   await seedLocalTestAccount();
+  await seedLocalAdminAccount();
 
   async function seedLocalTestAccount() {
     if (!config.localTestAccountEnabled) {
@@ -291,6 +292,58 @@ export async function createPostgresDatabase(config) {
         LOCAL_TEST_ACCOUNT.bio,
         JSON.stringify(normalizeInterests(LOCAL_TEST_ACCOUNT.interests)),
         LOCAL_TEST_ACCOUNT.mode,
+        createdAt,
+      ]);
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function seedLocalAdminAccount() {
+    if (!config.localAdminAccountEnabled) {
+      return;
+    }
+
+    const existingUser = await query('SELECT id FROM users WHERE email = $1 LIMIT 1', [normalizeEmail(LOCAL_ADMIN_ACCOUNT.email)]);
+    if (existingUser.rows[0]) {
+      await query('UPDATE users SET role = $2 WHERE id = $1', [existingUser.rows[0].id, LOCAL_ADMIN_ACCOUNT.role]);
+      return;
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const createdAt = now();
+      const insertedUser = await client.query(`
+        INSERT INTO users (public_id, email, password_hash, email_verified_at, is_demo, role, created_at)
+        VALUES ($1, $2, $3, $4, FALSE, $5, $6)
+        RETURNING id
+      `, [
+        'user-local-admin',
+        normalizeEmail(LOCAL_ADMIN_ACCOUNT.email),
+        hashPassword(LOCAL_ADMIN_ACCOUNT.password),
+        createdAt,
+        LOCAL_ADMIN_ACCOUNT.role,
+        createdAt,
+      ]);
+
+      await client.query(`
+        INSERT INTO profiles (user_id, public_id, name, age, city, bio, interests, mode, avatar, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, '', $9, $9)
+      `, [
+        insertedUser.rows[0].id,
+        'profile-local-admin',
+        LOCAL_ADMIN_ACCOUNT.name,
+        LOCAL_ADMIN_ACCOUNT.age,
+        LOCAL_ADMIN_ACCOUNT.city,
+        LOCAL_ADMIN_ACCOUNT.bio,
+        JSON.stringify(normalizeInterests(LOCAL_ADMIN_ACCOUNT.interests)),
+        LOCAL_ADMIN_ACCOUNT.mode,
         createdAt,
       ]);
 
