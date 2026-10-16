@@ -1,0 +1,10 @@
+{
+  "name": "Lifys Platform",
+  "short_name": "Lifys",
+  "description": "Plateforme de rencontre multi-catégories Lifys avec expérience premium, sobre et responsive.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f1ec",
+  "theme_color": "#b65fb5",
+  "lang": "fr"
+}

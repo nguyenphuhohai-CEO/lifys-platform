@@ -1,162 +1,348 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 import express from 'express';
+import { rateLimit } from 'express-rate-limit';
 
-import {
-  comparePassword,
-  createToken,
-  hashPassword,
-  normalizeEmail,
-  validateEmail,
-  validatePassword,
-  verifyToken,
-} from './auth.js';
+import { verifyToken } from './auth.js';
+import { createAuthController } from './controllers/auth-controller.js';
+import { createEmailService } from './email-service.js';
 import { createDatabase, sanitizeProfileInput } from './db.js';
+import { createHttpError } from './http.js';
+import { LOCAL_ADMIN_ACCOUNT, LOCAL_TEST_ACCOUNT } from './local-test-account.js';
+import { createLogger } from './logger.js';
+import { createAuthService } from './services/auth-service.js';
+import { normalizeBody, readRequiredString } from './validation.js';
 
-function createHttpError(status, message) {
-  const error = new Error(message);
-  error.status = status;
-  return error;
+function getRequestIp(req) {
+  return req.ip || req.socket.remoteAddress || 'local';
 }
 
-function sendSession(res, token, profile) {
-  res.json({
-    token,
-    user: {
-      email: profile.email,
-      profile,
+function hashIdentifier(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function createApiRateLimiter({ windowMs, max, keyGenerator }) {
+  return rateLimit({
+    windowMs,
+    max,
+    legacyHeaders: false,
+    standardHeaders: 'draft-7',
+    keyGenerator,
+    handler: (_req, res) => {
+      res.status(429).json({
+        error: 'Trop de requêtes, réessayez plus tard.',
+        code: 'RATE_LIMITED',
+      });
     },
   });
 }
 
-export function createApp(config) {
-  const database = createDatabase(config.databaseFile);
+function parseCorsOrigins(corsOrigin) {
+  return `${corsOrigin ?? ''}`
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+function extractRequestOrigin(req) {
+  const origin = `${req.headers.origin ?? ''}`.trim();
+  if (origin) {
+    return origin;
+  }
+
+  const referer = `${req.headers.referer ?? ''}`.trim();
+  if (!referer) {
+    return '';
+  }
+
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return '';
+  }
+}
+
+function getCookieValue(req, cookieName) {
+  const rawCookies = `${req.headers.cookie ?? ''}`;
+  if (!rawCookies) {
+    return '';
+  }
+
+  return rawCookies
+    .split(';')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(`${cookieName}=`))
+    ?.slice(cookieName.length + 1) ?? '';
+}
+
+const moderationStatuses = new Set(['open', 'reviewing', 'resolved', 'rejected']);
+
+export async function createApp(config) {
+  const logger = createLogger(config);
+  const database = await createDatabase(config);
+  const emailService = createEmailService({ config, logger });
+  const authService = createAuthService({ database, config, emailService, logger });
+  const authController = createAuthController({ authService, config });
   const app = express();
+  app.set('trust proxy', config.trustProxy);
+  const allowedOrigins = parseCorsOrigins(config.corsOrigin);
+  const authRateLimiter = createApiRateLimiter({
+    windowMs: config.rateLimitWindowMs,
+    max: config.authRateLimitMax,
+    keyGenerator: (req) => `auth:${getRequestIp(req)}`,
+  });
+  const protectedRouteRateLimiter = createApiRateLimiter({
+    windowMs: config.rateLimitWindowMs,
+    max: config.writeRateLimitMax,
+    keyGenerator: (req) => {
+      const authorization = `${req.headers.authorization ?? ''}`.trim();
+      return authorization
+        ? `protected:${hashIdentifier(authorization)}`
+        : `protected-ip:${getRequestIp(req)}`;
+    },
+  });
+  const refreshCookieRateLimiter = createApiRateLimiter({
+    windowMs: config.rateLimitWindowMs,
+    max: config.writeRateLimitMax,
+    keyGenerator: (req) => `refresh-ip:${getRequestIp(req)}`,
+  });
+  const writeRateLimiter = createApiRateLimiter({
+    windowMs: config.rateLimitWindowMs,
+    max: config.writeRateLimitMax,
+    keyGenerator: (req) => `write-user:${req.auth.userId}`,
+  });
+  const requireTrustedCookieOrigin = (req, _res, next) => {
+    const requestOrigin = extractRequestOrigin(req);
+    const trustedOrigins = allowedOrigins.length > 0
+      ? allowedOrigins
+      : [`${req.protocol}://${req.get('host')}`];
+
+    if (!requestOrigin || !trustedOrigins.includes(requestOrigin)) {
+      next(createHttpError(403, 'Origine non autorisée pour ce cookie sécurisé.', 'TRUSTED_ORIGIN_REQUIRED'));
+      return;
+    }
+
+    next();
+  };
+  const requireMatchingCsrfToken = (req, _res, next) => {
+    const cookieToken = decodeURIComponent(getCookieValue(req, config.csrfCookieName));
+    const headerToken = `${req.headers['x-csrf-token'] ?? ''}`.trim();
+
+    if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+      next(createHttpError(403, 'Jeton CSRF invalide.', 'CSRF_TOKEN_INVALID'));
+      return;
+    }
+
+    next();
+  };
 
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '1mb' }));
   app.use((req, res, next) => {
+    req.requestId = crypto.randomUUID();
+    res.setHeader('X-Request-Id', req.requestId);
+    const startedAt = performance.now();
+    res.on('finish', () => {
+      if (!config.logRequests || req.path === '/api/health') {
+        return;
+      }
+
+      logger.info('HTTP request completed', {
+        requestId: req.requestId,
+        method: req.method,
+        path: req.path,
+        statusCode: res.statusCode,
+        durationMs: Number((performance.now() - startedAt).toFixed(1)),
+        userId: req.auth?.userId ?? null,
+      });
+    });
+    next();
+  });
+  app.use(express.json({ limit: '1mb' }));
+  app.use((error, _req, res, next) => {
+    if (error instanceof SyntaxError && 'body' in error) {
+      res.status(400).json({ error: 'Corps JSON invalide.', code: 'INVALID_JSON' });
+      return;
+    }
+
+    next(error);
+  });
+  app.use((req, res, next) => {
+    const forwardedProto = `${req.headers['x-forwarded-proto'] ?? ''}`.split(',')[0].trim();
+    const isHttps = req.secure || forwardedProto === 'https';
+    if (config.forceHttps && !isHttps) {
+      const target = `${config.appBaseUrl}${req.originalUrl}`;
+      res.redirect(308, target);
+      return;
+    }
+
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    if (config.nodeEnv === 'production') {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+      res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https:; font-src 'self' https: data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+    }
+    next();
+  });
+  app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const requestOrigin = `${req.headers.origin ?? ''}`.trim();
+    const allowAll = allowedOrigins.includes('*');
+    const allowedOrigin = allowAll
+      ? '*'
+      : (requestOrigin && allowedOrigins.includes(requestOrigin) ? requestOrigin : '');
+
+    if (allowedOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+      if (!allowAll) {
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    }
+
+    if (req.method === 'OPTIONS') {
+      if (allowedOrigins.length === 0 && requestOrigin) {
+        next(createHttpError(403, 'Origine non autorisée.', 'CORS_ORIGIN_DENIED'));
+        return;
+      }
+
+      if (allowedOrigins.length > 0 && !allowedOrigin) {
+        next(createHttpError(403, 'Origine non autorisée.', 'CORS_ORIGIN_DENIED'));
+        return;
+      }
+
+      res.status(204).end();
+      return;
+    }
+
     next();
   });
 
-  function requireAuth(req, _res, next) {
+  async function requireAuth(req, _res, next) {
     const authorization = req.headers.authorization ?? '';
-    const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    const isBearerToken = authorization.startsWith('Bearer ');
+    const token = isBearerToken ? authorization.slice(7) : '';
 
-    if (!token) {
-      next(createHttpError(401, 'Authentification requise.'));
+    if (!authorization) {
+      next(createHttpError(401, 'Authentification requise.', 'AUTH_REQUIRED'));
+      return;
+    }
+
+    if (!isBearerToken || !token) {
+      next(createHttpError(401, 'Session expirée ou invalide.', 'SESSION_INVALID'));
       return;
     }
 
     try {
       const payload = verifyToken(token, config);
-      const profile = database.getProfileByUserId(payload.userId);
+      const [profile, user] = await Promise.all([
+        database.getProfileByUserId(payload.userId),
+        database.getUserById(payload.userId),
+      ]);
 
-      if (!profile) {
-        next(createHttpError(401, 'Session introuvable.'));
+      if (!profile || !user) {
+        next(createHttpError(401, 'Session introuvable.', 'SESSION_NOT_FOUND'));
         return;
       }
 
-      req.auth = { token, userId: payload.userId, email: payload.email, profile };
+      req.auth = {
+        token,
+        userId: payload.userId,
+        email: payload.email,
+        role: user.role ?? payload.role ?? 'member',
+        profile,
+      };
       next();
     } catch {
-      next(createHttpError(401, 'Session expirée ou invalide.'));
+      next(createHttpError(401, 'Session expirée ou invalide.', 'SESSION_INVALID'));
     }
   }
 
+  function requireModerator(req, _res, next) {
+    if (!['admin', 'moderator'].includes(req.auth?.role)) {
+      next(createHttpError(403, 'Accès modération refusé.', 'MODERATION_FORBIDDEN'));
+      return;
+    }
+    next();
+  }
+
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true });
-  });
-
-  app.post('/api/auth/register', (req, res, next) => {
-    try {
-      const email = normalizeEmail(req.body.email);
-      const password = req.body.password;
-      const initialProfile = sanitizeProfileInput({
-        name: req.body.name || email.split('@')[0] || 'Profil Lifys',
-        mode: req.body.mode,
-      });
-
-      if (!validateEmail(email)) {
-        throw createHttpError(400, 'Adresse e-mail invalide.');
-      }
-
-      if (!validatePassword(password)) {
-        throw createHttpError(400, 'Le mot de passe doit contenir au moins 8 caractères.');
-      }
-
-      if (database.getUserByEmail(email)) {
-        throw createHttpError(409, 'Un compte existe déjà avec cet e-mail.');
-      }
-
-      const created = database.createUser({
-        email,
-        passwordHash: hashPassword(password),
-        name: initialProfile.name || 'Profil Lifys',
-        mode: initialProfile.mode,
-      });
-      const token = createToken({ userId: created.userId, email }, config);
-      res.status(201);
-      sendSession(res, token, created.profile);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post('/api/auth/login', (req, res, next) => {
-    try {
-      const email = normalizeEmail(req.body.email);
-      const password = req.body.password;
-      const user = database.getUserByEmail(email);
-
-      if (typeof password !== 'string' || !password || !user || !comparePassword(password, user.password_hash)) {
-        throw createHttpError(401, 'Identifiants invalides.');
-      }
-
-      const token = createToken({ userId: user.id, email }, config);
-      sendSession(res, token, database.getProfileByUserId(user.id));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get('/api/auth/session', requireAuth, (req, res) => {
-    sendSession(res, req.auth.token, database.getProfileByUserId(req.auth.userId));
-  });
-
-  app.get('/api/bootstrap', requireAuth, (req, res) => {
     res.json({
-      profile: database.getProfileByUserId(req.auth.userId),
-      matches: database.listMatchesForUser(req.auth.userId),
-      conversations: database.listConversationsForUser(req.auth.userId),
+      ok: true,
+      uptimeSeconds: Number(process.uptime().toFixed(0)),
+      environment: {
+        emailDeliveryMode: config.emailDeliveryMode,
+        demoDiscoveryEnabled: config.demoDiscoveryEnabled,
+        databaseProvider: config.databaseProvider,
+        forceHttps: config.forceHttps,
+        trustProxy: config.trustProxy,
+        localTestAccountEnabled: config.localTestAccountEnabled,
+        localTestAccount: config.localTestAccountEnabled
+          ? {
+            email: LOCAL_TEST_ACCOUNT.email,
+            password: LOCAL_TEST_ACCOUNT.password,
+          }
+          : null,
+        localAdminAccountEnabled: config.localAdminAccountEnabled,
+        localAdminAccount: config.localAdminAccountEnabled
+          ? {
+            email: LOCAL_ADMIN_ACCOUNT.email,
+            password: LOCAL_ADMIN_ACCOUNT.password,
+          }
+          : null,
+      },
+      database: database.getHealthState(),
     });
   });
 
-  app.get('/api/profile', requireAuth, (req, res) => {
-    res.json({ profile: database.getProfileByUserId(req.auth.userId) });
+  app.post('/api/auth/register', authRateLimiter, authController.register);
+
+  app.post('/api/auth/login', authRateLimiter, authController.login);
+  app.post('/api/auth/refresh', authRateLimiter, refreshCookieRateLimiter, requireTrustedCookieOrigin, requireMatchingCsrfToken, authController.requireRefreshCookie, authController.refresh);
+  app.post('/api/auth/logout', refreshCookieRateLimiter, requireTrustedCookieOrigin, requireMatchingCsrfToken, authController.logout);
+  app.get('/api/auth/session', protectedRouteRateLimiter, requireAuth, authController.session);
+  app.post('/api/auth/verify-email/request', protectedRouteRateLimiter, requireAuth, writeRateLimiter, authController.requestEmailVerification);
+  app.post('/api/auth/verify-email/confirm', authRateLimiter, authController.verifyEmail);
+  app.post('/api/auth/password-reset/request', authRateLimiter, authController.requestPasswordReset);
+  app.post('/api/auth/password-reset/confirm', authRateLimiter, authController.resetPassword);
+  app.delete('/api/account', protectedRouteRateLimiter, requireAuth, writeRateLimiter, authController.deleteAccount);
+
+  app.get('/api/bootstrap', protectedRouteRateLimiter, requireAuth, async (req, res) => {
+    res.json({
+      profile: await database.getProfileByUserId(req.auth.userId),
+      matches: await database.listMatchesForUser(req.auth.userId),
+      conversations: await database.listConversationsForUser(req.auth.userId),
+    });
   });
 
-  app.put('/api/profile', requireAuth, (req, res, next) => {
+  app.get('/api/profile', protectedRouteRateLimiter, requireAuth, async (req, res) => {
+    res.json({ profile: await database.getProfileByUserId(req.auth.userId) });
+  });
+
+  app.put('/api/profile', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res, next) => {
     try {
-      const profile = sanitizeProfileInput(req.body);
+      const profile = sanitizeProfileInput(normalizeBody(req.body));
 
       if (!profile.name || !profile.city || !profile.bio || !profile.age) {
-        throw createHttpError(400, 'Nom, âge, ville et bio sont requis.');
+        throw createHttpError(400, 'Nom, âge, ville et bio sont requis.', 'PROFILE_INCOMPLETE');
       }
 
-      res.json({ profile: database.updateUserProfile(req.auth.userId, profile) });
+      res.json({ profile: await database.updateUserProfile(req.auth.userId, profile) });
     } catch (error) {
       next(error);
     }
   });
 
-  app.get('/api/discovery', requireAuth, (req, res) => {
+  app.get('/api/discovery', protectedRouteRateLimiter, requireAuth, async (req, res) => {
     res.json({
-      profiles: database.listDiscoveryProfiles(req.auth.userId, {
+      profiles: await database.listDiscoveryProfiles(req.auth.userId, {
         activeMode: req.query.mode ?? 'all',
         query: req.query.query ?? '',
         city: req.query.city ?? '',
@@ -164,26 +350,32 @@ export function createApp(config) {
     });
   });
 
-  app.post('/api/interactions/like', requireAuth, (req, res, next) => {
+  app.post('/api/interactions/like', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res, next) => {
     try {
-      if (!req.body.profileId) {
-        throw createHttpError(400, 'profileId est requis.');
+      const body = normalizeBody(req.body);
+      const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
+
+      if (!profileId) {
+        throw createHttpError(400, 'profileId est requis.', 'PROFILE_ID_REQUIRED');
       }
 
-      res.json(database.likeProfile(req.auth.userId, req.body.profileId));
+      res.json(await database.likeProfile(req.auth.userId, profileId));
     } catch (error) {
       next(error);
     }
   });
 
-  app.post('/api/interactions/pass', requireAuth, (req, res, next) => {
+  app.post('/api/interactions/pass', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res, next) => {
     try {
-      if (!req.body.profileId) {
-        throw createHttpError(400, 'profileId est requis.');
+      const body = normalizeBody(req.body);
+      const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
+
+      if (!profileId) {
+        throw createHttpError(400, 'profileId est requis.', 'PROFILE_ID_REQUIRED');
       }
 
-      if (!database.passProfile(req.auth.userId, req.body.profileId)) {
-        throw createHttpError(404, 'Profil introuvable.');
+      if (!(await database.passProfile(req.auth.userId, profileId))) {
+        throw createHttpError(404, 'Profil introuvable.', 'PROFILE_NOT_FOUND');
       }
 
       res.status(204).end();
@@ -192,25 +384,68 @@ export function createApp(config) {
     }
   });
 
-  app.get('/api/matches', requireAuth, (req, res) => {
-    res.json({ matches: database.listMatchesForUser(req.auth.userId) });
-  });
-
-  app.get('/api/conversations', requireAuth, (req, res) => {
-    res.json({ conversations: database.listConversationsForUser(req.auth.userId) });
-  });
-
-  app.post('/api/conversations/:conversationId/messages', requireAuth, (req, res, next) => {
+  app.post('/api/interactions/block', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res, next) => {
     try {
-      const text = `${req.body.text ?? ''}`.trim();
+      const body = normalizeBody(req.body);
+      const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
+      const reason = `${body.reason ?? ''}`.trim().slice(0, 200);
+      const blockedProfile = await database.blockProfile(req.auth.userId, profileId, reason);
 
-      if (!text) {
-        throw createHttpError(400, 'Le message est vide.');
+      if (!blockedProfile) {
+        throw createHttpError(404, 'Profil introuvable.', 'PROFILE_NOT_FOUND');
       }
 
-      const conversation = database.addMessage(req.auth.userId, req.params.conversationId, text);
+      res.status(201).json({
+        blockedProfile,
+        matches: await database.listMatchesForUser(req.auth.userId),
+        conversations: await database.listConversationsForUser(req.auth.userId),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/reports/profile', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res, next) => {
+    try {
+      const body = normalizeBody(req.body);
+      const profileId = readRequiredString(body, 'profileId', { maxLength: 80 });
+      const reason = readRequiredString(body, 'reason', { maxLength: 120 });
+      const details = `${body.details ?? ''}`.trim().slice(0, 1000);
+      const report = await database.reportProfile(req.auth.userId, profileId, reason, details);
+
+      if (!report) {
+        throw createHttpError(404, 'Profil introuvable.', 'PROFILE_NOT_FOUND');
+      }
+
+      res.status(201).json({
+        report,
+        message: 'Le signalement a été enregistré pour modération.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/matches', protectedRouteRateLimiter, requireAuth, async (req, res) => {
+    res.json({ matches: await database.listMatchesForUser(req.auth.userId) });
+  });
+
+  app.get('/api/conversations', protectedRouteRateLimiter, requireAuth, async (req, res) => {
+    res.json({ conversations: await database.listConversationsForUser(req.auth.userId) });
+  });
+
+  app.post('/api/conversations/:conversationId/messages', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res, next) => {
+    try {
+      const body = normalizeBody(req.body);
+      const text = readRequiredString(body, 'text', { maxLength: 2000 });
+
+      if (!text) {
+        throw createHttpError(400, 'Le message est vide.', 'MESSAGE_EMPTY');
+      }
+
+      const conversation = await database.addMessage(req.auth.userId, req.params.conversationId, text);
       if (!conversation) {
-        throw createHttpError(404, 'Conversation introuvable.');
+        throw createHttpError(404, 'Conversation introuvable.', 'CONVERSATION_NOT_FOUND');
       }
 
       res.status(201).json({ conversation });
@@ -219,25 +454,82 @@ export function createApp(config) {
     }
   });
 
-  app.post('/api/prototype/reset', requireAuth, (req, res) => {
-    database.resetUserData(req.auth.userId);
+  if (config.demoDiscoveryEnabled) {
+    app.post('/api/prototype/reset', protectedRouteRateLimiter, requireAuth, writeRateLimiter, async (req, res) => {
+      await database.resetUserData(req.auth.userId);
+      res.json({
+        profile: await database.getProfileByUserId(req.auth.userId),
+        matches: await database.listMatchesForUser(req.auth.userId),
+        conversations: await database.listConversationsForUser(req.auth.userId),
+      });
+    });
+  }
+
+  app.get('/api/admin/reports', protectedRouteRateLimiter, requireAuth, requireModerator, async (req, res) => {
+    const status = `${req.query.status ?? 'open'}`.trim() || 'open';
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 50) || 50));
     res.json({
-      profile: database.getProfileByUserId(req.auth.userId),
-      matches: database.listMatchesForUser(req.auth.userId),
-      conversations: database.listConversationsForUser(req.auth.userId),
+      reports: await database.listModerationReports(status, limit),
     });
   });
 
+  app.patch('/api/admin/reports/:reportId', protectedRouteRateLimiter, requireAuth, requireModerator, writeRateLimiter, async (req, res, next) => {
+    try {
+      const body = normalizeBody(req.body);
+      const status = readRequiredString(body, 'status', { maxLength: 40 });
+      const resolutionNote = `${body.resolutionNote ?? ''}`.trim().slice(0, 1000);
+      if (!moderationStatuses.has(status)) {
+        throw createHttpError(400, 'Statut de modération invalide.', 'MODERATION_STATUS_INVALID');
+      }
+
+      const report = await database.resolveModerationReport(req.params.reportId, req.auth.userId, status, resolutionNote);
+      if (!report) {
+        throw createHttpError(404, 'Signalement introuvable.', 'REPORT_NOT_FOUND');
+      }
+
+      res.json({ report });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   if (fs.existsSync(config.staticDir)) {
-    app.use(express.static(config.staticDir));
+    app.use(express.static(config.staticDir, {
+      maxAge: config.staticAssetMaxAgeSeconds * 1000,
+      setHeaders(res, filePath) {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-store');
+          return;
+        }
+
+        res.setHeader('Cache-Control', `public, max-age=${config.staticAssetMaxAgeSeconds}, immutable`);
+      },
+    }));
     app.get(/^(?!\/api\/).*/, (req, res) => {
       res.sendFile(path.join(config.staticDir, 'index.html'));
     });
   }
 
   app.use((error, _req, res, _next) => {
-    res.status(error.status || 500).json({
+    const statusCode = error.status || 500;
+    const context = {
+      requestId: _req.requestId,
+      path: _req.path,
+      method: _req.method,
+      statusCode,
+      code: error.code || 'INTERNAL_ERROR',
+      message: error.message,
+    };
+    if (statusCode >= 500) {
+      logger.error('Unhandled API error', context);
+    } else {
+      logger.warn('Handled API error', context);
+    }
+
+    res.status(statusCode).json({
       error: error.message || 'Une erreur inattendue est survenue.',
+      code: error.code || 'INTERNAL_ERROR',
+      requestId: _req.requestId,
     });
   });
 

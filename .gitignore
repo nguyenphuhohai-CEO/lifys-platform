@@ -2,3 +2,7 @@ node_modules/
 dist/
 data/
 .env
+deploy/certs/
+deploy/acme/
+deploy/letsencrypt/
+backups/

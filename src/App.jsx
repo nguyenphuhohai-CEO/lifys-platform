@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Avatar from './components/Avatar';
 import ToastRegion from './components/ToastRegion';
 import { MODES, defaultProfile } from './data/demoData';
 import { api, ApiError } from './lib/api';
-import { getConversationPreview, getModeById, serializeInterests } from './utils/app-utils';
+import { getConversationPreview, getModeById, resolveSelectedConversationId, serializeInterests } from './utils/app-utils';
+import { buildLocalCoachInsights } from './utils/local-ai';
 import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './utils/storage';
 
 const NAV_ITEMS = [
@@ -13,13 +14,27 @@ const NAV_ITEMS = [
   { id: 'matches', label: 'Matchs' },
   { id: 'messages', label: 'Messages' },
   { id: 'profile', label: 'Profil' },
+  { id: 'admin', label: 'Pilotage' },
 ];
 
-const initialAuth = safeReadJSON(STORAGE_KEYS.auth, { token: '' }, {
+const NAV_VIEW_IDS = new Set(NAV_ITEMS.map((item) => item.id));
+
+const PROTOTYPE_STORAGE_KEYS = [
+  STORAGE_KEYS.profile,
+  STORAGE_KEYS.likes,
+  STORAGE_KEYS.matches,
+  STORAGE_KEYS.messages,
+  STORAGE_KEYS.passed,
+];
+
+const initialSessionUiState = safeReadJSON(STORAGE_KEYS.sessionUi, { view: 'home', selectedConversation: null }, {
   sanitize: (value) => ({
-    token: typeof value?.token === 'string' ? value.token : '',
+    view: NAV_VIEW_IDS.has(value?.view) ? value.view : 'home',
+    selectedConversation: typeof value?.selectedConversation === 'string' ? value.selectedConversation : null,
   }),
-}).data;
+});
+
+const initialSessionUi = initialSessionUiState.data;
 
 function EmptyState({ title, description, actionLabel, onAction }) {
   return (
@@ -44,10 +59,60 @@ function SectionHeader({ eyebrow, title, description, aside }) {
   );
 }
 
+function CoachPanel({ coach, onNavigate }) {
+  return (
+    <section className="content-panel coach-panel">
+      <SectionHeader
+        eyebrow="Coach local"
+        title="Priorités produit et relation"
+        description={`Analyse locale sans appel externe. Profil complété à ${coach.profileHealth.score}%.`}
+      />
+
+      <div className="coach-summary">
+        <div className={`coach-summary-card ${coach.summary.tone}`}>
+          <strong>{coach.summary.title}</strong>
+          <p>{coach.summary.message}</p>
+          {coach.summary.actionLabel && coach.summary.actionView ? (
+            <button type="button" className="secondary-button" onClick={() => onNavigate(coach.summary.actionView)}>
+              {coach.summary.actionLabel}
+            </button>
+          ) : null}
+        </div>
+        <div className="coach-metrics">
+          <article className="mini-card">
+            <span className="mini-label">Profil</span>
+            <strong>{coach.profileHealth.score}%</strong>
+            <p>{coach.profileHealth.completed}/{coach.profileHealth.total} critères clés</p>
+          </article>
+          <article className="mini-card">
+            <span className="mini-label">Actions</span>
+            <strong>{coach.insights.length}</strong>
+            <p>pistes activables immédiatement</p>
+          </article>
+        </div>
+      </div>
+
+      <div className="coach-grid">
+        {coach.insights.map((item) => (
+          <article key={item.id} className={`coach-tip ${item.tone}`}>
+            <strong>{item.title}</strong>
+            <p>{item.message}</p>
+            {item.actionLabel && item.actionView ? (
+              <button type="button" className="secondary-button" onClick={() => onNavigate(item.actionView)}>
+                {item.actionLabel}
+              </button>
+            ) : null}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function App() {
-  const [token, setToken] = useState(initialAuth.token);
+  const [token, setToken] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
-  const [view, setView] = useState('home');
+  const [view, setView] = useState(initialSessionUi.view);
   const [activeMode, setActiveMode] = useState('all');
   const [profile, setProfile] = useState(defaultProfile);
   const [profileDraft, setProfileDraft] = useState(defaultProfile);
@@ -55,27 +120,52 @@ function App() {
   const [profiles, setProfiles] = useState([]);
   const [matches, setMatches] = useState([]);
   const [conversations, setConversations] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [selectedConversation, setSelectedConversation] = useState(initialSessionUi.selectedConversation);
   const [draftMessage, setDraftMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [cityQuery, setCityQuery] = useState('');
   const [toasts, setToasts] = useState([]);
   const [sessionLoading, setSessionLoading] = useState(true);
+  const [sessionBootstrapped, setSessionBootstrapped] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
   const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [emailVerificationSubmitting, setEmailVerificationSubmitting] = useState(false);
+  const [passwordResetSubmitting, setPasswordResetSubmitting] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [messageSending, setMessageSending] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [uiPersistenceWarningShown, setUiPersistenceWarningShown] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [pageError, setPageError] = useState('');
-  const [authMode, setAuthMode] = useState('register');
-  const [authForm, setAuthForm] = useState({
-    name: '',
-    email: '',
+  const [passwordResetRequestEmail, setPasswordResetRequestEmail] = useState('');
+  const [passwordResetForm, setPasswordResetForm] = useState({
+    token: '',
     password: '',
-    mode: 'amoureux',
   });
+  const [passwordResetPreviewToken, setPasswordResetPreviewToken] = useState('');
+  const [emailVerificationToken, setEmailVerificationToken] = useState('');
+  const [emailVerificationPreviewToken, setEmailVerificationPreviewToken] = useState('');
+  const [appEnvironment, setAppEnvironment] = useState({
+    emailDeliveryMode: 'preview',
+    demoDiscoveryEnabled: true,
+    databaseProvider: 'sqlite',
+    localTestAccountEnabled: false,
+    localTestAccount: null,
+    localAdminAccountEnabled: false,
+    localAdminAccount: null,
+  });
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
+  const [deleteAccountConfirm, setDeleteAccountConfirm] = useState('');
+  const [blockingProfileId, setBlockingProfileId] = useState('');
+  const [reportingProfileId, setReportingProfileId] = useState('');
+  const [moderationReports, setModerationReports] = useState([]);
+  const [moderationStatusFilter, setModerationStatusFilter] = useState('open');
+  const [moderationLoading, setModerationLoading] = useState(false);
+  const [moderationUpdatingId, setModerationUpdatingId] = useState('');
+  const [moderationNotes, setModerationNotes] = useState({});
+  const refreshRequestRef = useRef(null);
 
   const showToast = useCallback((toast) => {
     const id = `${toast.type}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -84,6 +174,21 @@ function App() {
       setToasts((current) => current.filter((item) => item.id !== id));
     }, 4200);
   }, []);
+
+  const isPreviewEmailMode = appEnvironment.emailDeliveryMode === 'preview';
+  const canModerate = ['admin', 'moderator'].includes(currentUser?.role ?? '');
+  const visibleNavItems = canModerate ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.id !== 'admin');
+  const runtimeDatabaseLabel = appEnvironment.databaseProvider === 'postgres' ? 'PostgreSQL' : 'SQLite';
+  const completedProfile = Boolean(profile.name && profile.age && profile.city && profile.bio);
+  const coach = useMemo(() => buildLocalCoachInsights({
+    currentUser,
+    profile,
+    profiles,
+    matches,
+    conversations,
+    appEnvironment,
+  }), [appEnvironment, conversations, currentUser, matches, profile, profiles]);
+  const environmentLabel = appEnvironment.demoDiscoveryEnabled ? 'Environnement de démonstration' : 'Déploiement public';
 
   const handleApiError = useCallback((error, fallbackMessage) => {
     const message = error instanceof ApiError ? error.message : fallbackMessage;
@@ -96,87 +201,333 @@ function App() {
   }, [showToast]);
 
   useEffect(() => {
-    if (token) {
-      safeWriteJSON(STORAGE_KEYS.auth, { token });
-    } else {
-      resetPrototypeStorage([STORAGE_KEYS.auth]);
-    }
-  }, [token]);
+    let cancelled = false;
 
-  const loadDiscovery = useCallback(async (authToken) => {
+    api.healthcheck()
+      .then((response) => {
+        if (!cancelled && response?.environment) {
+          setAppEnvironment(response.environment);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const verifyToken = params.get('verifyEmailToken');
+    const resetToken = params.get('resetPasswordToken');
+    let shouldCleanUrl = false;
+
+    if (verifyToken) {
+      setEmailVerificationToken(verifyToken);
+      shouldCleanUrl = true;
+    }
+
+    if (resetToken) {
+      setPasswordResetForm((current) => ({ ...current, token: resetToken }));
+      setAuthMode('login');
+      shouldCleanUrl = true;
+    }
+
+    if (shouldCleanUrl) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  const resetSessionState = useCallback((options = {}) => {
+    setToken('');
+    setCurrentUser(null);
+    setView('home');
+    setProfile(defaultProfile);
+    setProfileDraft(defaultProfile);
+    setProfileErrors({});
+    setProfiles([]);
+    setMatches([]);
+    setConversations([]);
+    setSelectedConversation(null);
+    setDraftMessage('');
+    setSearchQuery('');
+    setCityQuery('');
+    setActiveMode('all');
+    setEmailVerificationToken('');
+    setEmailVerificationPreviewToken('');
+    setPasswordResetPreviewToken('');
+    setDeleteAccountPassword('');
+    setDeleteAccountConfirm('');
+    setUiPersistenceWarningShown(false);
+    setIsMobileNavOpen(false);
+    resetPrototypeStorage([STORAGE_KEYS.auth, STORAGE_KEYS.sessionUi]);
+
+    if (options.pageError !== undefined) {
+      setPageError(options.pageError);
+    } else {
+      setPageError('');
+    }
+
+    if (options.toast) {
+      showToast(options.toast);
+    }
+  }, [showToast]);
+
+  const applyAuthenticatedSession = useCallback((response, options = {}) => {
+    setToken(response.token);
+    setCurrentUser(response.user);
+    if (options.view) {
+      setView(options.view);
+    }
+    setPageError('');
+  }, []);
+
+  const handleUnauthorized = useCallback((error) => {
+    const message = error instanceof ApiError ? error.message : 'Votre session n’est plus valide. Reconnectez-vous.';
+    resetSessionState({
+      pageError: message,
+      toast: {
+        type: 'warning',
+        title: 'Session expirée',
+        message,
+      },
+    });
+  }, [resetSessionState]);
+
+  const applyProfileState = useCallback((nextProfile) => {
+    setProfile(nextProfile);
+    setProfileDraft({
+      ...nextProfile,
+      interests: serializeInterests(nextProfile.interests),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!token) {
+      setUiPersistenceWarningShown(false);
+      resetPrototypeStorage([STORAGE_KEYS.sessionUi]);
+      return;
+    }
+
+    const persisted = safeWriteJSON(STORAGE_KEYS.sessionUi, {
+      view,
+      selectedConversation,
+    });
+    if (persisted) {
+      if (uiPersistenceWarningShown) {
+        setUiPersistenceWarningShown(false);
+      }
+      return;
+    }
+
+    if (!uiPersistenceWarningShown) {
+      setUiPersistenceWarningShown(true);
+      showToast({
+        type: 'warning',
+        title: 'Vue non persistée',
+        message: 'Le navigateur a refusé la persistance locale de la vue active et de la conversation sélectionnée.',
+      });
+    }
+  }, [selectedConversation, showToast, token, uiPersistenceWarningShown, view]);
+
+  useEffect(() => {
+    resetPrototypeStorage([STORAGE_KEYS.auth]);
+
+    if (!initialSessionUiState.recovered) {
+      return;
+    }
+
+    showToast({
+      type: 'warning',
+      title: 'Session locale réparée',
+      message: 'Des données locales corrompues ont été ignorées pour restaurer une session saine.',
+    });
+  }, [showToast]);
+
+  const refreshAccessToken = useCallback(async (options = {}) => {
+    if (!refreshRequestRef.current) {
+      refreshRequestRef.current = api.refreshSession()
+        .then((response) => {
+          applyAuthenticatedSession(response, options);
+          if (response.previewEmailVerificationToken) {
+            setEmailVerificationPreviewToken(response.previewEmailVerificationToken);
+          }
+          return response.token;
+        })
+        .finally(() => {
+          refreshRequestRef.current = null;
+        });
+    }
+
+    return refreshRequestRef.current;
+  }, [applyAuthenticatedSession]);
+
+  const withFreshToken = useCallback(async (callback, options = {}) => {
+    const currentToken = token || await refreshAccessToken(options.refreshView ? { view: options.refreshView } : {});
+
+    try {
+      return await callback(currentToken);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 401) {
+        throw error;
+      }
+
+      const refreshedToken = await refreshAccessToken(options.refreshView ? { view: options.refreshView } : {});
+      return callback(refreshedToken);
+    }
+  }, [refreshAccessToken, token]);
+
+  const syncAccountData = useCallback(async () => {
+    const [profileResponse, matchesResponse, conversationsResponse] = await withFreshToken((nextToken) => Promise.all([
+      api.getProfile(nextToken),
+      api.getMatches(nextToken),
+      api.getConversations(nextToken),
+    ]), { refreshView: view });
+
+    applyProfileState(profileResponse.profile);
+    setMatches(matchesResponse.matches);
+    setConversations(conversationsResponse.conversations);
+    setSelectedConversation((current) => resolveSelectedConversationId(conversationsResponse.conversations, current));
+  }, [applyProfileState, view, withFreshToken]);
+
+  const loadDiscovery = useCallback(async () => {
     setDiscoveryLoading(true);
 
     try {
-      const response = await api.getDiscovery(authToken, {
+      const response = await withFreshToken((nextToken) => api.getDiscovery(nextToken, {
         activeMode,
         query: searchQuery,
         city: cityQuery,
-      });
+      }), { refreshView: 'discover' });
       setProfiles(response.profiles);
       setPageError('');
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
       handleApiError(error, 'Impossible de charger la découverte.');
     } finally {
       setDiscoveryLoading(false);
     }
-  }, [activeMode, cityQuery, handleApiError, searchQuery]);
+  }, [activeMode, cityQuery, handleApiError, handleUnauthorized, searchQuery, withFreshToken]);
 
-  const loadDashboard = useCallback(async (authToken) => {
+  const loadDashboard = useCallback(async () => {
     setDashboardLoading(true);
 
     try {
-      const [sessionData, bootstrapData, discoveryData] = await Promise.all([
-        api.getSession(authToken),
-        api.getBootstrap(authToken),
-        api.getDiscovery(authToken, {
+      const [sessionData, profileData, matchesData, conversationsData, discoveryData] = await withFreshToken((nextToken) => Promise.all([
+        api.getSession(nextToken),
+        api.getProfile(nextToken),
+        api.getMatches(nextToken),
+        api.getConversations(nextToken),
+        api.getDiscovery(nextToken, {
           activeMode,
           query: searchQuery,
           city: cityQuery,
         }),
-      ]);
+      ]), { refreshView: view });
 
       setCurrentUser(sessionData.user);
-      setProfile(bootstrapData.profile);
-      setProfileDraft({
-        ...bootstrapData.profile,
-        interests: serializeInterests(bootstrapData.profile.interests),
-      });
-      setMatches(bootstrapData.matches);
-      setConversations(bootstrapData.conversations);
+      applyProfileState(profileData.profile);
+      setMatches(matchesData.matches);
+      setConversations(conversationsData.conversations);
       setProfiles(discoveryData.profiles);
-      setSelectedConversation((current) => (
-        bootstrapData.conversations.some((conversation) => conversation.id === current)
-          ? current
-          : bootstrapData.conversations[0]?.id ?? null
-      ));
+      setSelectedConversation((current) => resolveSelectedConversationId(conversationsData.conversations, current));
       setPageError('');
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
-        setToken('');
-        setCurrentUser(null);
+        handleUnauthorized(error);
+        return;
       }
       handleApiError(error, 'Impossible de charger votre espace Lifys.');
     } finally {
       setDashboardLoading(false);
       setSessionLoading(false);
     }
-  }, [activeMode, cityQuery, handleApiError, searchQuery]);
+  }, [activeMode, applyProfileState, cityQuery, handleApiError, handleUnauthorized, searchQuery, view, withFreshToken]);
+
+  const loadModerationReports = useCallback(async () => {
+    if (!canModerate) {
+      setModerationReports([]);
+      return;
+    }
+
+    setModerationLoading(true);
+
+    try {
+      const response = await withFreshToken((nextToken) => api.getModerationReports(nextToken, {
+        status: moderationStatusFilter,
+        limit: 100,
+      }), { refreshView: 'admin' });
+      setModerationReports(response.reports);
+      setPageError('');
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
+      handleApiError(error, 'Impossible de charger la file de modération.');
+    } finally {
+      setModerationLoading(false);
+    }
+  }, [canModerate, handleApiError, handleUnauthorized, moderationStatusFilter, withFreshToken]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      try {
+        await refreshAccessToken();
+      } catch {
+        if (!cancelled) {
+          setToken('');
+          setCurrentUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setSessionBootstrapped(true);
+        }
+      }
+    };
+
+    restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshAccessToken]);
+
+  useEffect(() => {
+    if (!sessionBootstrapped) {
+      return;
+    }
+
     if (!token) {
       setSessionLoading(false);
       setCurrentUser(null);
       return;
     }
 
-    loadDashboard(token);
-  }, [loadDashboard, token]);
+    loadDashboard();
+  }, [loadDashboard, sessionBootstrapped, token]);
 
   useEffect(() => {
     if (currentUser && token) {
-      loadDiscovery(token);
+      loadDiscovery();
     }
   }, [activeMode, cityQuery, currentUser, loadDiscovery, searchQuery, token]);
+
+  useEffect(() => {
+    if (!canModerate && view === 'admin') {
+      setView('home');
+      return;
+    }
+
+    if (canModerate && token && view === 'admin') {
+      loadModerationReports();
+    }
+  }, [canModerate, loadModerationReports, token, view]);
 
   useEffect(() => {
     setProfileDraft((current) => ({
@@ -188,13 +539,12 @@ function App() {
 
   useEffect(() => {
     if (!conversations.some((conversation) => conversation.id === selectedConversation)) {
-      setSelectedConversation(conversations[0]?.id ?? null);
+      setSelectedConversation(resolveSelectedConversationId(conversations, selectedConversation));
     }
   }, [conversations, selectedConversation]);
 
   const selectedConversationData = conversations.find((conversation) => conversation.id === selectedConversation) ?? null;
   const availableCities = useMemo(() => [...new Set(profiles.map((item) => item.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [profiles]);
-  const completedProfile = Boolean(profile.name && profile.age && profile.city && profile.bio);
 
   const validateProfile = () => {
     const errors = {};
@@ -218,6 +568,14 @@ function App() {
     return errors;
   };
 
+  const [authMode, setAuthMode] = useState('register');
+  const [authForm, setAuthForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    mode: 'amoureux',
+  });
+
   const handleAuthSubmit = async (event) => {
     event.preventDefault();
     setAuthSubmitting(true);
@@ -227,19 +585,119 @@ function App() {
         ? await api.register(authForm)
         : await api.login({ email: authForm.email, password: authForm.password });
 
-      setToken(response.token);
-      setCurrentUser(response.user);
-      setView('profile');
+      applyAuthenticatedSession(response, { view: 'profile' });
+      setSessionBootstrapped(true);
+      setAuthForm({
+        name: '',
+        email: '',
+        password: '',
+        mode: 'amoureux',
+      });
+      setPasswordResetPreviewToken('');
+      if (response.previewEmailVerificationToken) {
+        setEmailVerificationPreviewToken(response.previewEmailVerificationToken);
+        setEmailVerificationToken(response.previewEmailVerificationToken);
+      }
       showToast({
         type: 'success',
         title: authMode === 'register' ? 'Compte créé' : 'Connexion réussie',
-        message: 'Votre session Lifys est maintenant sécurisée par le backend.',
+        message: authMode === 'register'
+          ? 'Votre session Lifys est active. Vérifiez votre e-mail pour finaliser l’activation du compte.'
+          : 'Votre session Lifys backend est maintenant active.',
       });
-      setPageError('');
     } catch (error) {
       handleApiError(error, 'Impossible de démarrer votre session.');
     } finally {
       setAuthSubmitting(false);
+    }
+  };
+
+  const handleRequestEmailVerification = async () => {
+    setEmailVerificationSubmitting(true);
+
+    try {
+      const response = await withFreshToken((authToken) => api.requestEmailVerification(authToken));
+      if (response.previewToken) {
+        setEmailVerificationPreviewToken(response.previewToken);
+        setEmailVerificationToken(response.previewToken);
+      }
+      showToast({
+        type: 'info',
+        title: 'Vérification préparée',
+        message: response.message,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
+      handleApiError(error, 'Impossible de préparer la vérification e-mail.');
+    } finally {
+      setEmailVerificationSubmitting(false);
+    }
+  };
+
+  const handleConfirmEmailVerification = async (event) => {
+    event.preventDefault();
+    setEmailVerificationSubmitting(true);
+
+    try {
+      const response = await api.confirmEmailVerification(emailVerificationToken);
+      setCurrentUser(response.user);
+      setEmailVerificationPreviewToken('');
+      showToast({
+        type: 'success',
+        title: 'E-mail vérifié',
+        message: 'Votre adresse e-mail est maintenant confirmée.',
+      });
+    } catch (error) {
+      handleApiError(error, 'Impossible de confirmer cet e-mail.');
+    } finally {
+      setEmailVerificationSubmitting(false);
+    }
+  };
+
+  const handleRequestPasswordReset = async (event) => {
+    event.preventDefault();
+    setPasswordResetSubmitting(true);
+
+    try {
+      const response = await api.requestPasswordReset(passwordResetRequestEmail);
+      setPasswordResetPreviewToken(response.previewToken ?? '');
+      if (response.previewToken) {
+        setPasswordResetForm((current) => ({ ...current, token: response.previewToken }));
+      }
+      showToast({
+        type: 'info',
+        title: 'Réinitialisation préparée',
+        message: response.message,
+      });
+    } catch (error) {
+      handleApiError(error, 'Impossible de préparer la réinitialisation du mot de passe.');
+    } finally {
+      setPasswordResetSubmitting(false);
+    }
+  };
+
+  const handleConfirmPasswordReset = async (event) => {
+    event.preventDefault();
+    setPasswordResetSubmitting(true);
+
+    try {
+      const response = await api.confirmPasswordReset(passwordResetForm.token, passwordResetForm.password);
+      applyAuthenticatedSession(response, { view: 'profile' });
+      setSessionBootstrapped(true);
+      setPasswordResetForm({ token: '', password: '' });
+      setPasswordResetPreviewToken('');
+      showToast({
+        type: 'success',
+        title: 'Mot de passe réinitialisé',
+        message: 'Un nouveau refresh cookie et un nouvel access token ont été émis.',
+      });
+    } catch (error) {
+      handleApiError(error, 'Impossible de réinitialiser ce mot de passe.');
+    } finally {
+      setPasswordResetSubmitting(false);
     }
   };
 
@@ -260,22 +718,25 @@ function App() {
     setProfileSaving(true);
 
     try {
-      const response = await api.updateProfile(token, profileDraft);
-      setProfile(response.profile);
-      setProfileDraft({
-        ...response.profile,
-        interests: serializeInterests(response.profile.interests),
-      });
+      const response = await withFreshToken((nextToken) => api.updateProfile(nextToken, profileDraft), { refreshView: 'profile' });
+      applyProfileState(response.profile);
       setProfileErrors({});
       setView('discover');
       setPageError('');
       showToast({
         type: 'success',
         title: 'Profil synchronisé',
-        message: 'Votre profil est maintenant enregistré dans la base SQLite Lifys.',
+        message: 'Votre profil est maintenant enregistré côté serveur.',
       });
-      await loadDiscovery(token);
+      await Promise.all([
+        syncAccountData(),
+        loadDiscovery(),
+      ]);
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
       handleApiError(error, 'Impossible de sauvegarder le profil.');
     } finally {
       setProfileSaving(false);
@@ -284,8 +745,11 @@ function App() {
 
   const handleLike = async (profileId) => {
     try {
-      const response = await api.likeProfile(token, profileId);
-      await loadDashboard(token);
+      const response = await withFreshToken((nextToken) => api.likeProfile(nextToken, profileId), { refreshView: 'discover' });
+      await Promise.all([
+        syncAccountData(),
+        loadDiscovery(),
+      ]);
 
       if (response.matched) {
         setSelectedConversation(response.conversationId);
@@ -302,15 +766,26 @@ function App() {
         });
       }
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
       handleApiError(error, 'Impossible d’enregistrer ce like.');
     }
   };
 
   const handlePass = async (profileId) => {
     try {
-      await api.passProfile(token, profileId);
-      await loadDiscovery(token);
+      await withFreshToken((nextToken) => api.passProfile(nextToken, profileId), { refreshView: 'discover' });
+      await Promise.all([
+        syncAccountData(),
+        loadDiscovery(),
+      ]);
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
       handleApiError(error, 'Impossible d’enregistrer ce pass.');
     }
   };
@@ -324,16 +799,156 @@ function App() {
     setMessageSending(true);
 
     try {
-      const response = await api.sendMessage(token, selectedConversationData.id, text);
-      setConversations((current) => current.map((conversation) => (
-        conversation.id === response.conversation.id ? response.conversation : conversation
+      const response = await withFreshToken(
+        (nextToken) => api.sendMessage(nextToken, selectedConversationData.id, text),
+        { refreshView: 'messages' },
+      );
+      const persistedLastMessage = response.conversation.messages.at(-1)?.text ?? text.trim();
+      setConversations((current) => {
+        const existingConversation = current.some(
+          (conversation) => conversation.id === response.conversation.id,
+        );
+
+        if (!existingConversation) {
+          return [response.conversation, ...current];
+        }
+
+        return current.map((conversation) => (
+          conversation.id === response.conversation.id ? response.conversation : conversation
+        ));
+      });
+      setMatches((current) => current.map((match) => (
+        match.profileId === response.conversation.profileId
+          ? { ...match, lastMessage: persistedLastMessage }
+          : match
       )));
       setDraftMessage('');
       setPageError('');
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
       handleApiError(error, 'Impossible d’envoyer le message.');
     } finally {
       setMessageSending(false);
+    }
+  };
+
+  const handleReportProfile = async (profileId, profileName) => {
+    setReportingProfileId(profileId);
+
+    try {
+      const response = await withFreshToken(
+        (nextToken) => api.reportProfile(nextToken, profileId, {
+          reason: 'safety-review',
+          details: `Signalement envoyé depuis l’interface pour le profil ${profileName}.`,
+        }),
+        { refreshView: view },
+      );
+      showToast({
+        type: 'info',
+        title: 'Signalement enregistré',
+        message: response.message,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
+      handleApiError(error, 'Impossible d’enregistrer ce signalement.');
+    } finally {
+      setReportingProfileId('');
+    }
+  };
+
+  const handleBlockProfile = async (profileId, profileName) => {
+    setBlockingProfileId(profileId);
+
+    try {
+      const response = await withFreshToken(
+        (nextToken) => api.blockProfile(nextToken, profileId, 'user-request'),
+        { refreshView: view },
+      );
+      setMatches(response.matches);
+      setConversations(response.conversations);
+      setSelectedConversation((current) => resolveSelectedConversationId(response.conversations, current));
+      await loadDiscovery();
+      showToast({
+        type: 'warning',
+        title: 'Profil bloqué',
+        message: `${profileName} a été retiré de votre découverte, de vos matchs et de vos conversations.`,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
+      handleApiError(error, 'Impossible de bloquer ce profil.');
+    } finally {
+      setBlockingProfileId('');
+    }
+  };
+
+  const handleModerationUpdate = async (reportId, status) => {
+    setModerationUpdatingId(reportId);
+
+    try {
+      const response = await withFreshToken((nextToken) => api.updateModerationReport(nextToken, reportId, {
+        status,
+        resolutionNote: moderationNotes[reportId] ?? '',
+      }), { refreshView: 'admin' });
+      setModerationReports((current) => current.map((report) => (
+        report.id === reportId ? response.report : report
+      )));
+      showToast({
+        type: 'success',
+        title: 'Signalement mis à jour',
+        message: `Le signalement ${reportId} est maintenant marqué comme ${status}.`,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
+      handleApiError(error, 'Impossible de mettre à jour ce signalement.');
+    } finally {
+      setModerationUpdatingId('');
+    }
+  };
+
+  const handleDeleteAccount = async (event) => {
+    event.preventDefault();
+
+    if (deleteAccountConfirm.trim() !== currentUser?.email) {
+      showToast({
+        type: 'warning',
+        title: 'Confirmation manquante',
+        message: 'Saisissez votre adresse e-mail pour confirmer la suppression définitive du compte.',
+      });
+      return;
+    }
+
+    setDeletingAccount(true);
+
+    try {
+      await withFreshToken((nextToken) => api.deleteAccount(nextToken, deleteAccountPassword), { refreshView: 'profile' });
+      resetSessionState({
+        pageError: '',
+        toast: {
+          type: 'info',
+          title: 'Compte supprimé',
+          message: 'Votre compte et vos données associées ont été supprimés du serveur local.',
+        },
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
+      handleApiError(error, 'Impossible de supprimer ce compte.');
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -341,47 +956,70 @@ function App() {
     setResetting(true);
 
     try {
-      const response = await api.resetPrototype(token);
-      setProfile(response.profile);
-      setProfileDraft({
-        ...response.profile,
-        interests: serializeInterests(response.profile.interests),
-      });
+      const response = await withFreshToken((nextToken) => api.resetPrototype(nextToken), { refreshView: view });
+      const nextSelectedConversation = response.conversations[0]?.id ?? null;
+      const nextView = view === 'messages' && !nextSelectedConversation ? 'matches' : view;
+      applyProfileState(response.profile);
       setMatches(response.matches);
       setConversations(response.conversations);
-      setSelectedConversation(response.conversations[0]?.id ?? null);
+      setSelectedConversation(nextSelectedConversation);
+      setView(nextView);
       setSearchQuery('');
       setCityQuery('');
       setActiveMode('all');
       setDraftMessage('');
-      await loadDiscovery(token);
+      resetPrototypeStorage(PROTOTYPE_STORAGE_KEYS);
+      const restoredSessionUi = safeWriteJSON(STORAGE_KEYS.sessionUi, {
+        view: nextView,
+        selectedConversation: nextSelectedConversation,
+      });
+      if (!restoredSessionUi) {
+        showToast({
+          type: 'warning',
+          title: 'Vue non persistée',
+          message: 'Le prototype a été réinitialisé, mais la vue et la conversation actives n’ont pas pu être restaurées localement.',
+        });
+      }
+      await loadDiscovery();
       showToast({
         type: 'success',
         title: 'Données de démonstration réinitialisées',
-        message: 'Le backend a effacé vos interactions et restauré un profil vierge.',
+        message: 'Vos interactions serveur ont été nettoyées et votre profil a été réinitialisé.',
       });
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleUnauthorized(error);
+        return;
+      }
       handleApiError(error, 'Impossible de réinitialiser le prototype.');
     } finally {
       setResetting(false);
     }
   };
 
-  const handleLogout = () => {
-    setToken('');
-    setCurrentUser(null);
-    setProfile(defaultProfile);
-    setProfileDraft(defaultProfile);
-    setProfiles([]);
-    setMatches([]);
-    setConversations([]);
-    setSelectedConversation(null);
-    setDraftMessage('');
-    setPageError('');
-    showToast({
-      type: 'info',
-      title: 'Session fermée',
-      message: 'Votre jeton local a été supprimé du navigateur.',
+  const handleLogout = async () => {
+    let logoutConfirmed = false;
+
+    try {
+      await api.logout();
+      logoutConfirmed = true;
+    } catch {
+      // ignore logout transport failures, local reset still wins
+    }
+
+    resetSessionState({
+      pageError: logoutConfirmed ? '' : 'La session locale a été fermée, mais la révocation serveur du refresh cookie n’a pas pu être confirmée.',
+      toast: logoutConfirmed
+        ? {
+          type: 'info',
+          title: 'Session fermée',
+          message: 'Le refresh cookie sécurisé et la session locale ont été supprimés.',
+        }
+        : {
+          type: 'warning',
+          title: 'Déconnexion partielle',
+          message: 'L’état local a été réinitialisé, mais la révocation serveur du refresh cookie n’a pas pu être confirmée.',
+        },
     });
   };
 
@@ -400,7 +1038,7 @@ function App() {
         <div className="content-panel loading-panel" role="status" aria-live="polite">
           <p className="eyebrow">Chargement</p>
           <h1>Lifys établit la connexion sécurisée…</h1>
-          <p className="section-description">Initialisation du backend, de la base SQLite et de votre session.</p>
+          <p className="section-description">Initialisation de votre session, du backend Express et de la base {runtimeDatabaseLabel}.</p>
         </div>
       </div>
     );
@@ -413,11 +1051,13 @@ function App() {
         <main className="page-shell">
           <section className="hero-panel auth-hero">
             <div className="hero-copy">
-              <p className="eyebrow">Déploiement MVP · backend réel</p>
-              <h1>Lifys est prêt pour un vrai déploiement léger.</h1>
+              <p className="eyebrow">Frontend React + backend Express</p>
+              <h1>Lifys passe à un socle full-stack prêt à être durci pour la production.</h1>
               <p>
-                Ce MVP s’appuie désormais sur un backend Express, une base SQLite réelle, une authentification par mot de passe
-                et des profils/messages persistés côté serveur.
+                Les comptes, profils, matchs et conversations sont portés par le backend.
+                {appEnvironment.demoDiscoveryEnabled
+                  ? ' Les profils de découverte fictifs restent activés dans cet environnement tant que le mode démo est autorisé.'
+                  : ' La découverte ne repose plus que sur de vrais comptes créés dans votre environnement.'}
               </p>
               <div className="hero-metrics">
                 <article className="metric-card">
@@ -426,14 +1066,14 @@ function App() {
                   <small>API JSON sécurisée</small>
                 </article>
                 <article className="metric-card">
-                  <span>Base de données</span>
-                  <strong>SQLite</strong>
-                  <small>persistante et simple à déployer</small>
+                  <span>Base</span>
+                  <strong>{runtimeDatabaseLabel}</strong>
+                  <small>{appEnvironment.databaseProvider}</small>
                 </article>
                 <article className="metric-card">
-                  <span>Auth</span>
-                  <strong>JWT</strong>
-                  <small>session stockée localement</small>
+                  <span>Session</span>
+                  <strong>httpOnly</strong>
+                  <small>refresh cookie + access token</small>
                 </article>
               </div>
             </div>
@@ -442,10 +1082,22 @@ function App() {
               <SectionHeader
                 eyebrow={authMode === 'register' ? 'Créer un compte' : 'Connexion'}
                 title={authMode === 'register' ? 'Commencer sur Lifys' : 'Reprendre votre session'}
-                description="Les comptes sont réels pour ce MVP backend, mais les profils de découverte restent des démos."
+                description={`Le refresh token est stocké en cookie httpOnly.${appEnvironment.demoDiscoveryEnabled ? ' Les profils de découverte fictifs restent activés uniquement en mode démo explicite.' : ''}`}
               />
 
               {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
+              {appEnvironment.localTestAccountEnabled && appEnvironment.localTestAccount ? (
+                <div className="form-alert" role="status">
+                  <strong>Compte de test local</strong><br />
+                  {appEnvironment.localTestAccount.email} / {appEnvironment.localTestAccount.password}
+                </div>
+              ) : null}
+              {appEnvironment.localAdminAccountEnabled && appEnvironment.localAdminAccount ? (
+                <div className="form-alert" role="status">
+                  <strong>Compte admin local</strong><br />
+                  {appEnvironment.localAdminAccount.email} / {appEnvironment.localAdminAccount.password}
+                </div>
+              ) : null}
 
               <form className="profile-form" onSubmit={handleAuthSubmit}>
                 {authMode === 'register' ? (
@@ -474,11 +1126,97 @@ function App() {
                   <button type="submit" className="primary-button" disabled={authSubmitting}>
                     {authSubmitting ? 'Chargement…' : authMode === 'register' ? 'Créer mon compte' : 'Se connecter'}
                   </button>
+                  {appEnvironment.localTestAccountEnabled && appEnvironment.localTestAccount ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        setAuthMode('login');
+                        setAuthForm((current) => ({
+                          ...current,
+                          email: appEnvironment.localTestAccount.email,
+                          password: appEnvironment.localTestAccount.password,
+                        }));
+                      }}
+                    >
+                      Utiliser le compte test
+                    </button>
+                  ) : null}
+                  {appEnvironment.localAdminAccountEnabled && appEnvironment.localAdminAccount ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        setAuthMode('login');
+                        setAuthForm((current) => ({
+                          ...current,
+                          email: appEnvironment.localAdminAccount.email,
+                          password: appEnvironment.localAdminAccount.password,
+                        }));
+                      }}
+                    >
+                      Utiliser le compte admin
+                    </button>
+                  ) : null}
                   <button type="button" className="secondary-button" onClick={() => setAuthMode((current) => current === 'register' ? 'login' : 'register')}>
                     {authMode === 'register' ? 'J’ai déjà un compte' : 'Créer un nouveau compte'}
                   </button>
                 </div>
               </form>
+
+              <div className="profile-layout">
+                <form className="profile-form" onSubmit={handleRequestPasswordReset}>
+                  <SectionHeader
+                    eyebrow="Mot de passe"
+                    title="Préparer une réinitialisation"
+                    description={isPreviewEmailMode
+                      ? 'Mode preview : un token local s’affiche pour les environnements sans fournisseur e-mail.'
+                      : 'Si le compte existe, un e-mail de réinitialisation sera envoyé.'}
+                  />
+                  <label>
+                    <span>E-mail du compte</span>
+                    <input
+                      type="email"
+                      value={passwordResetRequestEmail}
+                      onChange={(event) => setPasswordResetRequestEmail(event.target.value)}
+                    />
+                  </label>
+                  {passwordResetPreviewToken ? <small className="section-description">Token preview : {passwordResetPreviewToken}</small> : null}
+                  <div className="form-actions">
+                    <button type="submit" className="secondary-button" disabled={passwordResetSubmitting}>
+                      {passwordResetSubmitting ? 'Préparation…' : 'Préparer le reset'}
+                    </button>
+                  </div>
+                </form>
+
+                <form className="profile-form" onSubmit={handleConfirmPasswordReset}>
+                  <SectionHeader
+                    eyebrow="Réinitialisation"
+                    title="Appliquer un nouveau mot de passe"
+                    description="Collez le token reçu par e-mail — ou le token preview en environnement local — puis définissez un nouveau mot de passe."
+                  />
+                  <label>
+                    <span>Token de reset</span>
+                    <input
+                      value={passwordResetForm.token}
+                      onChange={(event) => setPasswordResetForm((current) => ({ ...current, token: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Nouveau mot de passe</span>
+                    <input
+                      type="password"
+                      value={passwordResetForm.password}
+                      onChange={(event) => setPasswordResetForm((current) => ({ ...current, password: event.target.value }))}
+                    />
+                  </label>
+                  <div className="form-actions">
+                    <button type="submit" className="secondary-button" disabled={passwordResetSubmitting}>
+                      {passwordResetSubmitting ? 'Réinitialisation…' : 'Valider le reset'}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </section>
         </main>
@@ -495,7 +1233,7 @@ function App() {
           <span className="brand-icon">❤</span>
           <span>
             <strong>Lifys</strong>
-            <small>Frontend React + backend Express + SQLite</small>
+            <small>{`React + Express + ${runtimeDatabaseLabel}`}</small>
           </span>
         </button>
 
@@ -510,7 +1248,7 @@ function App() {
         </button>
 
         <nav id="lifys-main-nav" className={isMobileNavOpen ? 'nav nav-open' : 'nav'} aria-label="Navigation principale">
-          {NAV_ITEMS.map((item) => (
+          {visibleNavItems.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -524,9 +1262,12 @@ function App() {
 
         <div className="topbar-actions">
           <span className="prototype-badge">{currentUser.email}</span>
-          <button type="button" className="secondary-button" onClick={handleResetPrototype} disabled={resetting}>
-            {resetting ? 'Réinitialisation…' : 'Réinitialiser'}
-          </button>
+          {canModerate ? <span className="counter-badge muted">{currentUser.role}</span> : null}
+          {appEnvironment.demoDiscoveryEnabled ? (
+            <button type="button" className="secondary-button" onClick={handleResetPrototype} disabled={resetting}>
+              {resetting ? 'Réinitialisation…' : 'Réinitialiser'}
+            </button>
+          ) : null}
           <button type="button" className="secondary-button" onClick={handleLogout}>
             Déconnexion
           </button>
@@ -534,10 +1275,44 @@ function App() {
       </header>
 
       <main className="page-shell">
-        <section className="local-notice" aria-label="Avertissement MVP">
-          <strong>MVP déployable</strong>
-          <span>Les comptes et données utilisateur sont persistés dans SQLite. Les profils de découverte restent fictifs et ne constituent ni réseau social réel, ni identité vérifiée.</span>
+        <section className="local-notice" aria-label="État de plateforme">
+          <strong>État de plateforme</strong>
+          <span>Les comptes utilisateur, profils, matchs et messages sont persistés côté backend.</span>
+          <span>Le refresh token est protégé par cookie httpOnly et le refresh/logout sont protégés par un jeton CSRF compagnon.</span>
+          <span>Aucune vérification d’identité réelle n’est encore réalisée sur ce MVP.</span>
+          <span>{appEnvironment.demoDiscoveryEnabled ? 'Le mode démo découverte reste activé dans cet environnement.' : 'Le mode démo découverte est désactivé dans cet environnement.'}</span>
         </section>
+
+        {!currentUser.emailVerified ? (
+          <section className="content-panel">
+            <SectionHeader
+              eyebrow="Vérification e-mail"
+              title="Adresse non vérifiée"
+              description={isPreviewEmailMode
+                ? 'Mode preview : un token local s’affiche pour les environnements sans fournisseur e-mail.'
+                : 'Un e-mail de vérification peut être renvoyé à tout moment depuis cette page.'}
+            />
+            <div className="profile-layout">
+              <div className="form-actions">
+                <button type="button" className="secondary-button" onClick={handleRequestEmailVerification} disabled={emailVerificationSubmitting}>
+                  {emailVerificationSubmitting ? 'Préparation…' : 'Envoyer un e-mail de vérification'}
+                </button>
+              </div>
+              <form className="profile-form" onSubmit={handleConfirmEmailVerification}>
+                <label>
+                  <span>Token de vérification</span>
+                  <input value={emailVerificationToken} onChange={(event) => setEmailVerificationToken(event.target.value)} />
+                </label>
+                {emailVerificationPreviewToken ? <small className="section-description">Token preview : {emailVerificationPreviewToken}</small> : null}
+                <div className="form-actions">
+                  <button type="submit" className="primary-button" disabled={emailVerificationSubmitting || !emailVerificationToken.trim()}>
+                    {emailVerificationSubmitting ? 'Validation…' : 'Confirmer mon e-mail'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </section>
+        ) : null}
 
         {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
 
@@ -545,11 +1320,14 @@ function App() {
           <>
             <section className="hero-panel">
               <div className="hero-copy">
-                <span className="eyebrow">Expérience full-stack légère</span>
-                <h1>Une base Lifys prête à passer du prototype local à un MVP backend réel.</h1>
+                <span className="eyebrow">{environmentLabel}</span>
+                <h1>Lifys est prêt à être exploité sur une infrastructure publique maîtrisée.</h1>
                 <p>
-                  Vos profils, likes, matchs et messages sont maintenant gérés par un backend Express et une base SQLite,
-                  sans bouleverser l’expérience premium construite sur React + Vite.
+                  Votre profil, vos likes, vos matchs et vos messages sont servis par Express et stockés côté backend.
+                  {` Runtime base active : ${runtimeDatabaseLabel}.`}
+                  {appEnvironment.demoDiscoveryEnabled
+                    ? ' Les profils de découverte fictifs restent disponibles uniquement pour les environnements de démonstration.'
+                    : ' La découverte repose uniquement sur les profils réels actuellement créés, avec une posture compatible déploiement public.'}
                 </p>
 
                 <div className="cta-row">
@@ -563,7 +1341,7 @@ function App() {
                   <article className="metric-card">
                     <span>Profils</span>
                     <strong>{profiles.length}</strong>
-                    <small>résultats backend filtrés</small>
+                    <small>retournés par l’API</small>
                   </article>
                   <article className="metric-card">
                     <span>Matchs</span>
@@ -573,7 +1351,7 @@ function App() {
                   <article className="metric-card">
                     <span>Messages</span>
                     <strong>{conversations.reduce((count, conversation) => count + conversation.messages.length, 0)}</strong>
-                    <small>conservés côté serveur</small>
+                    <small>restaurés après reload</small>
                   </article>
                 </div>
               </div>
@@ -592,10 +1370,12 @@ function App() {
                 <div className="mini-card">
                   <span className="mini-label">Stack</span>
                   <strong>React + Express</strong>
-                  <p>JWT · SQLite · Docker</p>
+                  <p>{`JWT · ${runtimeDatabaseLabel} · Vite`}</p>
                 </div>
               </div>
             </section>
+
+            <CoachPanel coach={coach} onNavigate={setCurrentView} />
 
             <section className="mode-grid" aria-label="Choix de catégorie">
               {MODES.map((mode) => (
@@ -622,7 +1402,7 @@ function App() {
             <SectionHeader
               eyebrow="Découverte"
               title="Profils recommandés"
-              description="La découverte est maintenant alimentée par le backend et exclut automatiquement les profils déjà likés ou passés."
+              description={`La découverte est pilotée par l’API backend et exclut les profils déjà likés, passés ou bloqués.${appEnvironment.demoDiscoveryEnabled ? ' Des profils de démonstration peuvent encore apparaître dans cet environnement.' : ''}`}
               aside={(
                 <div className="header-meta">
                   <span className="counter-badge">{discoveryLoading ? 'Chargement…' : `${profiles.length} profil${profiles.length > 1 ? 's' : ''}`}</span>
@@ -656,7 +1436,7 @@ function App() {
             </div>
 
             {discoveryLoading ? (
-              <EmptyState title="Chargement des profils" description="Le backend prépare vos recommandations sécurisées." />
+              <EmptyState title="Chargement des profils" description="Le backend prépare vos recommandations." />
             ) : profiles.length === 0 ? (
               <EmptyState
                 title="Aucun profil disponible"
@@ -689,8 +1469,16 @@ function App() {
                       </div>
                     </div>
                     <div className="card-actions">
-                      <button type="button" className="pass-button" onClick={() => handlePass(person.id)}>Pass</button>
-                      <button type="button" className="like-button" onClick={() => handleLike(person.id)}>Like</button>
+                      <button type="button" className="pass-button" onClick={() => handlePass(person.id)} aria-label={`Passer le profil de ${person.name}`}>Pass</button>
+                      <button type="button" className="like-button" onClick={() => handleLike(person.id)} aria-label={`Liker le profil de ${person.name}`}>Like</button>
+                    </div>
+                    <div className="card-secondary-actions">
+                      <button type="button" className="secondary-button" disabled={reportingProfileId === person.id} onClick={() => handleReportProfile(person.id, person.name)}>
+                        {reportingProfileId === person.id ? 'Signalement…' : 'Signaler'}
+                      </button>
+                      <button type="button" className="secondary-button danger-button" disabled={blockingProfileId === person.id} onClick={() => handleBlockProfile(person.id, person.name)}>
+                        {blockingProfileId === person.id ? 'Blocage…' : 'Bloquer'}
+                      </button>
                     </div>
                   </article>
                 ))}
@@ -704,13 +1492,13 @@ function App() {
             <SectionHeader
               eyebrow="Matchs"
               title="Vos correspondances"
-              description="Les matchs sont persistés dans SQLite et peuvent être retrouvés après redémarrage du serveur."
+              description="Les matchs sont créés par le backend et restent disponibles au redémarrage de l’application."
             />
 
             {dashboardLoading ? (
-              <EmptyState title="Chargement des matchs" description="Lecture des correspondances depuis la base de données." />
+              <EmptyState title="Chargement des matchs" description={`Lecture des correspondances depuis ${runtimeDatabaseLabel}.`} />
             ) : matches.length === 0 ? (
-              <EmptyState title="Aucun match pour l’instant" description="Commencez par liker des profils pour créer vos premières connexions." actionLabel="Voir la découverte" onAction={() => setCurrentView('discover')} />
+              <EmptyState title="Aucun match pour l’instant" description="Commencez par liker des profils pour créer vos premières connexions." actionLabel="Voir la découverte" onAction={() => setView('discover')} />
             ) : (
               <div className="matches-list">
                 {matches.map((match) => (
@@ -741,9 +1529,9 @@ function App() {
               <SectionHeader eyebrow="Messages" title="Conversations" description="Historique persistant avec envoi par Entrée." />
 
               {dashboardLoading ? (
-                <EmptyState title="Chargement des conversations" description="Récupération de vos messages depuis le serveur." />
+                <EmptyState title="Chargement des conversations" description="Récupération de vos messages depuis le backend." />
               ) : conversations.length === 0 ? (
-                <EmptyState title="Aucune conversation" description="Un match backend ouvre automatiquement un canal de discussion." actionLabel="Trouver un match" onAction={() => setCurrentView('discover')} />
+                <EmptyState title="Aucune conversation" description="Un match backend ouvre automatiquement un canal de discussion." actionLabel="Trouver un match" onAction={() => setView('discover')} />
               ) : (
                 <div className="conversation-list">
                   {conversations.map((conversation) => (
@@ -776,7 +1564,9 @@ function App() {
                   </div>
 
                   <div className="chat-body" aria-live="polite">
-                    {selectedConversationData.messages.map((message) => (
+                    {selectedConversationData.messages.length === 0 ? (
+                      <p className="section-description">Aucun message pour l’instant. Envoyez le premier message pour démarrer la conversation.</p>
+                    ) : selectedConversationData.messages.map((message) => (
                       <div key={message.id} className={message.sender === 'me' ? 'bubble me' : 'bubble them'}>
                         {message.text}
                       </div>
@@ -802,7 +1592,7 @@ function App() {
                   </div>
                 </div>
               ) : (
-                <EmptyState title="Sélectionnez une conversation" description="Choisissez un échange pour afficher les messages stockés en base." />
+                <EmptyState title="Sélectionnez une conversation" description="Choisissez un échange pour afficher les messages persistés." />
               )}
             </div>
           </section>
@@ -819,18 +1609,18 @@ function App() {
                 <div className="form-grid">
                   <label>
                     <span>Prénom</span>
-                    <input value={profileDraft.name} onChange={(event) => updateProfileField('name', event.target.value)} aria-invalid={Boolean(profileErrors.name)} />
-                    {profileErrors.name ? <small className="field-error">{profileErrors.name}</small> : null}
+                    <input value={profileDraft.name} onChange={(event) => updateProfileField('name', event.target.value)} aria-invalid={Boolean(profileErrors.name)} aria-describedby={profileErrors.name ? 'profile-name-error' : undefined} />
+                    {profileErrors.name ? <small className="field-error" id="profile-name-error">{profileErrors.name}</small> : null}
                   </label>
                   <label>
                     <span>Âge</span>
-                    <input type="number" min="18" max="80" value={profileDraft.age ?? ''} onChange={(event) => updateProfileField('age', event.target.value)} aria-invalid={Boolean(profileErrors.age)} />
-                    {profileErrors.age ? <small className="field-error">{profileErrors.age}</small> : null}
+                    <input type="number" min="18" max="80" value={profileDraft.age ?? ''} onChange={(event) => updateProfileField('age', event.target.value)} aria-invalid={Boolean(profileErrors.age)} aria-describedby={profileErrors.age ? 'profile-age-error' : undefined} />
+                    {profileErrors.age ? <small className="field-error" id="profile-age-error">{profileErrors.age}</small> : null}
                   </label>
                   <label>
                     <span>Ville</span>
-                    <input value={profileDraft.city} onChange={(event) => updateProfileField('city', event.target.value)} aria-invalid={Boolean(profileErrors.city)} />
-                    {profileErrors.city ? <small className="field-error">{profileErrors.city}</small> : null}
+                    <input value={profileDraft.city} onChange={(event) => updateProfileField('city', event.target.value)} aria-invalid={Boolean(profileErrors.city)} aria-describedby={profileErrors.city ? 'profile-city-error' : undefined} />
+                    {profileErrors.city ? <small className="field-error" id="profile-city-error">{profileErrors.city}</small> : null}
                   </label>
                   <label>
                     <span>Catégorie principale</span>
@@ -842,14 +1632,14 @@ function App() {
 
                 <label>
                   <span>Avatar URL</span>
-                  <input value={profileDraft.avatar} onChange={(event) => updateProfileField('avatar', event.target.value)} aria-invalid={Boolean(profileErrors.avatar)} />
-                  {profileErrors.avatar ? <small className="field-error">{profileErrors.avatar}</small> : null}
+                  <input value={profileDraft.avatar} onChange={(event) => updateProfileField('avatar', event.target.value)} aria-invalid={Boolean(profileErrors.avatar)} aria-describedby={profileErrors.avatar ? 'profile-avatar-error' : undefined} />
+                  {profileErrors.avatar ? <small className="field-error" id="profile-avatar-error">{profileErrors.avatar}</small> : null}
                 </label>
 
                 <label>
                   <span>Bio</span>
-                  <textarea rows="5" value={profileDraft.bio} onChange={(event) => updateProfileField('bio', event.target.value)} aria-invalid={Boolean(profileErrors.bio)} />
-                  {profileErrors.bio ? <small className="field-error">{profileErrors.bio}</small> : null}
+                  <textarea rows="5" value={profileDraft.bio} onChange={(event) => updateProfileField('bio', event.target.value)} aria-invalid={Boolean(profileErrors.bio)} aria-describedby={profileErrors.bio ? 'profile-bio-error' : undefined} />
+                  {profileErrors.bio ? <small className="field-error" id="profile-bio-error">{profileErrors.bio}</small> : null}
                 </label>
 
                 <label>
@@ -877,12 +1667,127 @@ function App() {
                 <span className="tag">{getModeById(profileDraft.mode).label}</span>
                 <p className="profile-preview-bio">{profileDraft.bio || 'Votre bio apparaîtra ici une fois complétée.'}</p>
                 <div className="interest-row">
-                  {(profileDraft.interests ? profileDraft.interests.split(',').map((item) => item.trim()).filter(Boolean) : ['Ajoutez vos centres d’intérêt']).map((item) => (
-                    <span key={item}>{item}</span>
+                  {(profileDraft.interests ? profileDraft.interests.split(',').map((item) => item.trim()).filter(Boolean) : ['Ajoutez vos centres d’intérêt']).map((item, index) => (
+                    <span key={`${item}-${index}`}>{item}</span>
                   ))}
                 </div>
+                <form className="profile-form danger-zone" onSubmit={handleDeleteAccount}>
+                  <SectionHeader
+                    eyebrow="Compte"
+                    title="Suppression définitive"
+                    description="Cette action supprime votre compte, vos profils, matchs, messages, sessions et signalements associés."
+                  />
+                  <label>
+                    <span>Mot de passe actuel</span>
+                    <input type="password" value={deleteAccountPassword} onChange={(event) => setDeleteAccountPassword(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>Confirmez avec votre e-mail</span>
+                    <input value={deleteAccountConfirm} onChange={(event) => setDeleteAccountConfirm(event.target.value)} placeholder={currentUser.email} />
+                  </label>
+                  <div className="form-actions">
+                    <button
+                      type="submit"
+                      className="secondary-button danger-button"
+                      disabled={deletingAccount || !deleteAccountPassword.trim() || !deleteAccountConfirm.trim()}
+                    >
+                      {deletingAccount ? 'Suppression…' : 'Supprimer mon compte'}
+                    </button>
+                  </div>
+                </form>
               </aside>
             </div>
+          </section>
+        )}
+
+        {view === 'admin' && canModerate && (
+          <section className="content-panel moderation-panel">
+            <SectionHeader
+              eyebrow="Pilotage"
+              title="Console de modération"
+              description="Suivez les signalements entrants, documentez leur traitement et gardez une visibilité claire sur l’exploitation."
+              aside={(
+                <div className="header-meta">
+                  <span className="counter-badge">{moderationReports.length} signalement{moderationReports.length > 1 ? 's' : ''}</span>
+                </div>
+              )}
+            />
+
+            <div className="discover-toolbar moderation-toolbar">
+              <div className="mode-pills" aria-label="Filtre de statut de modération">
+                {['open', 'reviewing', 'resolved', 'rejected', 'all'].map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    className={moderationStatusFilter === status ? 'pill active' : 'pill'}
+                    onClick={() => setModerationStatusFilter(status)}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="secondary-button" onClick={loadModerationReports} disabled={moderationLoading}>
+                {moderationLoading ? 'Actualisation…' : 'Actualiser'}
+              </button>
+            </div>
+
+            {moderationLoading ? (
+              <EmptyState title="Chargement des signalements" description="Lecture de la file de modération depuis le backend." />
+            ) : moderationReports.length === 0 ? (
+              <EmptyState title="Aucun signalement" description="La file de modération est vide pour ce filtre." />
+            ) : (
+              <div className="moderation-list">
+                {moderationReports.map((report) => (
+                  <article key={report.id} className="moderation-item">
+                    <div className="moderation-header">
+                      <div>
+                        <p className="eyebrow">Signalement {report.id}</p>
+                        <h3>{report.target.name}</h3>
+                        <p className="section-description">
+                          {report.target.city || 'Ville non précisée'} · {getModeById(report.target.mode).label}
+                        </p>
+                      </div>
+                      <span className={`tag moderation-status ${report.status}`}>{report.status}</span>
+                    </div>
+
+                    <div className="moderation-grid">
+                      <div className="mini-card">
+                        <span className="mini-label">Reporter</span>
+                        <strong>{report.reporter.name}</strong>
+                        <p>{report.reason}</p>
+                      </div>
+                      <div className="mini-card">
+                        <span className="mini-label">Détail</span>
+                        <strong>{report.details || 'Sans détail complémentaire'}</strong>
+                        <p>{report.handledAt ? `Traité le ${new Date(report.handledAt).toLocaleString('fr-FR')}` : 'En attente de traitement'}</p>
+                      </div>
+                    </div>
+
+                    <label className="moderation-note">
+                      <span>Note de traitement</span>
+                      <textarea
+                        rows="3"
+                        value={moderationNotes[report.id] ?? report.resolutionNote ?? ''}
+                        onChange={(event) => setModerationNotes((current) => ({ ...current, [report.id]: event.target.value }))}
+                        placeholder="Décision, contexte, action menée…"
+                      />
+                    </label>
+
+                    <div className="moderation-actions">
+                      <button type="button" className="secondary-button" disabled={moderationUpdatingId === report.id} onClick={() => handleModerationUpdate(report.id, 'reviewing')}>
+                        En revue
+                      </button>
+                      <button type="button" className="primary-button" disabled={moderationUpdatingId === report.id} onClick={() => handleModerationUpdate(report.id, 'resolved')}>
+                        Résoudre
+                      </button>
+                      <button type="button" className="secondary-button danger-button" disabled={moderationUpdatingId === report.id} onClick={() => handleModerationUpdate(report.id, 'rejected')}>
+                        Rejeter
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         )}
       </main>

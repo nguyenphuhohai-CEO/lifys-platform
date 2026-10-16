@@ -1,5 +1,6 @@
 export const STORAGE_KEYS = {
   auth: 'lifys-auth',
+  sessionUi: 'lifys-session-ui',
   profile: 'lifys-profile',
   likes: 'lifys-likes',
   matches: 'lifys-matches',
