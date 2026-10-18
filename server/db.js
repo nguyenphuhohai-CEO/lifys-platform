@@ -60,6 +60,7 @@ function serializeProfile(row) {
     userId: row.user_id,
     userPublicId: row.user_public_id,
     email: row.email,
+    emailVerified: Boolean(row.email_verified_at),
     name: row.name,
     age: row.age,
     city: row.city,
@@ -121,7 +122,8 @@ function buildMatchReason(currentProfile, targetProfile, hasReciprocalLike) {
   return 'Affinité démonstrative validée par le moteur de matching.';
 }
 
-export function createDatabase(databaseFile) {
+export function createDatabase(databaseFile, options = {}) {
+  const { seedDemoData: shouldSeedDemoData = true, requireEmailVerification = false } = options;
   fs.mkdirSync(path.dirname(databaseFile), { recursive: true });
   const db = new Database(databaseFile);
   db.pragma('journal_mode = WAL');
@@ -193,36 +195,117 @@ export function createDatabase(databaseFile) {
       content TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS email_verifications (
+      token_hash TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS blocks (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      blocked_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, blocked_user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      public_id TEXT NOT NULL UNIQUE,
+      reporter_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reason TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TEXT NOT NULL,
+      resolved_at TEXT
+    );
   `);
+
+  const userColumns = new Set(db.prepare('PRAGMA table_info(users)').all().map((column) => column.name));
+  for (const [column, definition] of [
+    ['email_verified_at', 'TEXT'],
+    ['status', "TEXT NOT NULL DEFAULT 'active'"],
+    ['terms_accepted_at', 'TEXT'],
+    ['terms_version', 'TEXT'],
+  ]) {
+    if (!userColumns.has(column)) {
+      db.exec(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
+    }
+  }
+  db.exec('UPDATE users SET email_verified_at = created_at WHERE is_demo = 1 AND email_verified_at IS NULL');
 
   const statements = {
     insertUser: db.prepare(`
-      INSERT INTO users (public_id, email, password_hash, is_demo, created_at)
-      VALUES (@public_id, @email, @password_hash, @is_demo, @created_at)
+      INSERT INTO users (public_id, email, password_hash, is_demo, created_at, terms_accepted_at, terms_version, email_verified_at)
+      VALUES (@public_id, @email, @password_hash, @is_demo, @created_at, @terms_accepted_at, @terms_version, @email_verified_at)
     `),
     insertProfile: db.prepare(`
       INSERT INTO profiles (user_id, public_id, name, age, city, bio, interests, mode, avatar, created_at, updated_at)
       VALUES (@user_id, @public_id, @name, @age, @city, @bio, @interests, @mode, @avatar, @created_at, @updated_at)
     `),
     findUserByEmail: db.prepare(`SELECT * FROM users WHERE email = ?`),
+    findUserById: db.prepare(`SELECT * FROM users WHERE id = ?`),
     findProfileByUserId: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.user_id = ?
     `),
     findProfileByPublicId: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.public_id = ?
     `),
     listProfilesExcludingUser: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status
       FROM profiles
       JOIN users ON users.id = profiles.user_id
-      WHERE profiles.user_id != ?
+      WHERE profiles.user_id != @user_id
+        AND users.status = 'active'
+        AND (users.is_demo = 1 OR users.email_verified_at IS NOT NULL OR @include_unverified = 1)
+        AND NOT EXISTS (
+          SELECT 1 FROM blocks
+          WHERE (blocks.user_id = @user_id AND blocks.blocked_user_id = users.id)
+             OR (blocks.user_id = users.id AND blocks.blocked_user_id = @user_id)
+        )
       ORDER BY users.is_demo DESC, profiles.updated_at DESC
+    `),
+    insertVerification: db.prepare(`INSERT OR REPLACE INTO email_verifications (token_hash, user_id, expires_at) VALUES (?, ?, ?)`),
+    deleteVerificationsForUser: db.prepare(`DELETE FROM email_verifications WHERE user_id = ?`),
+    findVerification: db.prepare(`SELECT * FROM email_verifications WHERE token_hash = ?`),
+    markEmailVerified: db.prepare(`UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL`),
+    insertBlock: db.prepare(`INSERT OR IGNORE INTO blocks (user_id, blocked_user_id, created_at) VALUES (?, ?, ?)`),
+    isBlockedPair: db.prepare(`
+      SELECT 1 FROM blocks
+      WHERE (user_id = @a AND blocked_user_id = @b) OR (user_id = @b AND blocked_user_id = @a)
+      LIMIT 1
+    `),
+    insertReport: db.prepare(`
+      INSERT INTO reports (public_id, reporter_user_id, target_user_id, reason, details, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `),
+    listOpenReports: db.prepare(`
+      SELECT reports.public_id, reports.reason, reports.details, reports.created_at,
+        reporter.email AS reporter_email, target.email AS target_email, target.public_id AS target_user_public_id,
+        target.status AS target_status, target_profile.name AS target_name
+      FROM reports
+      JOIN users AS reporter ON reporter.id = reports.reporter_user_id
+      JOIN users AS target ON target.id = reports.target_user_id
+      JOIN profiles AS target_profile ON target_profile.user_id = target.id
+      WHERE reports.status = 'open'
+      ORDER BY reports.created_at ASC
+    `),
+    findReport: db.prepare(`SELECT * FROM reports WHERE public_id = ?`),
+    resolveReport: db.prepare(`UPDATE reports SET status = ?, resolved_at = ? WHERE id = ?`),
+    resolveReportsForTarget: db.prepare(`UPDATE reports SET status = 'actioned', resolved_at = ? WHERE target_user_id = ? AND status = 'open'`),
+    setUserStatus: db.prepare(`UPDATE users SET status = ? WHERE id = ?`),
+    deleteUser: db.prepare(`DELETE FROM users WHERE id = ? AND is_demo = 0`),
+    deleteDemoUsers: db.prepare(`DELETE FROM users WHERE is_demo = 1`),
+    listLikesGiven: db.prepare(`
+      SELECT profiles.public_id AS profile_id, likes.created_at FROM likes
+      JOIN profiles ON profiles.user_id = likes.target_user_id WHERE likes.user_id = ?
     `),
     updateProfile: db.prepare(`
       UPDATE profiles
@@ -265,7 +348,13 @@ export function createDatabase(databaseFile) {
       FROM matches
       JOIN users ON users.id = CASE WHEN matches.user_one_id = @user_id THEN matches.user_two_id ELSE matches.user_one_id END
       JOIN profiles ON profiles.user_id = users.id
-      WHERE matches.user_one_id = @user_id OR matches.user_two_id = @user_id
+      WHERE (matches.user_one_id = @user_id OR matches.user_two_id = @user_id)
+        AND users.status = 'active'
+        AND NOT EXISTS (
+          SELECT 1 FROM blocks
+          WHERE (blocks.user_id = @user_id AND blocks.blocked_user_id = users.id)
+             OR (blocks.user_id = users.id AND blocks.blocked_user_id = @user_id)
+        )
       ORDER BY matches.created_at DESC
     `),
     listConversationsForUser: db.prepare(`
@@ -283,7 +372,13 @@ export function createDatabase(databaseFile) {
       JOIN matches ON matches.id = conversations.match_id
       JOIN users ON users.id = CASE WHEN matches.user_one_id = @user_id THEN matches.user_two_id ELSE matches.user_one_id END
       JOIN profiles ON profiles.user_id = users.id
-      WHERE matches.user_one_id = @user_id OR matches.user_two_id = @user_id
+      WHERE (matches.user_one_id = @user_id OR matches.user_two_id = @user_id)
+        AND users.status = 'active'
+        AND NOT EXISTS (
+          SELECT 1 FROM blocks
+          WHERE (blocks.user_id = @user_id AND blocks.blocked_user_id = users.id)
+             OR (blocks.user_id = users.id AND blocks.blocked_user_id = @user_id)
+        )
       ORDER BY conversations.created_at DESC
     `),
     listMessagesForConversation: db.prepare(`
@@ -361,9 +456,13 @@ export function createDatabase(databaseFile) {
     `),
   };
 
-  seedDemoData(db, statements);
+  if (shouldSeedDemoData) {
+    seedDemoData(db, statements);
+  } else {
+    statements.deleteDemoUsers.run();
+  }
 
-  function createUser({ email, passwordHash, name, mode = 'amoureux' }) {
+  function createUser({ email, passwordHash, name, mode = 'amoureux', termsVersion = null }) {
     const createdAt = now();
     const userResult = statements.insertUser.run({
       public_id: createPublicId('user'),
@@ -371,6 +470,9 @@ export function createDatabase(databaseFile) {
       password_hash: passwordHash,
       is_demo: 0,
       created_at: createdAt,
+      terms_accepted_at: termsVersion ? createdAt : null,
+      terms_version: termsVersion,
+      email_verified_at: requireEmailVerification ? null : createdAt,
     });
 
     statements.insertProfile.run({
@@ -429,7 +531,7 @@ export function createDatabase(databaseFile) {
     const query = `${filters.query ?? ''}`.trim().toLowerCase();
     const city = `${filters.city ?? ''}`.trim().toLowerCase();
 
-    return statements.listProfilesExcludingUser.all(userId)
+    return statements.listProfilesExcludingUser.all({ user_id: userId, include_unverified: requireEmailVerification ? 0 : 1 })
       .filter((row) => !hiddenUserIds.has(row.user_id))
       .map(serializePublicProfile)
       .filter((profile) => activeMode === 'all' || profile.mode === activeMode)
@@ -493,14 +595,20 @@ export function createDatabase(databaseFile) {
       return { matched: false, match: null, conversationId: null };
     }
 
+    const targetStatus = statements.findUserById.get(targetProfile.userId);
+    if (
+      targetStatus?.status !== 'active'
+      || (requireEmailVerification && !targetStatus.is_demo && !targetStatus.email_verified_at)
+      || statements.isBlockedPair.get({ a: userId, b: targetProfile.userId })
+    ) {
+      return { matched: false, match: null, conversationId: null };
+    }
+
     statements.upsertLike.run(userId, targetProfile.userId, now());
     statements.deletePassForPair.run(userId, targetProfile.userId);
 
     const reciprocal = Boolean(statements.hasReciprocalLike.get(targetProfile.userId, userId));
-    const sameMode = currentProfile.mode === targetProfile.mode;
-    const sameCity = currentProfile.city && currentProfile.city.toLowerCase() === targetProfile.city.toLowerCase();
-    const sharedInterest = targetProfile.interests.some((interest) => currentProfile.interests.includes(interest));
-    const shouldMatch = reciprocal || sameMode || sameCity || sharedInterest || targetProfile.isDemo;
+    const shouldMatch = reciprocal || targetProfile.isDemo;
 
     if (!shouldMatch) {
       return { matched: false, match: null, conversationId: null };
@@ -551,6 +659,10 @@ export function createDatabase(databaseFile) {
       return null;
     }
 
+    const otherUserId = conversation.user_one_id === userId ? conversation.user_two_id : conversation.user_one_id;
+    if (statements.isBlockedPair.get({ a: userId, b: otherUserId }) || statements.findUserById.get(otherUserId)?.status !== 'active') {
+      return null;
+    }
     statements.insertMessage.run(createPublicId('message'), conversation.id, userId, `${text}`.trim(), now());
     return listConversationsForUser(userId).find((item) => item.id === conversationPublicId) ?? null;
   }
@@ -574,10 +686,113 @@ export function createDatabase(databaseFile) {
     });
   });
 
+  function getUserById(userId) {
+    return statements.findUserById.get(userId);
+  }
+
+  function createEmailVerification(userId, tokenHash, expiresAt) {
+    statements.deleteVerificationsForUser.run(userId);
+    statements.insertVerification.run(tokenHash, userId, expiresAt);
+  }
+
+  function verifyEmailToken(tokenHash) {
+    const row = statements.findVerification.get(tokenHash);
+    if (!row || row.expires_at < now()) {
+      return null;
+    }
+
+    statements.markEmailVerified.run(now(), row.user_id);
+    statements.deleteVerificationsForUser.run(row.user_id);
+    return row.user_id;
+  }
+
+  function blockProfile(userId, profilePublicId) {
+    const target = getProfileByPublicId(profilePublicId);
+    if (!target || target.userId === userId) {
+      return false;
+    }
+
+    statements.insertBlock.run(userId, target.userId, now());
+    return true;
+  }
+
+  function reportProfile(userId, profilePublicId, { reason, details }) {
+    const target = getProfileByPublicId(profilePublicId);
+    if (!target || target.userId === userId) {
+      return null;
+    }
+
+    const publicId = createPublicId('report');
+    statements.insertReport.run(publicId, userId, target.userId, reason, details, now());
+    return publicId;
+  }
+
+  function listOpenReports() {
+    return statements.listOpenReports.all().map((row) => ({
+      id: row.public_id,
+      reason: row.reason,
+      details: row.details,
+      createdAt: row.created_at,
+      reporterEmail: row.reporter_email,
+      target: {
+        userId: row.target_user_public_id,
+        email: row.target_email,
+        name: row.target_name,
+        status: row.target_status,
+      },
+    }));
+  }
+
+  const resolveReportById = db.transaction((reportPublicId, action) => {
+    const report = statements.findReport.get(reportPublicId);
+    if (!report || report.status !== 'open') {
+      return false;
+    }
+
+    if (action === 'suspend') {
+      statements.setUserStatus.run('suspended', report.target_user_id);
+      statements.resolveReportsForTarget.run(now(), report.target_user_id);
+    } else {
+      statements.resolveReport.run('dismissed', now(), report.id);
+    }
+
+    return true;
+  });
+
+  function deleteAccount(userId) {
+    return statements.deleteUser.run(userId).changes > 0;
+  }
+
+  function exportUserData(userId) {
+    const user = statements.findUserById.get(userId);
+    return {
+      account: {
+        email: user.email,
+        createdAt: user.created_at,
+        emailVerifiedAt: user.email_verified_at,
+        termsAcceptedAt: user.terms_accepted_at,
+        termsVersion: user.terms_version,
+      },
+      profile: getProfileByUserId(userId),
+      likesGiven: statements.listLikesGiven.all(userId).map((row) => ({ profileId: row.profile_id, createdAt: row.created_at })),
+      matches: listMatchesForUser(userId),
+      conversations: listConversationsForUser(userId),
+    };
+  }
+
   return {
     db,
     createUser,
     getUserByEmail,
+    getUserById,
+    createEmailVerification,
+    verifyEmailToken,
+    blockProfile,
+    reportProfile,
+    listOpenReports,
+    resolveReportById,
+    deleteAccount,
+    exportUserData,
     getProfileByUserId,
     getProfileByPublicId,
     updateUserProfile,
@@ -607,6 +822,9 @@ function seedDemoData(db, statements) {
         password_hash: 'demo-account',
         is_demo: 1,
         created_at: createdAt,
+        terms_accepted_at: null,
+        terms_version: null,
+        email_verified_at: createdAt,
       });
 
       statements.insertProfile.run({

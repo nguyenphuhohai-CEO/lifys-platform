@@ -66,7 +66,24 @@ TRUST_PROXY=0
 
 En production (`NODE_ENV=production`), `JWT_SECRET` est obligatoire (32 caractères minimum) et `TRUST_PROXY` vaut `1` par défaut (déploiement derrière un reverse proxy). Les routes `/api/auth` sont limitées à 30 requêtes par 15 minutes et par IP, et les en-têtes de sécurité (CSP, HSTS, etc.) sont activés. Montez `DATABASE_FILE` sur un volume persistant.
 
-Pages de catégories : `/Amical`, `/Amoureux`, `/Sans-lendemain`, `/Mariage`, `/Professionnel`.
+Pages de catégories : `/Amical`, `/Amoureux`, `/Sans-lendemain`, `/Mariage`, `/Professionnel`. Pages légales : `/cgu`, `/confidentialite`, `/mentions-legales`.
+
+### Mise en production : e-mail, modération, profils
+
+```env
+APP_URL=https://lifys.com
+SMTP_URL=smtps://user:pass@smtp.example.com:465
+MAIL_FROM="Lifys <no-reply@lifys.com>"
+ADMIN_EMAILS=vous@lifys.com
+# valeurs par défaut en production :
+REQUIRE_EMAIL_VERIFICATION=true
+SEED_DEMO_DATA=false
+```
+
+- **Vérification e-mail** : active par défaut en production (`SMTP_URL` obligatoire). Sans SMTP en développement, les e-mails sont affichés dans la console du serveur.
+- **Profils** : en production, les profils de démonstration sont supprimés au démarrage ; seuls de vrais membres vérifiés apparaissent, et un match exige un like réciproque (en dev, les profils démo restent disponibles).
+- **Modération** : signalement et blocage par les membres ; les comptes listés dans `ADMIN_EMAILS` utilisent `GET /api/admin/reports` et `POST /api/admin/reports/:id/resolve` (`{"action":"dismiss"|"suspend"}`).
+- **RGPD** : export (`GET /api/account/export`) et suppression (`DELETE /api/account`) depuis la page Profil.
 
 Node.js 22 ou 24 requis (`better-sqlite3` 12).
 
@@ -187,12 +204,11 @@ docker run -p 3001:3001 \
 Ce MVP reste volontairement limité :
 
 - pas de paiement ;
-- pas de vérification d’identité ;
+- pas de vérification d’identité (uniquement de l’adresse e-mail) ;
 - pas de temps réel WebSocket ;
-- pas de modération ;
-- pas de rôles admin ;
+- modération manuelle via signalements (API admin, pas encore d’interface) ;
 - SQLite adapté au MVP, pas à une très forte montée en charge ;
-- les profils de découverte restent des profils fictifs de démonstration.
+- les textes légaux (`src/pages/LegalPage.jsx`) sont des modèles à compléter (`[À COMPLÉTER]`) et à faire valider par un juriste.
 
 ## Roadmap recommandée
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Avatar from './components/Avatar';
+import SiteFooter from './components/SiteFooter';
 import ToastRegion from './components/ToastRegion';
 import { MODES, defaultProfile } from './data/demoData';
 import { api, ApiError } from './lib/api';
@@ -76,7 +77,10 @@ function App() {
     email: '',
     password: '',
     mode: 'amoureux',
+    acceptTerms: false,
   });
+  const [reportTarget, setReportTarget] = useState(null);
+  const [reportReason, setReportReason] = useState('spam');
 
   const showToast = useCallback((toast) => {
     const id = `${toast.type}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -133,6 +137,11 @@ function App() {
           activeMode,
           query: searchQuery,
           city: cityQuery,
+        }).catch((error) => {
+          if (error instanceof ApiError && error.details?.code === 'email_not_verified') {
+            return { profiles: [] };
+          }
+          throw error;
         }),
       ]);
 
@@ -152,7 +161,7 @@ function App() {
       ));
       setPageError('');
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
+      if (error instanceof ApiError && (error.status === 401 || error.details?.code === 'account_suspended')) {
         setToken('');
         setCurrentUser(null);
       }
@@ -338,6 +347,72 @@ function App() {
     }
   };
 
+  const handleResendVerification = async () => {
+    try {
+      await api.resendVerification(token);
+      showToast({ type: 'success', title: 'E-mail envoyé', message: 'Consultez votre boîte de réception pour confirmer votre adresse.' });
+    } catch (error) {
+      handleApiError(error, 'Impossible d’envoyer l’e-mail de confirmation.');
+    }
+  };
+
+  const handleReport = async () => {
+    if (!reportTarget) {
+      return;
+    }
+
+    try {
+      await api.reportProfile(token, { profileId: reportTarget.id, reason: reportReason });
+      showToast({ type: 'success', title: 'Signalement envoyé', message: 'Merci, notre équipe va examiner ce profil.' });
+      setReportTarget(null);
+    } catch (error) {
+      handleApiError(error, 'Impossible d’envoyer le signalement.');
+    }
+  };
+
+  const handleBlock = async (person) => {
+    if (!window.confirm(`Bloquer ${person.name} ? Vous ne vous verrez plus mutuellement.`)) {
+      return;
+    }
+
+    try {
+      await api.blockProfile(token, person.id);
+      await loadDashboard(token);
+      showToast({ type: 'success', title: 'Profil bloqué', message: `${person.name} n’apparaîtra plus dans vos résultats.` });
+    } catch (error) {
+      handleApiError(error, 'Impossible de bloquer ce profil.');
+    }
+  };
+
+  const handleExportAccount = async () => {
+    try {
+      const data = await api.exportAccount(token);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'lifys-donnees.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      handleApiError(error, 'Impossible d’exporter vos données.');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const password = window.prompt('Cette action est définitive. Saisissez votre mot de passe pour supprimer votre compte :');
+    if (!password) {
+      return;
+    }
+
+    try {
+      await api.deleteAccount(token, password);
+      handleLogout();
+      showToast({ type: 'success', title: 'Compte supprimé', message: 'Vos données ont été effacées.' });
+    } catch (error) {
+      handleApiError(error, 'Impossible de supprimer le compte.');
+    }
+  };
+
   const handleResetPrototype = async () => {
     setResetting(true);
 
@@ -455,7 +530,7 @@ function App() {
               <SectionHeader
                 eyebrow={authMode === 'register' ? 'Créer un compte' : 'Connexion'}
                 title={authMode === 'register' ? 'Commencer sur Lifys' : 'Reprendre votre session'}
-                description="Créez votre compte en quelques secondes. Les profils proposés sont pour l’instant des profils de démonstration."
+                description="Créez votre compte en quelques secondes. Une confirmation par e-mail est nécessaire pour accéder aux rencontres."
               />
 
               {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
@@ -483,8 +558,20 @@ function App() {
                     </select>
                   </label>
                 ) : null}
+                {authMode === 'register' ? (
+                  <label className="consent-row">
+                    <input
+                      type="checkbox"
+                      checked={authForm.acceptTerms}
+                      onChange={(event) => setAuthForm((current) => ({ ...current, acceptTerms: event.target.checked }))}
+                    />
+                    <span>
+                      J’ai au moins 18 ans et j’accepte les <a href="/cgu" target="_blank" rel="noreferrer">CGU</a> et la <a href="/confidentialite" target="_blank" rel="noreferrer">politique de confidentialité</a>.
+                    </span>
+                  </label>
+                ) : null}
                 <div className="form-actions">
-                  <button type="submit" className="primary-button" disabled={authSubmitting}>
+                  <button type="submit" className="primary-button" disabled={authSubmitting || (authMode === 'register' && !authForm.acceptTerms)}>
                     {authSubmitting ? 'Chargement…' : authMode === 'register' ? 'Créer mon compte' : 'Se connecter'}
                   </button>
                   <button type="button" className="secondary-button" onClick={() => setAuthMode((current) => current === 'register' ? 'login' : 'register')}>
@@ -495,6 +582,7 @@ function App() {
             </div>
           </section>
         </main>
+        <SiteFooter />
       </div>
     );
   }
@@ -549,8 +637,16 @@ function App() {
       <main className="page-shell">
         <section className="local-notice" aria-label="Information">
           <strong>Version bêta</strong>
-          <span>Les profils proposés dans la découverte sont des profils de démonstration, sans identité vérifiée.</span>
+          <span>Lifys ne vérifie pas l’identité de ses membres : restez prudent et signalez tout comportement abusif.</span>
         </section>
+
+        {currentUser.emailVerified === false ? (
+          <section className="local-notice verify-notice" aria-label="Confirmation de l’e-mail">
+            <strong>Confirmez votre e-mail</strong>
+            <span>Un lien de confirmation a été envoyé à {currentUser.email}. Il est requis pour découvrir des profils et écrire.</span>
+            <button type="button" className="secondary-button" onClick={handleResendVerification}>Renvoyer l’e-mail</button>
+          </section>
+        ) : null}
 
         {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
 
@@ -703,6 +799,10 @@ function App() {
                     <div className="card-actions">
                       <button type="button" className="pass-button" onClick={() => handlePass(person.id)}>Pass</button>
                       <button type="button" className="like-button" onClick={() => handleLike(person.id)}>Like</button>
+                    </div>
+                    <div className="card-actions card-safety">
+                      <button type="button" className="link-button" onClick={() => { setReportTarget(person); setReportReason('spam'); }}>Signaler</button>
+                      <button type="button" className="link-button" onClick={() => handleBlock(person)}>Bloquer</button>
                     </div>
                   </article>
                 ))}
@@ -895,9 +995,43 @@ function App() {
                 </div>
               </aside>
             </div>
+
+            <div className="account-panel">
+              <h3>Mes données</h3>
+              <p>Téléchargez vos données ou supprimez définitivement votre compte.</p>
+              <div className="form-actions">
+                <button type="button" className="secondary-button" onClick={handleExportAccount}>Télécharger mes données</button>
+                <button type="button" className="danger-button" onClick={handleDeleteAccount}>Supprimer mon compte</button>
+              </div>
+            </div>
           </section>
         )}
       </main>
+
+      {reportTarget ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Signaler un profil">
+          <div className="modal-card">
+            <h3>Signaler {reportTarget.name}</h3>
+            <label>
+              <span>Motif</span>
+              <select value={reportReason} onChange={(event) => setReportReason(event.target.value)}>
+                <option value="spam">Spam ou publicité</option>
+                <option value="harcelement">Harcèlement</option>
+                <option value="faux-profil">Faux profil ou arnaque</option>
+                <option value="contenu-inapproprie">Contenu inapproprié</option>
+                <option value="mineur">Personne mineure</option>
+                <option value="autre">Autre</option>
+              </select>
+            </label>
+            <div className="form-actions">
+              <button type="button" className="primary-button" onClick={handleReport}>Envoyer</button>
+              <button type="button" className="secondary-button" onClick={() => setReportTarget(null)}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <SiteFooter />
     </div>
   );
 }

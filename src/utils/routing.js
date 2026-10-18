@@ -16,6 +16,11 @@ export function getModeFromPathname(pathname) {
   return MODES.find((mode) => mode.id === segment || mode.id.replace(/-/g, '') === segment) ?? null;
 }
 
+export function getLegalPage(pathname) {
+  const segment = String(pathname || '').split('/').filter(Boolean)[0]?.toLowerCase() ?? '';
+  return ['cgu', 'confidentialite', 'mentions-legales'].includes(segment) ? segment : null;
+}
+
 export function getModeFromSearch(search) {
   const value = new URLSearchParams(search || '').get('mode');
   return MODES.find((mode) => mode.id === value)?.id ?? null;

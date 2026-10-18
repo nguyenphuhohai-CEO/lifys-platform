@@ -86,4 +86,22 @@ export const api = {
   resetPrototype(token) {
     return apiRequest('/api/prototype/reset', { method: 'POST', token });
   },
+  verifyEmail(verificationToken) {
+    return apiRequest('/api/auth/verify-email', { method: 'POST', body: { token: verificationToken } });
+  },
+  resendVerification(token) {
+    return apiRequest('/api/auth/resend-verification', { method: 'POST', token });
+  },
+  reportProfile(token, payload) {
+    return apiRequest('/api/reports', { method: 'POST', token, body: payload });
+  },
+  blockProfile(token, profileId) {
+    return apiRequest('/api/blocks', { method: 'POST', token, body: { profileId } });
+  },
+  exportAccount(token) {
+    return apiRequest('/api/account/export', { token });
+  },
+  deleteAccount(token, password) {
+    return apiRequest('/api/account', { method: 'DELETE', token, body: { password } });
+  },
 };

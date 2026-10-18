@@ -21,6 +21,17 @@ export function getConfig(overrides = {}) {
     throw new Error('JWT_SECRET must be at least 32 characters in production.');
   }
 
+  const isProduction = nodeEnv === 'production';
+  const smtpUrl = overrides.SMTP_URL ?? process.env.SMTP_URL ?? '';
+  const flag = (name, fallback) => {
+    const raw = overrides[name] ?? process.env[name];
+    return raw === undefined || raw === '' ? fallback : `${raw}`.toLowerCase() === 'true';
+  };
+  const requireEmailVerification = flag('REQUIRE_EMAIL_VERIFICATION', isProduction);
+  if (isProduction && requireEmailVerification && !smtpUrl) {
+    throw new Error('SMTP_URL is required in production when e-mail verification is enabled.');
+  }
+
   return {
     port,
     databaseFile,
@@ -29,5 +40,14 @@ export function getConfig(overrides = {}) {
     staticDir,
     nodeEnv,
     trustProxy: Number.isNaN(Number(trustProxy)) ? trustProxy : Number(trustProxy),
+    appUrl: `${overrides.APP_URL ?? process.env.APP_URL ?? `http://localhost:${port}`}`.replace(/\/+$/, ''),
+    smtpUrl,
+    mailFrom: overrides.MAIL_FROM ?? process.env.MAIL_FROM ?? 'Lifys <no-reply@lifys.local>',
+    seedDemoData: flag('SEED_DEMO_DATA', !isProduction),
+    requireEmailVerification,
+    adminEmails: `${overrides.ADMIN_EMAILS ?? process.env.ADMIN_EMAILS ?? ''}`
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean),
   };
 }
