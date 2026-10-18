@@ -1,6 +1,7 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const rootDir = path.resolve(new URL('..', import.meta.url).pathname);
+const rootDir = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 export function getConfig(overrides = {}) {
   const port = Number(overrides.PORT ?? process.env.PORT ?? 3001);

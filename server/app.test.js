@@ -17,7 +17,7 @@ async function startTestServer() {
     JWT_SECRET: 'test-secret',
     STATIC_DIR: path.join(tempDir, 'dist'),
   });
-  const { app } = createApp(config);
+  const { app, database } = createApp(config);
   const server = createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
@@ -26,6 +26,7 @@ async function startTestServer() {
     baseUrl: `http://127.0.0.1:${address.port}`,
     async close() {
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+      database.db.close();
       fs.rmSync(tempDir, { recursive: true, force: true });
     },
   };
