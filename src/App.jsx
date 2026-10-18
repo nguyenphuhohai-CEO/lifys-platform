@@ -4,6 +4,8 @@ import Avatar from './components/Avatar';
 import SiteFooter from './components/SiteFooter';
 import ToastRegion from './components/ToastRegion';
 import { MODES, defaultProfile } from './data/demoData';
+import LanguageSwitcher from './components/LanguageSwitcher';
+import { useI18n } from './i18n';
 import { api, ApiError } from './lib/api';
 import { getConversationPreview, getModeById, serializeInterests } from './utils/app-utils';
 import { getCategoryPath, getModeFromSearch, navigate } from './utils/routing';
@@ -22,6 +24,22 @@ const initialAuth = safeReadJSON(STORAGE_KEYS.auth, { token: '' }, {
     token: typeof value?.token === 'string' ? value.token : '',
   }),
 }).data;
+
+function translateReasonWith(t, reason) {
+  const patterns = [
+    [/^Même intention : (.+)\.$/, 'Même intention : {value}.'],
+    [/^Même ville : (.+)\.$/, 'Même ville : {value}.'],
+    [/^Centre d’intérêt partagé : (.+)\.$/, 'Centre d’intérêt partagé : {value}.'],
+  ];
+  for (const [pattern, key] of patterns) {
+    const found = typeof reason === 'string' ? reason.match(pattern) : null;
+    if (found) {
+      const value = key.startsWith('Même intention') ? t(found[1].charAt(0).toUpperCase() + found[1].slice(1)) : found[1];
+      return t(key, { value });
+    }
+  }
+  return t(reason);
+}
 
 function EmptyState({ title, description, actionLabel, onAction }) {
   return (
@@ -47,6 +65,7 @@ function SectionHeader({ eyebrow, title, description, aside }) {
 }
 
 function App() {
+  const { lang, t } = useI18n();
   const [token, setToken] = useState(initialAuth.token);
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState('home');
@@ -82,6 +101,8 @@ function App() {
   const [reportTarget, setReportTarget] = useState(null);
   const [reportReason, setReportReason] = useState('spam');
 
+  const translateReason = (reason) => translateReasonWith(t, reason);
+
   const showToast = useCallback((toast) => {
     const id = `${toast.type}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
     setToasts((current) => [...current, { id, ...toast }]);
@@ -91,14 +112,14 @@ function App() {
   }, []);
 
   const handleApiError = useCallback((error, fallbackMessage) => {
-    const message = error instanceof ApiError ? error.message : fallbackMessage;
+    const message = t(error instanceof ApiError ? error.message : fallbackMessage);
     setPageError(message);
     showToast({
       type: 'warning',
-      title: 'Action interrompue',
+      title: t('Action interrompue'),
       message,
     });
-  }, [showToast]);
+  }, [showToast, t]);
 
   useEffect(() => {
     if (token) {
@@ -120,7 +141,7 @@ function App() {
       setProfiles(response.profiles);
       setPageError('');
     } catch (error) {
-      handleApiError(error, 'Impossible de charger la découverte.');
+      handleApiError(error, t('Impossible de charger la découverte.'));
     } finally {
       setDiscoveryLoading(false);
     }
@@ -165,7 +186,7 @@ function App() {
         setToken('');
         setCurrentUser(null);
       }
-      handleApiError(error, 'Impossible de charger votre espace Lifys.');
+      handleApiError(error, t('Impossible de charger votre espace Lifys.'));
     } finally {
       setDashboardLoading(false);
       setSessionLoading(false);
@@ -210,19 +231,19 @@ function App() {
     const errors = {};
 
     if (!profileDraft.name.trim()) {
-      errors.name = 'Ajoutez votre prénom.';
+      errors.name = t('Ajoutez votre prénom.');
     }
     if (!profileDraft.age || Number(profileDraft.age) < 18 || Number(profileDraft.age) > 80) {
-      errors.age = 'Indiquez un âge entre 18 et 80 ans.';
+      errors.age = t('Indiquez un âge entre 18 et 80 ans.');
     }
     if (!profileDraft.city.trim()) {
-      errors.city = 'Ajoutez une ville.';
+      errors.city = t('Ajoutez une ville.');
     }
     if (profileDraft.bio.trim().length < 20) {
-      errors.bio = 'Décrivez-vous en au moins 20 caractères.';
+      errors.bio = t('Décrivez-vous en au moins 20 caractères.');
     }
     if (profileDraft.avatar && !/^https?:\/\//i.test(profileDraft.avatar.trim())) {
-      errors.avatar = 'Utilisez une URL commençant par http:// ou https://.';
+      errors.avatar = t('Utilisez une URL commençant par http:// ou https://.');
     }
 
     return errors;
@@ -234,7 +255,7 @@ function App() {
 
     try {
       const response = authMode === 'register'
-        ? await api.register(authForm)
+        ? await api.register({ ...authForm, lang })
         : await api.login({ email: authForm.email, password: authForm.password });
 
       setToken(response.token);
@@ -242,12 +263,12 @@ function App() {
       setView('profile');
       showToast({
         type: 'success',
-        title: authMode === 'register' ? 'Compte créé' : 'Connexion réussie',
-        message: 'Votre session Lifys est maintenant sécurisée par le backend.',
+        title: authMode === 'register' ? t('Compte créé') : t('Connexion réussie'),
+        message: t('Bienvenue sur Lifys !'),
       });
       setPageError('');
     } catch (error) {
-      handleApiError(error, 'Impossible de démarrer votre session.');
+      handleApiError(error, t('Impossible de démarrer votre session.'));
     } finally {
       setAuthSubmitting(false);
     }
@@ -261,8 +282,8 @@ function App() {
     if (Object.keys(errors).length) {
       showToast({
         type: 'warning',
-        title: 'Profil incomplet',
-        message: 'Corrigez les champs signalés avant l’enregistrement.',
+        title: t('Profil incomplet'),
+        message: t('Corrigez les champs signalés avant l’enregistrement.'),
       });
       return;
     }
@@ -281,12 +302,12 @@ function App() {
       setPageError('');
       showToast({
         type: 'success',
-        title: 'Profil synchronisé',
-        message: 'Votre profil a bien été enregistré.',
+        title: t('Profil synchronisé'),
+        message: t('Votre profil a bien été enregistré.'),
       });
       await loadDiscovery(token);
     } catch (error) {
-      handleApiError(error, 'Impossible de sauvegarder le profil.');
+      handleApiError(error, t('Impossible de sauvegarder le profil.'));
     } finally {
       setProfileSaving(false);
     }
@@ -301,18 +322,18 @@ function App() {
         setSelectedConversation(response.conversationId);
         showToast({
           type: 'success',
-          title: 'Match confirmé',
-          message: 'Le backend a créé votre match et ouvert une conversation persistante.',
+          title: t('Match confirmé'),
+          message: t('Vous pouvez maintenant discuter ensemble.'),
         });
       } else {
         showToast({
           type: 'info',
-          title: 'Like enregistré',
-          message: 'Votre intérêt a été sauvegardé côté serveur.',
+          title: t('Like enregistré'),
+          message: t('Votre intérêt a bien été enregistré.'),
         });
       }
     } catch (error) {
-      handleApiError(error, 'Impossible d’enregistrer ce like.');
+      handleApiError(error, t('Impossible d’enregistrer ce like.'));
     }
   };
 
@@ -321,7 +342,7 @@ function App() {
       await api.passProfile(token, profileId);
       await loadDiscovery(token);
     } catch (error) {
-      handleApiError(error, 'Impossible d’enregistrer ce pass.');
+      handleApiError(error, t('Impossible d’enregistrer ce pass.'));
     }
   };
 
@@ -341,7 +362,7 @@ function App() {
       setDraftMessage('');
       setPageError('');
     } catch (error) {
-      handleApiError(error, 'Impossible d’envoyer le message.');
+      handleApiError(error, t('Impossible d’envoyer le message.'));
     } finally {
       setMessageSending(false);
     }
@@ -349,10 +370,10 @@ function App() {
 
   const handleResendVerification = async () => {
     try {
-      await api.resendVerification(token);
-      showToast({ type: 'success', title: 'E-mail envoyé', message: 'Consultez votre boîte de réception pour confirmer votre adresse.' });
+      await api.resendVerification(token, lang);
+      showToast({ type: 'success', title: t('E-mail envoyé'), message: t('Consultez votre boîte de réception pour confirmer votre adresse.') });
     } catch (error) {
-      handleApiError(error, 'Impossible d’envoyer l’e-mail de confirmation.');
+      handleApiError(error, t('Impossible d’envoyer l’e-mail de confirmation.'));
     }
   };
 
@@ -363,24 +384,24 @@ function App() {
 
     try {
       await api.reportProfile(token, { profileId: reportTarget.id, reason: reportReason });
-      showToast({ type: 'success', title: 'Signalement envoyé', message: 'Merci, notre équipe va examiner ce profil.' });
+      showToast({ type: 'success', title: t('Signalement envoyé'), message: t('Merci, notre équipe va examiner ce profil.') });
       setReportTarget(null);
     } catch (error) {
-      handleApiError(error, 'Impossible d’envoyer le signalement.');
+      handleApiError(error, t('Impossible d’envoyer le signalement.'));
     }
   };
 
   const handleBlock = async (person) => {
-    if (!window.confirm(`Bloquer ${person.name} ? Vous ne vous verrez plus mutuellement.`)) {
+    if (!window.confirm(t('Bloquer {name} ? Vous ne vous verrez plus mutuellement.', { name: person.name }))) {
       return;
     }
 
     try {
       await api.blockProfile(token, person.id);
       await loadDashboard(token);
-      showToast({ type: 'success', title: 'Profil bloqué', message: `${person.name} n’apparaîtra plus dans vos résultats.` });
+      showToast({ type: 'success', title: t('Profil bloqué'), message: t('{name} n’apparaîtra plus dans vos résultats.', { name: person.name }) });
     } catch (error) {
-      handleApiError(error, 'Impossible de bloquer ce profil.');
+      handleApiError(error, t('Impossible de bloquer ce profil.'));
     }
   };
 
@@ -394,12 +415,12 @@ function App() {
       link.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      handleApiError(error, 'Impossible d’exporter vos données.');
+      handleApiError(error, t('Impossible d’exporter vos données.'));
     }
   };
 
   const handleDeleteAccount = async () => {
-    const password = window.prompt('Cette action est définitive. Saisissez votre mot de passe pour supprimer votre compte :');
+    const password = window.prompt(t('Cette action est définitive. Saisissez votre mot de passe pour supprimer votre compte :'));
     if (!password) {
       return;
     }
@@ -407,9 +428,9 @@ function App() {
     try {
       await api.deleteAccount(token, password);
       handleLogout();
-      showToast({ type: 'success', title: 'Compte supprimé', message: 'Vos données ont été effacées.' });
+      showToast({ type: 'success', title: t('Compte supprimé'), message: t('Vos données ont été effacées.') });
     } catch (error) {
-      handleApiError(error, 'Impossible de supprimer le compte.');
+      handleApiError(error, t('Impossible de supprimer le compte.'));
     }
   };
 
@@ -433,11 +454,11 @@ function App() {
       await loadDiscovery(token);
       showToast({
         type: 'success',
-        title: 'Données de démonstration réinitialisées',
-        message: 'Le backend a effacé vos interactions et restauré un profil vierge.',
+        title: t('Espace réinitialisé'),
+        message: t('Vos interactions ont été effacées et votre profil réinitialisé.'),
       });
     } catch (error) {
-      handleApiError(error, 'Impossible de réinitialiser le prototype.');
+      handleApiError(error, t('Impossible de réinitialiser le prototype.'));
     } finally {
       setResetting(false);
     }
@@ -456,8 +477,8 @@ function App() {
     setPageError('');
     showToast({
       type: 'info',
-      title: 'Session fermée',
-      message: 'Votre jeton local a été supprimé du navigateur.',
+      title: t('Session fermée'),
+      message: t('À bientôt sur Lifys !'),
     });
   };
 
@@ -474,9 +495,9 @@ function App() {
     return (
       <div className="app-shell app-loading">
         <div className="content-panel loading-panel" role="status" aria-live="polite">
-          <p className="eyebrow">Chargement</p>
-          <h1>Lifys prépare votre espace…</h1>
-          <p className="section-description">Chargement de votre session…</p>
+          <p className="eyebrow">{t('Chargement')}</p>
+          <h1>{t('Lifys prépare votre espace…')}</h1>
+          <p className="section-description">{t('Chargement de votre session…')}</p>
         </div>
       </div>
     );
@@ -489,12 +510,9 @@ function App() {
         <main className="page-shell">
           <section className="hero-panel auth-hero">
             <div className="hero-copy">
-              <p className="eyebrow">Rencontres multi-catégories</p>
-              <h1>Des rencontres qui vous ressemblent.</h1>
-              <p>
-                Amitié, amour, rencontres spontanées, mariage ou réseau professionnel : choisissez l’intention qui vous correspond
-                et rencontrez des personnes qui la partagent.
-              </p>
+              <p className="eyebrow">{t('Rencontres multi-catégories')}</p>
+              <h1>{t('Des rencontres qui vous ressemblent.')}</h1>
+              <p>{t('Amitié, amour, rencontres spontanées, mariage ou réseau professionnel : choisissez l’intention qui vous correspond et rencontrez des personnes qui la partagent.')}</p>
               <div className="category-links">
                 {MODES.map((mode) => (
                   <a
@@ -503,34 +521,34 @@ function App() {
                     className="pill"
                     onClick={(event) => { event.preventDefault(); navigate(getCategoryPath(mode.id)); }}
                   >
-                    {mode.icon} {mode.label}
+                    {mode.icon} {t(mode.label)}
                   </a>
                 ))}
               </div>
               <div className="hero-metrics">
                 <article className="metric-card">
-                  <span>5 catégories</span>
-                  <strong>Votre intention</strong>
-                  <small>chaque rencontre commence par un objectif clair</small>
+                  <span>{t('5 catégories')}</span>
+                  <strong>{t('Votre intention')}</strong>
+                  <small>{t('chaque rencontre commence par un objectif clair')}</small>
                 </article>
                 <article className="metric-card">
-                  <span>Confidentialité</span>
-                  <strong>Vos données</strong>
-                  <small>jamais d’identifiant interne exposé aux autres</small>
+                  <span>{t('Confidentialité')}</span>
+                  <strong>{t('Vos données')}</strong>
+                  <small>{t('jamais d’identifiant interne exposé aux autres')}</small>
                 </article>
                 <article className="metric-card">
-                  <span>Échanges</span>
-                  <strong>Messagerie</strong>
-                  <small>discutez dès qu’un match se crée</small>
+                  <span>{t('Échanges')}</span>
+                  <strong>{t('Messagerie')}</strong>
+                  <small>{t('discutez dès qu’un match se crée')}</small>
                 </article>
               </div>
             </div>
 
             <div className="content-panel auth-card">
               <SectionHeader
-                eyebrow={authMode === 'register' ? 'Créer un compte' : 'Connexion'}
-                title={authMode === 'register' ? 'Commencer sur Lifys' : 'Reprendre votre session'}
-                description="Créez votre compte en quelques secondes. Une confirmation par e-mail est nécessaire pour accéder aux rencontres."
+                eyebrow={authMode === 'register' ? t('Créer un compte') : t('Connexion')}
+                title={authMode === 'register' ? t('Commencer sur Lifys') : t('Reprendre votre session')}
+                description={t('Créez votre compte en quelques secondes. Une confirmation par e-mail est nécessaire pour accéder aux rencontres.')}
               />
 
               {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
@@ -538,23 +556,23 @@ function App() {
               <form className="profile-form" onSubmit={handleAuthSubmit}>
                 {authMode === 'register' ? (
                   <label>
-                    <span>Prénom</span>
+                    <span>{t('Prénom')}</span>
                     <input value={authForm.name} onChange={(event) => setAuthForm((current) => ({ ...current, name: event.target.value }))} />
                   </label>
                 ) : null}
                 <label>
-                  <span>E-mail</span>
+                  <span>{t('E-mail')}</span>
                   <input type="email" value={authForm.email} onChange={(event) => setAuthForm((current) => ({ ...current, email: event.target.value }))} />
                 </label>
                 <label>
-                  <span>Mot de passe</span>
+                  <span>{t('Mot de passe')}</span>
                   <input type="password" value={authForm.password} onChange={(event) => setAuthForm((current) => ({ ...current, password: event.target.value }))} />
                 </label>
                 {authMode === 'register' ? (
                   <label>
-                    <span>Catégorie principale</span>
+                    <span>{t('Catégorie principale')}</span>
                     <select value={authForm.mode} onChange={(event) => setAuthForm((current) => ({ ...current, mode: event.target.value }))}>
-                      {MODES.map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+                      {MODES.map((mode) => <option key={mode.id} value={mode.id}>{t(mode.label)}</option>)}
                     </select>
                   </label>
                 ) : null}
@@ -566,16 +584,16 @@ function App() {
                       onChange={(event) => setAuthForm((current) => ({ ...current, acceptTerms: event.target.checked }))}
                     />
                     <span>
-                      J’ai au moins 18 ans et j’accepte les <a href="/cgu" target="_blank" rel="noreferrer">CGU</a> et la <a href="/confidentialite" target="_blank" rel="noreferrer">politique de confidentialité</a>.
+                      {t('J’ai au moins 18 ans et j’accepte les')} <a href="/cgu" target="_blank" rel="noreferrer">{t('CGU')}</a> {t('et la')} <a href="/confidentialite" target="_blank" rel="noreferrer">{t('politique de confidentialité')}</a>.
                     </span>
                   </label>
                 ) : null}
                 <div className="form-actions">
                   <button type="submit" className="primary-button" disabled={authSubmitting || (authMode === 'register' && !authForm.acceptTerms)}>
-                    {authSubmitting ? 'Chargement…' : authMode === 'register' ? 'Créer mon compte' : 'Se connecter'}
+                    {authSubmitting ? t('Chargement…') : authMode === 'register' ? t('Créer mon compte') : t('Se connecter')}
                   </button>
                   <button type="button" className="secondary-button" onClick={() => setAuthMode((current) => current === 'register' ? 'login' : 'register')}>
-                    {authMode === 'register' ? 'J’ai déjà un compte' : 'Créer un nouveau compte'}
+                    {authMode === 'register' ? t('J’ai déjà un compte') : t('Créer un nouveau compte')}
                   </button>
                 </div>
               </form>
@@ -595,8 +613,8 @@ function App() {
         <button type="button" className="brand-block" onClick={() => setCurrentView('home')}>
           <span className="brand-icon">❤</span>
           <span>
-            <strong>Lifys</strong>
-            <small>Rencontres multi-catégories</small>
+            <strong>{t('Lifys')}</strong>
+            <small>{t('Rencontres multi-catégories')}</small>
           </span>
         </button>
 
@@ -610,7 +628,7 @@ function App() {
           Menu
         </button>
 
-        <nav id="lifys-main-nav" className={isMobileNavOpen ? 'nav nav-open' : 'nav'} aria-label="Navigation principale">
+        <nav id="lifys-main-nav" className={isMobileNavOpen ? 'nav nav-open' : 'nav'} aria-label={t('Navigation principale')}>
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
@@ -618,33 +636,34 @@ function App() {
               className={view === item.id ? 'nav-button active' : 'nav-button'}
               onClick={() => setCurrentView(item.id)}
             >
-              {item.label}
+              {t(item.label)}
             </button>
           ))}
         </nav>
 
         <div className="topbar-actions">
+          <LanguageSwitcher />
           <span className="prototype-badge">{currentUser.email}</span>
           <button type="button" className="secondary-button" onClick={handleResetPrototype} disabled={resetting}>
-            {resetting ? 'Réinitialisation…' : 'Réinitialiser'}
+            {resetting ? t('Réinitialisation…') : t('Réinitialiser')}
           </button>
           <button type="button" className="secondary-button" onClick={handleLogout}>
-            Déconnexion
+            {t('Déconnexion')}
           </button>
         </div>
       </header>
 
       <main className="page-shell">
-        <section className="local-notice" aria-label="Information">
-          <strong>Version bêta</strong>
-          <span>Lifys ne vérifie pas l’identité de ses membres : restez prudent et signalez tout comportement abusif.</span>
+        <section className="local-notice" aria-label={t('Information')}>
+          <strong>{t('Version bêta')}</strong>
+          <span>{t('Lifys ne vérifie pas l’identité de ses membres : restez prudent et signalez tout comportement abusif.')}</span>
         </section>
 
         {currentUser.emailVerified === false ? (
-          <section className="local-notice verify-notice" aria-label="Confirmation de l’e-mail">
-            <strong>Confirmez votre e-mail</strong>
-            <span>Un lien de confirmation a été envoyé à {currentUser.email}. Il est requis pour découvrir des profils et écrire.</span>
-            <button type="button" className="secondary-button" onClick={handleResendVerification}>Renvoyer l’e-mail</button>
+          <section className="local-notice verify-notice" aria-label={t('Confirmation de l’e-mail')}>
+            <strong>{t('Confirmez votre e-mail')}</strong>
+            <span>{t('Un lien de confirmation a été envoyé à {email}. Il est requis pour découvrir des profils et écrire.', { email: currentUser.email })}</span>
+            <button type="button" className="secondary-button" onClick={handleResendVerification}>{t('Renvoyer l’e-mail')}</button>
           </section>
         ) : null}
 
@@ -654,58 +673,56 @@ function App() {
           <>
             <section className="hero-panel">
               <div className="hero-copy">
-                <span className="eyebrow">Bienvenue sur Lifys</span>
-                <h1>Rencontrez les bonnes personnes, pour la bonne raison.</h1>
-                <p>
-                  Choisissez votre catégorie, découvrez des profils compatibles et échangez dès qu’un match se crée.
-                </p>
+                <span className="eyebrow">{t('Bienvenue sur Lifys')}</span>
+                <h1>{t('Rencontrez les bonnes personnes, pour la bonne raison.')}</h1>
+                <p>{t('Choisissez votre catégorie, découvrez des profils compatibles et échangez dès qu’un match se crée.')}</p>
 
                 <div className="cta-row">
-                  <button type="button" className="primary-button" onClick={() => setCurrentView('discover')}>Découvrir les profils</button>
+                  <button type="button" className="primary-button" onClick={() => setCurrentView('discover')}>{t('Découvrir les profils')}</button>
                   <button type="button" className="secondary-button" onClick={() => setCurrentView('profile')}>
-                    {completedProfile ? 'Modifier mon profil' : 'Compléter mon profil'}
+                    {completedProfile ? t('Modifier mon profil') : t('Compléter mon profil')}
                   </button>
                 </div>
 
                 <div className="hero-metrics">
                   <article className="metric-card">
-                    <span>Profils</span>
+                    <span>{t('Profils')}</span>
                     <strong>{profiles.length}</strong>
-                    <small>correspondant à vos filtres</small>
+                    <small>{t('correspondant à vos filtres')}</small>
                   </article>
                   <article className="metric-card">
-                    <span>Matchs</span>
+                    <span>{t('Matchs')}</span>
                     <strong>{matches.length}</strong>
-                    <small>personnes en commun</small>
+                    <small>{t('personnes en commun')}</small>
                   </article>
                   <article className="metric-card">
-                    <span>Messages</span>
+                    <span>{t('Messages')}</span>
                     <strong>{conversations.reduce((count, conversation) => count + conversation.messages.length, 0)}</strong>
-                    <small>échangés</small>
+                    <small>{t('échangés')}</small>
                   </article>
                 </div>
               </div>
 
               <div className="hero-visual">
                 <div className="mini-card large">
-                  <span className="mini-label">Catégorie active</span>
-                  <h3>{getModeById(profile.mode || 'amoureux').label}</h3>
-                  <p>{profile.city || 'Ville à compléter'} · {profile.age || '18+'} ans</p>
+                  <span className="mini-label">{t('Catégorie active')}</span>
+                  <h3>{t(getModeById(profile.mode || 'amoureux').label)}</h3>
+                  <p>{profile.city || t('Ville à compléter')} · {profile.age || '18+'} {t('ans')}</p>
                 </div>
                 <div className="mini-card">
-                  <span className="mini-label">Compte</span>
-                  <strong>{completedProfile ? 'Actif' : 'À compléter'}</strong>
+                  <span className="mini-label">{t('Compte')}</span>
+                  <strong>{completedProfile ? t('Actif') : t('À compléter')}</strong>
                   <p>{currentUser.email}</p>
                 </div>
                 <div className="mini-card">
-                  <span className="mini-label">Catégories</span>
-                  <strong>5 façons de rencontrer</strong>
-                  <p>Amical · Amoureux · Sans lendemain · Mariage · Professionnel</p>
+                  <span className="mini-label">{t('Catégories')}</span>
+                  <strong>{t('5 façons de rencontrer')}</strong>
+                  <p>{MODES.map((item) => t(item.label)).join(' · ')}</p>
                 </div>
               </div>
             </section>
 
-            <section className="mode-grid" aria-label="Choix de catégorie">
+            <section className="mode-grid" aria-label={t('Choix de catégorie')}>
               {MODES.map((mode) => (
                 <button
                   key={mode.id}
@@ -717,8 +734,8 @@ function App() {
                   }}
                 >
                   <span className="mode-icon" style={{ '--mode-accent': mode.accent }}>{mode.icon}</span>
-                  <strong>{mode.label}</strong>
-                  <small>{mode.description}</small>
+                  <strong>{t(mode.label)}</strong>
+                  <small>{t(mode.description)}</small>
                 </button>
               ))}
             </section>
@@ -728,34 +745,34 @@ function App() {
         {view === 'discover' && (
           <section className="content-panel">
             <SectionHeader
-              eyebrow="Découverte"
-              title="Profils recommandés"
-              description="La découverte est maintenant alimentée par le backend et exclut automatiquement les profils déjà likés ou passés."
+              eyebrow={t('Découverte')}
+              title={t('Profils recommandés')}
+              description={t('Des profils sélectionnés selon vos critères, hors profils déjà likés ou passés.')}
               aside={(
                 <div className="header-meta">
-                  <span className="counter-badge">{discoveryLoading ? 'Chargement…' : `${profiles.length} profil${profiles.length > 1 ? 's' : ''}`}</span>
+                  <span className="counter-badge">{discoveryLoading ? t('Chargement…') : t(profiles.length > 1 ? '{count} profils' : '{count} profil', { count: profiles.length })}</span>
                 </div>
               )}
             />
 
             <div className="discover-toolbar">
-              <div className="mode-pills" aria-label="Filtre par catégorie">
-                <button type="button" className={activeMode === 'all' ? 'pill active' : 'pill'} onClick={() => setActiveMode('all')}>Tous</button>
+              <div className="mode-pills" aria-label={t('Filtre par catégorie')}>
+                <button type="button" className={activeMode === 'all' ? 'pill active' : 'pill'} onClick={() => setActiveMode('all')}>{t('Tous')}</button>
                 {MODES.map((mode) => (
                   <button type="button" key={mode.id} className={activeMode === mode.id ? 'pill active' : 'pill'} onClick={() => setActiveMode(mode.id)}>
-                    {mode.label}
+                    {t(mode.label)}
                   </button>
                 ))}
               </div>
 
               <div className="filter-grid">
                 <label>
-                  <span>Recherche texte</span>
-                  <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Nom, bio, intérêt…" />
+                  <span>{t('Recherche texte')}</span>
+                  <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={t('Nom, bio, intérêt…')} />
                 </label>
                 <label>
-                  <span>Ville</span>
-                  <input type="search" list="lifys-city-options" value={cityQuery} onChange={(event) => setCityQuery(event.target.value)} placeholder="Paris, Lyon…" />
+                  <span>{t('Ville')}</span>
+                  <input type="search" list="lifys-city-options" value={cityQuery} onChange={(event) => setCityQuery(event.target.value)} placeholder={t('Paris, Lyon…')} />
                   <datalist id="lifys-city-options">
                     {availableCities.map((city) => <option key={city} value={city} />)}
                   </datalist>
@@ -764,12 +781,12 @@ function App() {
             </div>
 
             {discoveryLoading ? (
-              <EmptyState title="Chargement des profils" description="Le backend prépare vos recommandations sécurisées." />
+              <EmptyState title={t('Chargement des profils')} description={t('Nous préparons vos recommandations.')} />
             ) : profiles.length === 0 ? (
               <EmptyState
-                title="Aucun profil disponible"
-                description="Essayez une autre catégorie, élargissez vos filtres ou réinitialisez vos interactions."
-                actionLabel="Effacer les filtres"
+                title={t('Aucun profil disponible')}
+                description={t('Essayez une autre catégorie, élargissez vos filtres ou réinitialisez vos interactions.')}
+                actionLabel={t('Effacer les filtres')}
                 onAction={() => {
                   setSearchQuery('');
                   setCityQuery('');
@@ -785,11 +802,11 @@ function App() {
                       <div className="identity-row">
                         <div>
                           <h3>{person.name}, {person.age ?? '18+'}</h3>
-                          <p className="city-line">📍 {person.city || 'Ville non précisée'}</p>
+                          <p className="city-line">📍 {person.city || t('Ville non précisée')}</p>
                         </div>
-                        <span className="tag">{getModeById(person.mode).label}</span>
+                        <span className="tag">{t(getModeById(person.mode).label)}</span>
                       </div>
-                      <p>{person.bio || 'Profil en cours de complétion.'}</p>
+                      <p>{person.bio || t('Profil en cours de complétion.')}</p>
                       <div className="interest-row">
                         {(person.interests.length ? person.interests : ['profil']).map((item) => (
                           <span key={`${person.id}-${item}`}>{item}</span>
@@ -797,12 +814,12 @@ function App() {
                       </div>
                     </div>
                     <div className="card-actions">
-                      <button type="button" className="pass-button" onClick={() => handlePass(person.id)}>Pass</button>
-                      <button type="button" className="like-button" onClick={() => handleLike(person.id)}>Like</button>
+                      <button type="button" className="pass-button" onClick={() => handlePass(person.id)}>{t('Pass')}</button>
+                      <button type="button" className="like-button" onClick={() => handleLike(person.id)}>{t('Like')}</button>
                     </div>
                     <div className="card-actions card-safety">
-                      <button type="button" className="link-button" onClick={() => { setReportTarget(person); setReportReason('spam'); }}>Signaler</button>
-                      <button type="button" className="link-button" onClick={() => handleBlock(person)}>Bloquer</button>
+                      <button type="button" className="link-button" onClick={() => { setReportTarget(person); setReportReason('spam'); }}>{t('Signaler')}</button>
+                      <button type="button" className="link-button" onClick={() => handleBlock(person)}>{t('Bloquer')}</button>
                     </div>
                   </article>
                 ))}
@@ -814,15 +831,15 @@ function App() {
         {view === 'matches' && (
           <section className="content-panel">
             <SectionHeader
-              eyebrow="Matchs"
-              title="Vos correspondances"
-              description="Retrouvez ici toutes les personnes avec qui vous avez matché."
+              eyebrow={t('Matchs')}
+              title={t('Vos correspondances')}
+              description={t('Retrouvez ici toutes les personnes avec qui vous avez matché.')}
             />
 
             {dashboardLoading ? (
-              <EmptyState title="Chargement des matchs" description="Lecture des correspondances depuis la base de données." />
+              <EmptyState title={t('Chargement des matchs')} description={t('Chargement de vos correspondances.')} />
             ) : matches.length === 0 ? (
-              <EmptyState title="Aucun match pour l’instant" description="Commencez par liker des profils pour créer vos premières connexions." actionLabel="Voir la découverte" onAction={() => setCurrentView('discover')} />
+              <EmptyState title={t('Aucun match pour l’instant')} description={t('Commencez par liker des profils pour créer vos premières connexions.')} actionLabel={t('Voir la découverte')} onAction={() => setCurrentView('discover')} />
             ) : (
               <div className="matches-list">
                 {matches.map((match) => (
@@ -830,8 +847,8 @@ function App() {
                     <Avatar className="match-avatar" src={match.avatar} alt={match.name} fallback={match.name} />
                     <div className="match-copy">
                       <h3>{match.name}</h3>
-                      <p>{match.city || 'Ville non précisée'} · {getModeById(match.mode).label}</p>
-                      <small>{match.reason}</small>
+                      <p>{match.city || t('Ville non précisée')} · {t(getModeById(match.mode).label)}</p>
+                      <small>{translateReason(match.reason)}</small>
                     </div>
                     <button type="button" className="secondary-button" onClick={() => {
                       const conversation = conversations.find((item) => item.profileId === match.profileId);
@@ -850,12 +867,12 @@ function App() {
         {view === 'messages' && (
           <section className="messages-layout">
             <aside className="content-panel conversation-panel">
-              <SectionHeader eyebrow="Messages" title="Conversations" description="Historique persistant avec envoi par Entrée." />
+              <SectionHeader eyebrow={t('Messages')} title={t('Conversations')} description={t('Retrouvez vos échanges. Envoi avec Entrée.')} />
 
               {dashboardLoading ? (
-                <EmptyState title="Chargement des conversations" description="Récupération de vos messages depuis le serveur." />
+                <EmptyState title={t('Chargement des conversations')} description={t('Chargement de vos messages.')} />
               ) : conversations.length === 0 ? (
-                <EmptyState title="Aucune conversation" description="Un match backend ouvre automatiquement un canal de discussion." actionLabel="Trouver un match" onAction={() => setCurrentView('discover')} />
+                <EmptyState title={t('Aucune conversation')} description={t('Un match ouvre automatiquement un canal de discussion.')} actionLabel={t('Trouver un match')} onAction={() => setCurrentView('discover')} />
               ) : (
                 <div className="conversation-list">
                   {conversations.map((conversation) => (
@@ -868,7 +885,7 @@ function App() {
                       <Avatar className="conversation-avatar" src={conversation.avatar} alt={conversation.name} fallback={conversation.name} />
                       <div>
                         <strong>{conversation.name}</strong>
-                        <small>{getConversationPreview(conversation)}</small>
+                        <small>{t(getConversationPreview(conversation))}</small>
                       </div>
                     </button>
                   ))}
@@ -883,7 +900,7 @@ function App() {
                     <Avatar className="conversation-avatar" src={selectedConversationData.avatar} alt={selectedConversationData.name} fallback={selectedConversationData.name} />
                     <div>
                       <strong>{selectedConversationData.name}</strong>
-                      <small>{getModeById(selectedConversationData.mode).label}</small>
+                      <small>{t(getModeById(selectedConversationData.mode).label)}</small>
                     </div>
                   </div>
 
@@ -898,7 +915,7 @@ function App() {
                   <div className="composer">
                     <input
                       type="text"
-                      placeholder="Écrire un message persistant…"
+                      placeholder={t('Écrire un message…')}
                       value={draftMessage}
                       onChange={(event) => setDraftMessage(event.target.value)}
                       onKeyDown={(event) => {
@@ -909,12 +926,12 @@ function App() {
                       }}
                     />
                     <button type="button" className="primary-button" disabled={messageSending || !draftMessage.trim()} onClick={handleSendMessage}>
-                      {messageSending ? 'Envoi…' : 'Envoyer'}
+                      {messageSending ? t('Envoi…') : t('Envoyer')}
                     </button>
                   </div>
                 </div>
               ) : (
-                <EmptyState title="Sélectionnez une conversation" description="Choisissez un échange pour afficher les messages stockés en base." />
+                <EmptyState title={t('Sélectionnez une conversation')} description={t('Choisissez un échange pour afficher les messages.')} />
               )}
             </div>
           </section>
@@ -922,74 +939,74 @@ function App() {
 
         {view === 'profile' && (
           <section className="content-panel profile-panel">
-            <SectionHeader eyebrow="Profil" title="Complétez votre profil" description="Les mises à jour sont validées puis synchronisées vers le backend." />
+            <SectionHeader eyebrow={t('Profil')} title={t('Complétez votre profil')} description={t('Vos informations sont visibles par les autres membres, sauf votre e-mail.')} />
 
             <div className="profile-layout">
               <form className="profile-form" onSubmit={handleProfileSave} noValidate>
-                {Object.keys(profileErrors).length ? <div className="form-alert" role="alert">Corrigez les champs signalés avant de sauvegarder.</div> : null}
+                {Object.keys(profileErrors).length ? <div className="form-alert" role="alert">{t('Corrigez les champs signalés avant de sauvegarder.')}</div> : null}
 
                 <div className="form-grid">
                   <label>
-                    <span>Prénom</span>
+                    <span>{t('Prénom')}</span>
                     <input value={profileDraft.name} onChange={(event) => updateProfileField('name', event.target.value)} aria-invalid={Boolean(profileErrors.name)} />
                     {profileErrors.name ? <small className="field-error">{profileErrors.name}</small> : null}
                   </label>
                   <label>
-                    <span>Âge</span>
+                    <span>{t('Âge')}</span>
                     <input type="number" min="18" max="80" value={profileDraft.age ?? ''} onChange={(event) => updateProfileField('age', event.target.value)} aria-invalid={Boolean(profileErrors.age)} />
                     {profileErrors.age ? <small className="field-error">{profileErrors.age}</small> : null}
                   </label>
                   <label>
-                    <span>Ville</span>
+                    <span>{t('Ville')}</span>
                     <input value={profileDraft.city} onChange={(event) => updateProfileField('city', event.target.value)} aria-invalid={Boolean(profileErrors.city)} />
                     {profileErrors.city ? <small className="field-error">{profileErrors.city}</small> : null}
                   </label>
                   <label>
-                    <span>Catégorie principale</span>
+                    <span>{t('Catégorie principale')}</span>
                     <select value={profileDraft.mode} onChange={(event) => updateProfileField('mode', event.target.value)}>
-                      {MODES.map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+                      {MODES.map((mode) => <option key={mode.id} value={mode.id}>{t(mode.label)}</option>)}
                     </select>
                   </label>
                 </div>
 
                 <label>
-                  <span>Avatar URL</span>
+                  <span>{t('Photo (URL)')}</span>
                   <input value={profileDraft.avatar} onChange={(event) => updateProfileField('avatar', event.target.value)} aria-invalid={Boolean(profileErrors.avatar)} />
                   {profileErrors.avatar ? <small className="field-error">{profileErrors.avatar}</small> : null}
                 </label>
 
                 <label>
-                  <span>Bio</span>
+                  <span>{t('Bio')}</span>
                   <textarea rows="5" value={profileDraft.bio} onChange={(event) => updateProfileField('bio', event.target.value)} aria-invalid={Boolean(profileErrors.bio)} />
                   {profileErrors.bio ? <small className="field-error">{profileErrors.bio}</small> : null}
                 </label>
 
                 <label>
-                  <span>Centres d’intérêt</span>
+                  <span>{t('Centres d’intérêt')}</span>
                   <input
                     value={profileDraft.interests}
                     onChange={(event) => updateProfileField('interests', event.target.value)}
                     onBlur={(event) => updateProfileField('interests', serializeInterests(event.target.value))}
-                    placeholder="Voyage, Musique, Sport"
+                    placeholder={t('Voyage, Musique, Sport')}
                   />
                 </label>
 
                 <div className="form-actions">
                   <button type="submit" className="primary-button" disabled={profileSaving}>
-                    {profileSaving ? 'Synchronisation…' : 'Sauvegarder le profil'}
+                    {profileSaving ? t('Synchronisation…') : t('Sauvegarder le profil')}
                   </button>
                 </div>
               </form>
 
               <aside className="profile-preview">
-                <p className="eyebrow">Aperçu</p>
-                <Avatar className="profile-preview-avatar" src={profileDraft.avatar} alt={profileDraft.name || 'Votre profil'} fallback={profileDraft.name || 'Lifys'} />
-                <h3>{profileDraft.name || 'Votre prénom'}</h3>
+                <p className="eyebrow">{t('Aperçu')}</p>
+                <Avatar className="profile-preview-avatar" src={profileDraft.avatar} alt={profileDraft.name || t('Votre profil')} fallback={profileDraft.name || 'Lifys'} />
+                <h3>{profileDraft.name || t('Votre prénom')}</h3>
                 <p>{profileDraft.city || 'Ville'} · {profileDraft.age || '18+'} ans</p>
                 <span className="tag">{getModeById(profileDraft.mode).label}</span>
-                <p className="profile-preview-bio">{profileDraft.bio || 'Votre bio apparaîtra ici une fois complétée.'}</p>
+                <p className="profile-preview-bio">{profileDraft.bio || t('Votre bio apparaîtra ici une fois complétée.')}</p>
                 <div className="interest-row">
-                  {(profileDraft.interests ? profileDraft.interests.split(',').map((item) => item.trim()).filter(Boolean) : ['Ajoutez vos centres d’intérêt']).map((item) => (
+                  {(profileDraft.interests ? profileDraft.interests.split(',').map((item) => item.trim()).filter(Boolean) : [t('Ajoutez vos centres d’intérêt')]).map((item) => (
                     <span key={item}>{item}</span>
                   ))}
                 </div>
@@ -997,11 +1014,11 @@ function App() {
             </div>
 
             <div className="account-panel">
-              <h3>Mes données</h3>
-              <p>Téléchargez vos données ou supprimez définitivement votre compte.</p>
+              <h3>{t('Mes données')}</h3>
+              <p>{t('Téléchargez vos données ou supprimez définitivement votre compte.')}</p>
               <div className="form-actions">
-                <button type="button" className="secondary-button" onClick={handleExportAccount}>Télécharger mes données</button>
-                <button type="button" className="danger-button" onClick={handleDeleteAccount}>Supprimer mon compte</button>
+                <button type="button" className="secondary-button" onClick={handleExportAccount}>{t('Télécharger mes données')}</button>
+                <button type="button" className="danger-button" onClick={handleDeleteAccount}>{t('Supprimer mon compte')}</button>
               </div>
             </div>
           </section>
@@ -1009,23 +1026,23 @@ function App() {
       </main>
 
       {reportTarget ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Signaler un profil">
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={t('Signaler un profil')}>
           <div className="modal-card">
-            <h3>Signaler {reportTarget.name}</h3>
+            <h3>{t('Signaler {name}', { name: reportTarget.name })}</h3>
             <label>
-              <span>Motif</span>
+              <span>{t('Motif')}</span>
               <select value={reportReason} onChange={(event) => setReportReason(event.target.value)}>
-                <option value="spam">Spam ou publicité</option>
-                <option value="harcelement">Harcèlement</option>
-                <option value="faux-profil">Faux profil ou arnaque</option>
-                <option value="contenu-inapproprie">Contenu inapproprié</option>
-                <option value="mineur">Personne mineure</option>
-                <option value="autre">Autre</option>
+                <option value="spam">{t('Spam ou publicité')}</option>
+                <option value="harcelement">{t('Harcèlement')}</option>
+                <option value="faux-profil">{t('Faux profil ou arnaque')}</option>
+                <option value="contenu-inapproprie">{t('Contenu inapproprié')}</option>
+                <option value="mineur">{t('Personne mineure')}</option>
+                <option value="autre">{t('Autre')}</option>
               </select>
             </label>
             <div className="form-actions">
-              <button type="button" className="primary-button" onClick={handleReport}>Envoyer</button>
-              <button type="button" className="secondary-button" onClick={() => setReportTarget(null)}>Annuler</button>
+              <button type="button" className="primary-button" onClick={handleReport}>{t('Envoyer')}</button>
+              <button type="button" className="secondary-button" onClick={() => setReportTarget(null)}>{t('Annuler')}</button>
             </div>
           </div>
         </div>

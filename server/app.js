@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+﻿import crypto from 'node:crypto';
 import fs from 'node:fs';
 
 import express from 'express';
@@ -13,6 +13,7 @@ import {
   verifyToken,
 } from './auth.js';
 import { createDatabase, sanitizeProfileInput } from './db.js';
+import { buildVerificationEmail } from './email-templates.js';
 import { createMailer } from './mailer.js';
 import { createRateLimiter } from './rate-limit.js';
 
@@ -123,15 +124,12 @@ export function createApp(config) {
     next();
   }
 
-  async function sendVerificationEmail(userId, email) {
+  async function sendVerificationEmail(userId, email, lang) {
     const rawToken = crypto.randomBytes(32).toString('hex');
     database.createEmailVerification(userId, hashToken(rawToken), new Date(Date.now() + VERIFICATION_TTL_MS).toISOString());
 
-    await mailer.send({
-      to: email,
-      subject: 'Confirmez votre adresse e-mail Lifys',
-      text: `Bienvenue sur Lifys !\n\nConfirmez votre adresse e-mail en ouvrant ce lien (valable 24 heures) :\n${config.appUrl}/verify-email?token=${rawToken}\n\nSi vous n’êtes pas à l’origine de cette inscription, ignorez ce message.`,
-    });
+    const message = buildVerificationEmail(lang, `${config.appUrl}/verify-email?token=${rawToken}`);
+    await mailer.send({ to: email, ...message });
   }
 
   app.get('/api/health', (_req, res) => {
@@ -173,7 +171,7 @@ export function createApp(config) {
 
       if (config.requireEmailVerification) {
         try {
-          await sendVerificationEmail(created.userId, email);
+          await sendVerificationEmail(created.userId, email, req.body.lang);
         } catch (mailError) {
           console.error('Verification e-mail failed:', mailError.message);
         }
@@ -230,7 +228,7 @@ export function createApp(config) {
         return;
       }
 
-      await sendVerificationEmail(req.auth.userId, req.auth.profile.email);
+      await sendVerificationEmail(req.auth.userId, req.auth.profile.email, req.body?.lang);
       res.json({ sent: true });
     } catch (error) {
       next(error);
@@ -424,3 +422,4 @@ export function createApp(config) {
 
   return { app, database, mailer };
 }
+

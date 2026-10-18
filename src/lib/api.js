@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+﻿const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -89,8 +89,8 @@ export const api = {
   verifyEmail(verificationToken) {
     return apiRequest('/api/auth/verify-email', { method: 'POST', body: { token: verificationToken } });
   },
-  resendVerification(token) {
-    return apiRequest('/api/auth/resend-verification', { method: 'POST', token });
+  resendVerification(token, lang) {
+    return apiRequest('/api/auth/resend-verification', { method: 'POST', token, body: { lang } });
   },
   reportProfile(token, payload) {
     return apiRequest('/api/reports', { method: 'POST', token, body: payload });
@@ -105,3 +105,4 @@ export const api = {
     return apiRequest('/api/account', { method: 'DELETE', token, body: { password } });
   },
 };
+

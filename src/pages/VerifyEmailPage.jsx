@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import SiteFooter from '../components/SiteFooter';
+import { useI18n } from '../i18n';
 
 export default function VerifyEmailPage() {
+  const { t } = useI18n();
   const [state, setState] = useState('loading');
 
   useEffect(() => {
@@ -12,12 +15,13 @@ export default function VerifyEmailPage() {
   return (
     <div className="app-shell">
       <main className="page-shell legal-page">
-        <h1>Confirmation de l’adresse e-mail</h1>
-        {state === 'loading' && <p>Vérification en cours…</p>}
-        {state === 'ok' && <p>Votre adresse e-mail est confirmée. Vous pouvez maintenant utiliser Lifys.</p>}
-        {state === 'error' && <p>Ce lien est invalide ou a expiré. Connectez-vous pour recevoir un nouveau lien.</p>}
-        <a className="primary-button" href="/">Aller sur Lifys</a>
+        <h1>{t('Confirmation de l’adresse e-mail')}</h1>
+        {state === 'loading' && <p>{t('Vérification en cours…')}</p>}
+        {state === 'ok' && <p>{t('Votre adresse e-mail est confirmée. Vous pouvez maintenant utiliser Lifys.')}</p>}
+        {state === 'error' && <p>{t('Ce lien est invalide ou a expiré. Connectez-vous pour recevoir un nouveau lien.')}</p>}
+        <a className="primary-button" href="/">{t('Aller sur Lifys')}</a>
       </main>
+      <SiteFooter />
     </div>
   );
 }

@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import CategoryPage from './pages/CategoryPage';
 import LegalPage from './pages/LegalPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import { getLegalPage, getModeFromPathname } from './utils/routing';
+import { I18nProvider } from './i18n';
 import './styles.css';
 
 function Root() {
@@ -31,6 +32,9 @@ function Root() {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <Root />
+    <I18nProvider>
+      <Root />
+    </I18nProvider>
   </React.StrictMode>
 );
+

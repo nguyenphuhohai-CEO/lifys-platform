@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+﻿import { useEffect } from 'react';
 
+import SiteFooter from '../components/SiteFooter';
 import { MODES } from '../data/demoData';
+import { useI18n } from '../i18n';
 import { getCategoryPath, navigate } from '../utils/routing';
 
 const CATEGORY_CONTENT = {
@@ -37,22 +39,23 @@ const CATEGORY_CONTENT = {
 };
 
 function CategoryPage({ mode }) {
+  const { t } = useI18n();
   const content = CATEGORY_CONTENT[mode.id];
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = `Lifys · ${mode.label}`;
+    document.title = `Lifys · ${t(mode.label)}`;
     return () => {
       document.title = previousTitle;
     };
-  }, [mode.label]);
+  }, [mode.label, t]);
 
   const goToApp = () => navigate(`/?mode=${mode.id}`);
 
   return (
     <div className="app-shell" style={{ '--mode-accent': mode.accent }}>
       <main className="page-shell category-page">
-        <nav className="category-nav" aria-label="Catégories">
+        <nav className="category-nav" aria-label={t('Catégories')}>
           <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }} className="category-brand">Lifys</a>
           <div className="category-links">
             {MODES.map((item) => (
@@ -63,7 +66,7 @@ function CategoryPage({ mode }) {
                 aria-current={item.id === mode.id ? 'page' : undefined}
                 onClick={(event) => { event.preventDefault(); navigate(getCategoryPath(item.id)); }}
               >
-                {item.label}
+                {t(item.label)}
               </a>
             ))}
           </div>
@@ -71,33 +74,36 @@ function CategoryPage({ mode }) {
 
         <section className="hero-panel category-hero">
           <div className="hero-copy">
-            <p className="eyebrow">{mode.icon} {mode.label}</p>
-            <h1>{content.headline}</h1>
-            <p>{content.intro}</p>
+            <p className="eyebrow">{mode.icon} {t(mode.label)}</p>
+            <h1>{t(content.headline)}</h1>
+            <p>{t(content.intro)}</p>
             <div className="category-actions">
-              <button type="button" className="primary-button" onClick={goToApp}>Rejoindre {mode.label}</button>
-              <button type="button" className="secondary-button" onClick={() => navigate('/')}>Découvrir Lifys</button>
+              <button type="button" className="primary-button" onClick={goToApp}>{t('Rejoindre {mode}', { mode: t(mode.label) })}</button>
+              <button type="button" className="secondary-button" onClick={() => navigate('/')}>{t('Découvrir Lifys')}</button>
             </div>
           </div>
         </section>
 
         <section className="content-panel category-section">
-          <h2>Pourquoi {mode.label} sur Lifys ?</h2>
+          <h2>{t('Pourquoi {mode} sur Lifys ?', { mode: t(mode.label) })}</h2>
           <ul className="category-list">
-            {content.highlights.map((item) => <li key={item}>{item}</li>)}
+            {content.highlights.map((item) => <li key={item}>{t(item)}</li>)}
           </ul>
         </section>
 
         <section className="content-panel category-section">
-          <h2>Comment ça marche</h2>
+          <h2>{t('Comment ça marche')}</h2>
           <ol className="category-list">
-            {content.steps.map((item) => <li key={item}>{item}</li>)}
+            {content.steps.map((item) => <li key={item}>{t(item)}</li>)}
           </ol>
-          <button type="button" className="primary-button" onClick={goToApp}>Commencer maintenant</button>
+          <button type="button" className="primary-button" onClick={goToApp}>{t('Commencer maintenant')}</button>
         </section>
       </main>
+      <SiteFooter />
     </div>
   );
 }
 
 export default CategoryPage;
+
+

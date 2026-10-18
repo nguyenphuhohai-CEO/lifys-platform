@@ -1,4 +1,4 @@
-# Lifys Platform
+﻿# Lifys Platform
 
 Lifys est désormais un **MVP full-stack léger** pour une plateforme de rencontres multi-catégories.  
 Le frontend reste en **React + Vite**, et le déploiement repose maintenant sur un **backend Express**, une **base SQLite réelle** et une **authentification JWT**.
@@ -146,6 +146,10 @@ npm test
 - envoi avec `Enter` ;
 - récupération après redémarrage du serveur.
 
+## Langues
+
+L’interface est disponible en français (par défaut), anglais, espagnol et vietnamien. La langue est détectée depuis le navigateur puis mémorisée (lifys.lang) ; un sélecteur figure dans le pied de page et l’en-tête. Les textes sont des paires dans src/i18n/rows.js (clé = français) et src/i18n/legalRows.js ; un test vérifie leur complétude. Les e-mails de vérification sont envoyés dans la langue choisie. Les textes juridiques traduits sont indicatifs : seule la version française fait foi.
+
 ## Architecture
 
 ```text
@@ -260,3 +264,4 @@ Ne pas y stocker de données sensibles réelles sans :
 - `npm run build`
 - scan des secrets sur les fichiers modifiés
 - test manuel du backend et du frontend connecté
+
