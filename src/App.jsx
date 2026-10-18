@@ -5,6 +5,7 @@ import ToastRegion from './components/ToastRegion';
 import { MODES, defaultProfile } from './data/demoData';
 import { api, ApiError } from './lib/api';
 import { getConversationPreview, getModeById, serializeInterests } from './utils/app-utils';
+import { getCategoryPath, getModeFromSearch, navigate } from './utils/routing';
 import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './utils/storage';
 
 const NAV_ITEMS = [
@@ -48,7 +49,7 @@ function App() {
   const [token, setToken] = useState(initialAuth.token);
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState('home');
-  const [activeMode, setActiveMode] = useState('all');
+  const [activeMode, setActiveMode] = useState(() => getModeFromSearch(window.location.search) ?? 'all');
   const [profile, setProfile] = useState(defaultProfile);
   const [profileDraft, setProfileDraft] = useState(defaultProfile);
   const [profileErrors, setProfileErrors] = useState({});
@@ -419,6 +420,18 @@ function App() {
                 Ce MVP s’appuie désormais sur un backend Express, une base SQLite réelle, une authentification par mot de passe
                 et des profils/messages persistés côté serveur.
               </p>
+              <div className="category-links">
+                {MODES.map((mode) => (
+                  <a
+                    key={mode.id}
+                    href={getCategoryPath(mode.id)}
+                    className="pill"
+                    onClick={(event) => { event.preventDefault(); navigate(getCategoryPath(mode.id)); }}
+                  >
+                    {mode.icon} {mode.label}
+                  </a>
+                ))}
+              </div>
               <div className="hero-metrics">
                 <article className="metric-card">
                   <span>Backend</span>

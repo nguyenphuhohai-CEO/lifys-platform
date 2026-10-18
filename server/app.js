@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import path from 'node:path';
 
 import express from 'express';
 
@@ -231,7 +230,7 @@ export function createApp(config) {
   if (fs.existsSync(config.staticDir)) {
     app.use(express.static(config.staticDir));
     app.get(/^(?!\/api\/).*/, (req, res) => {
-      res.sendFile(path.join(config.staticDir, 'index.html'));
+      res.sendFile('index.html', { root: config.staticDir });
     });
   }
 

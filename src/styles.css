@@ -983,3 +983,56 @@ textarea:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+.category-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.category-brand {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--primary-deep);
+  text-decoration: none;
+}
+
+.category-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.category-nav .category-links {
+  margin: 0;
+}
+
+.category-links .pill {
+  text-decoration: none;
+}
+
+.category-hero {
+  border-top: 4px solid var(--mode-accent, var(--primary));
+}
+
+.category-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.category-section {
+  margin-top: 20px;
+}
+
+.category-list {
+  display: grid;
+  gap: 10px;
+  padding-left: 20px;
+  margin: 12px 0 20px;
+}
