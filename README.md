@@ -146,6 +146,10 @@ npm test
 - envoi avec `Enter` ;
 - récupération après redémarrage du serveur.
 
+## Offres : gratuit avec publicités / Premium sans publicités
+
+Deux formules : **Gratuit** (publicités affichées) et **Premium** (abonnement mensuel, aucune publicité). Le plan est stocké sur le compte (plan) et exposé dans le profil ; les emplacements publicitaires (AdSlot) disparaissent pour les abonnés. Le paiement passe par Stripe Checkout : configurer STRIPE_SECRET_KEY, STRIPE_PREMIUM_PRICE_ID, STRIPE_WEBHOOK_SECRET (voir .env.example) et déclarer le webhook POST /api/billing/webhook (événements checkout.session.completed, customer.subscription.updated, customer.subscription.deleted). Les publicités sont pour l’instant un encart interne ; un réseau publicitaire (ex. AdSense) nécessitera d’ajuster la CSP et le consentement cookies.
+
 ## Langues
 
 L’interface est disponible en français (par défaut), anglais, espagnol et vietnamien. La langue est détectée depuis le navigateur puis mémorisée (lifys.lang) ; un sélecteur figure dans le pied de page et l’en-tête. Les textes sont des paires dans src/i18n/rows.js (clé = français) et src/i18n/legalRows.js ; un test vérifie leur complétude. Les e-mails de vérification sont envoyés dans la langue choisie. Les textes juridiques traduits sont indicatifs : seule la version française fait foi.
@@ -264,4 +268,5 @@ Ne pas y stocker de données sensibles réelles sans :
 - `npm run build`
 - scan des secrets sur les fichiers modifiés
 - test manuel du backend et du frontend connecté
+
 

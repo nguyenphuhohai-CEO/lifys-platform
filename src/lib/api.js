@@ -92,6 +92,15 @@ export const api = {
   resendVerification(token, lang) {
     return apiRequest('/api/auth/resend-verification', { method: 'POST', token, body: { lang } });
   },
+  getPlans() {
+    return apiRequest('/api/billing/plans');
+  },
+  startCheckout(token) {
+    return apiRequest('/api/billing/checkout', { method: 'POST', token });
+  },
+  openBillingPortal(token) {
+    return apiRequest('/api/billing/portal', { method: 'POST', token });
+  },
   reportProfile(token, payload) {
     return apiRequest('/api/reports', { method: 'POST', token, body: payload });
   },

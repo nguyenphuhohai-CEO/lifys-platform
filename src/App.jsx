@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Avatar from './components/Avatar';
 import SiteFooter from './components/SiteFooter';
+import PricingPanel, { AdSlot } from './components/Pricing';
 import ToastRegion from './components/ToastRegion';
 import { MODES, defaultProfile } from './data/demoData';
 import LanguageSwitcher from './components/LanguageSwitcher';
@@ -16,6 +17,7 @@ const NAV_ITEMS = [
   { id: 'discover', label: 'Découvrir' },
   { id: 'matches', label: 'Matchs' },
   { id: 'messages', label: 'Messages' },
+  { id: 'pricing', label: 'Offres' },
   { id: 'profile', label: 'Profil' },
 ];
 
@@ -98,6 +100,9 @@ function App() {
     mode: 'amoureux',
     acceptTerms: false,
   });
+  const [plans, setPlans] = useState([]);
+  const [checkoutAvailable, setCheckoutAvailable] = useState(false);
+  const [billingBusy, setBillingBusy] = useState(false);
   const [reportTarget, setReportTarget] = useState(null);
   const [reportReason, setReportReason] = useState('spam');
 
@@ -222,6 +227,40 @@ function App() {
       setSelectedConversation(conversations[0]?.id ?? null);
     }
   }, [conversations, selectedConversation]);
+
+  const isPremium = currentUser?.profile?.plan === 'premium';
+
+  useEffect(() => {
+    api.getPlans().then((data) => {
+      setPlans(data.plans);
+      setCheckoutAvailable(data.checkoutAvailable);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const billing = new URLSearchParams(window.location.search).get('billing');
+    if (billing && currentUser) {
+      window.history.replaceState({}, '', window.location.pathname);
+      setView('pricing');
+      showToast(billing === 'success'
+        ? { type: 'success', title: t('Paiement reçu'), message: t('Votre abonnement Premium sera activé dans quelques instants.') }
+        : { type: 'info', title: t('Paiement annulé'), message: t('Aucun montant n’a été prélevé.') });
+      if (billing === 'success') {
+        window.setTimeout(() => loadDashboard(token), 3000);
+      }
+    }
+  }, [currentUser, loadDashboard, showToast, t, token]);
+
+  const redirectToBilling = async (request) => {
+    setBillingBusy(true);
+    try {
+      const { url } = await request(token);
+      window.location.assign(url);
+    } catch (error) {
+      handleApiError(error, t('Le paiement n’est pas encore disponible.'));
+      setBillingBusy(false);
+    }
+  };
 
   const selectedConversationData = conversations.find((conversation) => conversation.id === selectedConversation) ?? null;
   const availableCities = useMemo(() => [...new Set(profiles.map((item) => item.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [profiles]);
@@ -643,6 +682,7 @@ function App() {
 
         <div className="topbar-actions">
           <LanguageSwitcher />
+          {isPremium ? <span className="tag">{t('Premium')}</span> : null}
           <span className="prototype-badge">{currentUser.email}</span>
           <button type="button" className="secondary-button" onClick={handleResetPrototype} disabled={resetting}>
             {resetting ? t('Réinitialisation…') : t('Réinitialiser')}
@@ -722,6 +762,8 @@ function App() {
               </div>
             </section>
 
+            {!isPremium ? <AdSlot onUpgrade={() => setCurrentView('pricing')} /> : null}
+
             <section className="mode-grid" aria-label={t('Choix de catégorie')}>
               {MODES.map((mode) => (
                 <button
@@ -754,6 +796,8 @@ function App() {
                 </div>
               )}
             />
+
+            {!isPremium ? <AdSlot onUpgrade={() => setCurrentView('pricing')} /> : null}
 
             <div className="discover-toolbar">
               <div className="mode-pills" aria-label={t('Filtre par catégorie')}>
@@ -842,6 +886,7 @@ function App() {
               <EmptyState title={t('Aucun match pour l’instant')} description={t('Commencez par liker des profils pour créer vos premières connexions.')} actionLabel={t('Voir la découverte')} onAction={() => setCurrentView('discover')} />
             ) : (
               <div className="matches-list">
+                {!isPremium ? <AdSlot onUpgrade={() => setCurrentView('pricing')} /> : null}
                 {matches.map((match) => (
                   <article key={match.id} className="match-item">
                     <Avatar className="match-avatar" src={match.avatar} alt={match.name} fallback={match.name} />
@@ -934,6 +979,24 @@ function App() {
                 <EmptyState title={t('Sélectionnez une conversation')} description={t('Choisissez un échange pour afficher les messages.')} />
               )}
             </div>
+          </section>
+        )}
+
+        {view === 'pricing' && (
+          <section className="content-panel">
+            <SectionHeader
+              eyebrow={t('Offres')}
+              title={t('Choisissez votre formule')}
+              description={t('Restez gratuitement avec des publicités, ou passez à Premium pour une expérience sans publicité.')}
+            />
+            <PricingPanel
+              plans={plans}
+              checkoutAvailable={checkoutAvailable}
+              isPremium={isPremium}
+              busy={billingBusy}
+              onCheckout={() => redirectToBilling(api.startCheckout)}
+              onManage={() => redirectToBilling(api.openBillingPortal)}
+            />
           </section>
         )}
 

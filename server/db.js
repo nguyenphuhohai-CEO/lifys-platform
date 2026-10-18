@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+﻿import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
@@ -54,6 +54,10 @@ function parseInterests(rawValue) {
   }
 }
 
+function isPremium(row) {
+  return row.plan === 'premium' && (!row.plan_until || new Date(row.plan_until).getTime() > Date.now());
+}
+
 function serializeProfile(row) {
   return {
     id: row.public_id,
@@ -61,6 +65,7 @@ function serializeProfile(row) {
     userPublicId: row.user_public_id,
     email: row.email,
     emailVerified: Boolean(row.email_verified_at),
+    plan: isPremium(row) ? 'premium' : 'free',
     name: row.name,
     age: row.age,
     city: row.city,
@@ -228,6 +233,10 @@ export function createDatabase(databaseFile, options = {}) {
     ['status', "TEXT NOT NULL DEFAULT 'active'"],
     ['terms_accepted_at', 'TEXT'],
     ['terms_version', 'TEXT'],
+    ['plan', "TEXT NOT NULL DEFAULT 'free'"],
+    ['plan_until', 'TEXT'],
+    ['stripe_customer_id', 'TEXT'],
+    ['stripe_subscription_id', 'TEXT'],
   ]) {
     if (!userColumns.has(column)) {
       db.exec(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
@@ -247,19 +256,19 @@ export function createDatabase(databaseFile, options = {}) {
     findUserByEmail: db.prepare(`SELECT * FROM users WHERE email = ?`),
     findUserById: db.prepare(`SELECT * FROM users WHERE id = ?`),
     findProfileByUserId: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status, users.plan, users.plan_until
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.user_id = ?
     `),
     findProfileByPublicId: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status, users.plan, users.plan_until
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.public_id = ?
     `),
     listProfilesExcludingUser: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status, users.plan, users.plan_until
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.user_id != @user_id
@@ -275,6 +284,8 @@ export function createDatabase(databaseFile, options = {}) {
     insertVerification: db.prepare(`INSERT OR REPLACE INTO email_verifications (token_hash, user_id, expires_at) VALUES (?, ?, ?)`),
     deleteVerificationsForUser: db.prepare(`DELETE FROM email_verifications WHERE user_id = ?`),
     findVerification: db.prepare(`SELECT * FROM email_verifications WHERE token_hash = ?`),
+    setPlanByCustomer: db.prepare(`UPDATE users SET plan = @plan, plan_until = @plan_until, stripe_subscription_id = COALESCE(@subscription_id, stripe_subscription_id) WHERE stripe_customer_id = @customer_id`),
+    setPlanById: db.prepare(`UPDATE users SET plan = @plan, plan_until = @plan_until, stripe_customer_id = COALESCE(@customer_id, stripe_customer_id), stripe_subscription_id = COALESCE(@subscription_id, stripe_subscription_id) WHERE id = @user_id`),
     markEmailVerified: db.prepare(`UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL`),
     insertBlock: db.prepare(`INSERT OR IGNORE INTO blocks (user_id, blocked_user_id, created_at) VALUES (?, ?, ?)`),
     isBlockedPair: db.prepare(`
@@ -759,6 +770,14 @@ export function createDatabase(databaseFile, options = {}) {
     return true;
   });
 
+  function setUserPlan({ userId, customerId, plan, planUntil, subscriptionId }) {
+    const params = { plan, plan_until: planUntil ?? null, customer_id: customerId ?? null, subscription_id: subscriptionId ?? null };
+    if (userId) {
+      return statements.setPlanById.run({ ...params, user_id: userId }).changes > 0;
+    }
+    return Boolean(customerId) && statements.setPlanByCustomer.run(params).changes > 0;
+  }
+
   function deleteAccount(userId) {
     return statements.deleteUser.run(userId).changes > 0;
   }
@@ -772,6 +791,8 @@ export function createDatabase(databaseFile, options = {}) {
         emailVerifiedAt: user.email_verified_at,
         termsAcceptedAt: user.terms_accepted_at,
         termsVersion: user.terms_version,
+        plan: user.plan,
+        planUntil: user.plan_until,
       },
       profile: getProfileByUserId(userId),
       likesGiven: statements.listLikesGiven.all(userId).map((row) => ({ profileId: row.profile_id, createdAt: row.created_at })),
@@ -792,6 +813,7 @@ export function createDatabase(databaseFile, options = {}) {
     listOpenReports,
     resolveReportById,
     deleteAccount,
+    setUserPlan,
     exportUserData,
     getProfileByUserId,
     getProfileByPublicId,
@@ -845,3 +867,5 @@ function seedDemoData(db, statements) {
 
   transaction();
 }
+
+

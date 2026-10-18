@@ -1,4 +1,4 @@
-// Chaque ligne : [français (clé), anglais, espagnol, vietnamien]
+﻿// Chaque ligne : [français (clé), anglais, espagnol, vietnamien]
 export const ROWS = [
   // Navigation et en-tête
   ['Rencontres multi-catégories', 'Dating across 5 categories', 'Citas en 5 categorías', 'Hẹn hò theo 5 chủ đề'],
@@ -14,6 +14,34 @@ export const ROWS = [
   ['Déconnexion', 'Log out', 'Cerrar sesión', 'Đăng xuất'],
   ['Langue', 'Language', 'Idioma', 'Ngôn ngữ'],
   ['Votre profil', 'Your profile', 'Su perfil', 'Hồ sơ của bạn'],
+  ['Offres', 'Plans', 'Planes', 'Gói dịch vụ'],
+  ['Publicité', 'Advertisement', 'Publicidad', 'Quảng cáo'],
+  ['Votre espace publicitaire', 'Your ad space', 'Su espacio publicitario', 'Không gian quảng cáo'],
+  ['Passez à Lifys Premium pour supprimer toutes les publicités.', 'Go Lifys Premium to remove all ads.', 'Pase a Lifys Premium para eliminar toda la publicidad.', 'Nâng cấp Lifys Premium để loại bỏ toàn bộ quảng cáo.'],
+  ['Supprimer les publicités', 'Remove ads', 'Quitar la publicidad', 'Xóa quảng cáo'],
+  ['Premium', 'Premium', 'Premium', 'Premium'],
+  ['Gratuit', 'Free', 'Gratis', 'Miễn phí'],
+  ['/ mois', '/ month', '/ mes', '/ tháng'],
+  ['Avec publicités', 'With ads', 'Con publicidad', 'Có quảng cáo'],
+  ['Sans publicités', 'Ad-free', 'Sin publicidad', 'Không quảng cáo'],
+  ['Toutes les catégories de rencontre', 'All meeting categories', 'Todas las categorías de encuentro', 'Tất cả chủ đề gặp gỡ'],
+  ['Matchs et messagerie illimités', 'Unlimited matches and messaging', 'Matches y mensajes ilimitados', 'Kết đôi và nhắn tin không giới hạn'],
+  ['Publicités affichées', 'Ads displayed', 'Se muestra publicidad', 'Hiển thị quảng cáo'],
+  ['Aucune publicité', 'No ads', 'Sin publicidad', 'Không có quảng cáo'],
+  ['Résiliable à tout moment', 'Cancel any time', 'Cancelable en cualquier momento', 'Hủy bất cứ lúc nào'],
+  ['Votre offre actuelle', 'Your current plan', 'Su plan actual', 'Gói hiện tại của bạn'],
+  ['Redirection…', 'Redirecting…', 'Redirigiendo…', 'Đang chuyển hướng…'],
+  ['Passer à Premium', 'Go Premium', 'Pasar a Premium', 'Nâng cấp Premium'],
+  ['Le paiement n’est pas encore disponible.', 'Payment is not available yet.', 'El pago aún no está disponible.', 'Thanh toán hiện chưa khả dụng.'],
+  ['Gérer mon abonnement', 'Manage my subscription', 'Gestionar mi suscripción', 'Quản lý đăng ký'],
+  ['Paiement reçu', 'Payment received', 'Pago recibido', 'Đã nhận thanh toán'],
+  ['Votre abonnement Premium sera activé dans quelques instants.', 'Your Premium subscription will be activated in a few moments.', 'Su suscripción Premium se activará en unos instantes.', 'Gói Premium của bạn sẽ được kích hoạt trong giây lát.'],
+  ['Paiement annulé', 'Payment cancelled', 'Pago cancelado', 'Đã hủy thanh toán'],
+  ['Aucun montant n’a été prélevé.', 'No amount was charged.', 'No se ha cobrado ningún importe.', 'Không có khoản tiền nào bị trừ.'],
+  ['Choisissez votre formule', 'Choose your plan', 'Elija su plan', 'Chọn gói của bạn'],
+  ['Restez gratuitement avec des publicités, ou passez à Premium pour une expérience sans publicité.', 'Stay free with ads, or go Premium for an ad-free experience.', 'Siga gratis con publicidad, o pase a Premium para una experiencia sin anuncios.', 'Dùng miễn phí kèm quảng cáo, hoặc nâng cấp Premium để không còn quảng cáo.'],
+  ['Vous êtes déjà abonné à Lifys Premium.', 'You are already subscribed to Lifys Premium.', 'Ya está suscrito a Lifys Premium.', 'Bạn đã đăng ký Lifys Premium.'],
+  ['La gestion de l’abonnement n’est pas disponible.', 'Subscription management is not available.', 'La gestión de la suscripción no está disponible.', 'Chức năng quản lý đăng ký không khả dụng.'],
   ['Information', 'Information', 'Información', 'Thông tin'],
   ['Version bêta', 'Beta version', 'Versión beta', 'Phiên bản beta'],
   ['Lifys ne vérifie pas l’identité de ses membres : restez prudent et signalez tout comportement abusif.', 'Lifys does not verify its members’ identity: stay cautious and report any abusive behaviour.', 'Lifys no verifica la identidad de sus miembros: sea prudente y denuncie cualquier comportamiento abusivo.', 'Lifys không xác minh danh tính thành viên: hãy cẩn trọng và báo cáo mọi hành vi lạm dụng.'],
@@ -316,3 +344,4 @@ export const ROWS = [
   ['Contact', 'Contact', 'Contacto', 'Liên hệ'],
   ['Hébergeur', 'Host', 'Alojamiento', 'Nhà cung cấp lưu trữ'],
 ];
+

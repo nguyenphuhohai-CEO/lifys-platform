@@ -13,6 +13,7 @@ import {
   verifyToken,
 } from './auth.js';
 import { createDatabase, sanitizeProfileInput } from './db.js';
+import { applyStripeEvent, createCheckoutSession, createPortalSession, getPlans, verifyStripeSignature } from './billing.js';
 import { buildVerificationEmail } from './email-templates.js';
 import { createMailer } from './mailer.js';
 import { createRateLimiter } from './rate-limit.js';
@@ -53,6 +54,20 @@ export function createApp(config) {
 
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxy);
+  app.post('/api/billing/webhook', express.raw({ type: '*/*', limit: '100kb' }), (req, res, next) => {
+    try {
+      const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '';
+      if (!verifyStripeSignature(rawBody, req.headers['stripe-signature'], config.billing.webhookSecret)) {
+        throw createHttpError(400, 'Signature invalide.');
+      }
+
+      applyStripeEvent(database, JSON.parse(rawBody));
+      res.json({ received: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.use(express.json({ limit: '100kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -230,6 +245,43 @@ export function createApp(config) {
 
       await sendVerificationEmail(req.auth.userId, req.auth.profile.email, req.body?.lang);
       res.json({ sent: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  const billingConfigured = () => Boolean(config.billing.secretKey && config.billing.premiumPriceId);
+
+  app.get('/api/billing/plans', (_req, res) => {
+    res.json({ plans: getPlans(config), checkoutAvailable: billingConfigured() });
+  });
+
+  app.post('/api/billing/checkout', requireAuth, requireVerified, async (req, res, next) => {
+    try {
+      if (!billingConfigured()) {
+        throw createHttpError(503, 'Le paiement n’est pas encore disponible.', 'billing_unavailable');
+      }
+
+      if (req.auth.profile.plan === 'premium') {
+        throw createHttpError(409, 'Vous êtes déjà abonné à Lifys Premium.');
+      }
+
+      const user = database.getUserById(req.auth.userId);
+      const url = await createCheckoutSession(config, { userId: req.auth.userId, email: req.auth.profile.email, customerId: user.stripe_customer_id });
+      res.json({ url });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/billing/portal', requireAuth, async (req, res, next) => {
+    try {
+      const user = database.getUserById(req.auth.userId);
+      if (!billingConfigured() || !user.stripe_customer_id) {
+        throw createHttpError(503, 'La gestion de l’abonnement n’est pas disponible.', 'billing_unavailable');
+      }
+
+      res.json({ url: await createPortalSession(config, user.stripe_customer_id) });
     } catch (error) {
       next(error);
     }

@@ -43,6 +43,13 @@ export function getConfig(overrides = {}) {
     appUrl: `${overrides.APP_URL ?? process.env.APP_URL ?? `http://localhost:${port}`}`.replace(/\/+$/, ''),
     smtpUrl,
     mailFrom: overrides.MAIL_FROM ?? process.env.MAIL_FROM ?? 'Lifys <no-reply@lifys.local>',
+    billing: {
+      secretKey: overrides.STRIPE_SECRET_KEY ?? process.env.STRIPE_SECRET_KEY ?? '',
+      webhookSecret: overrides.STRIPE_WEBHOOK_SECRET ?? process.env.STRIPE_WEBHOOK_SECRET ?? '',
+      premiumPriceId: overrides.STRIPE_PREMIUM_PRICE_ID ?? process.env.STRIPE_PREMIUM_PRICE_ID ?? '',
+      premiumPriceCents: Number(overrides.PREMIUM_PRICE_CENTS ?? process.env.PREMIUM_PRICE_CENTS ?? 499),
+      currency: `${overrides.PREMIUM_CURRENCY ?? process.env.PREMIUM_CURRENCY ?? 'eur'}`.toLowerCase(),
+    },
     seedDemoData: flag('SEED_DEMO_DATA', !isProduction),
     requireEmailVerification,
     adminEmails: `${overrides.ADMIN_EMAILS ?? process.env.ADMIN_EMAILS ?? ''}`
