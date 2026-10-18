@@ -11,8 +11,14 @@ export function getConfig(overrides = {}) {
   const staticDir = overrides.STATIC_DIR ?? process.env.STATIC_DIR ?? path.join(rootDir, 'dist');
   const nodeEnv = overrides.NODE_ENV ?? process.env.NODE_ENV ?? 'development';
 
+  const trustProxy = overrides.TRUST_PROXY ?? process.env.TRUST_PROXY ?? (nodeEnv === 'production' ? '1' : '0');
+
   if (nodeEnv === 'production' && jwtSecret === 'lifys-dev-secret-change-me') {
     throw new Error('JWT_SECRET must be set in production.');
+  }
+
+  if (nodeEnv === 'production' && jwtSecret.length < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters in production.');
   }
 
   return {
@@ -22,5 +28,6 @@ export function getConfig(overrides = {}) {
     jwtExpiresIn,
     staticDir,
     nodeEnv,
+    trustProxy: Number.isNaN(Number(trustProxy)) ? trustProxy : Number(trustProxy),
   };
 }

@@ -273,7 +273,7 @@ function App() {
       showToast({
         type: 'success',
         title: 'Profil synchronisé',
-        message: 'Votre profil est maintenant enregistré dans la base SQLite Lifys.',
+        message: 'Votre profil a bien été enregistré.',
       });
       await loadDiscovery(token);
     } catch (error) {
@@ -400,8 +400,8 @@ function App() {
       <div className="app-shell app-loading">
         <div className="content-panel loading-panel" role="status" aria-live="polite">
           <p className="eyebrow">Chargement</p>
-          <h1>Lifys établit la connexion sécurisée…</h1>
-          <p className="section-description">Initialisation du backend, de la base SQLite et de votre session.</p>
+          <h1>Lifys prépare votre espace…</h1>
+          <p className="section-description">Chargement de votre session…</p>
         </div>
       </div>
     );
@@ -414,11 +414,11 @@ function App() {
         <main className="page-shell">
           <section className="hero-panel auth-hero">
             <div className="hero-copy">
-              <p className="eyebrow">Déploiement MVP · backend réel</p>
-              <h1>Lifys est prêt pour un vrai déploiement léger.</h1>
+              <p className="eyebrow">Rencontres multi-catégories</p>
+              <h1>Des rencontres qui vous ressemblent.</h1>
               <p>
-                Ce MVP s’appuie désormais sur un backend Express, une base SQLite réelle, une authentification par mot de passe
-                et des profils/messages persistés côté serveur.
+                Amitié, amour, rencontres spontanées, mariage ou réseau professionnel : choisissez l’intention qui vous correspond
+                et rencontrez des personnes qui la partagent.
               </p>
               <div className="category-links">
                 {MODES.map((mode) => (
@@ -434,19 +434,19 @@ function App() {
               </div>
               <div className="hero-metrics">
                 <article className="metric-card">
-                  <span>Backend</span>
-                  <strong>Express</strong>
-                  <small>API JSON sécurisée</small>
+                  <span>5 catégories</span>
+                  <strong>Votre intention</strong>
+                  <small>chaque rencontre commence par un objectif clair</small>
                 </article>
                 <article className="metric-card">
-                  <span>Base de données</span>
-                  <strong>SQLite</strong>
-                  <small>persistante et simple à déployer</small>
+                  <span>Confidentialité</span>
+                  <strong>Vos données</strong>
+                  <small>jamais d’identifiant interne exposé aux autres</small>
                 </article>
                 <article className="metric-card">
-                  <span>Auth</span>
-                  <strong>JWT</strong>
-                  <small>session stockée localement</small>
+                  <span>Échanges</span>
+                  <strong>Messagerie</strong>
+                  <small>discutez dès qu’un match se crée</small>
                 </article>
               </div>
             </div>
@@ -455,7 +455,7 @@ function App() {
               <SectionHeader
                 eyebrow={authMode === 'register' ? 'Créer un compte' : 'Connexion'}
                 title={authMode === 'register' ? 'Commencer sur Lifys' : 'Reprendre votre session'}
-                description="Les comptes sont réels pour ce MVP backend, mais les profils de découverte restent des démos."
+                description="Créez votre compte en quelques secondes. Les profils proposés sont pour l’instant des profils de démonstration."
               />
 
               {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
@@ -508,7 +508,7 @@ function App() {
           <span className="brand-icon">❤</span>
           <span>
             <strong>Lifys</strong>
-            <small>Frontend React + backend Express + SQLite</small>
+            <small>Rencontres multi-catégories</small>
           </span>
         </button>
 
@@ -547,9 +547,9 @@ function App() {
       </header>
 
       <main className="page-shell">
-        <section className="local-notice" aria-label="Avertissement MVP">
-          <strong>MVP déployable</strong>
-          <span>Les comptes et données utilisateur sont persistés dans SQLite. Les profils de découverte restent fictifs et ne constituent ni réseau social réel, ni identité vérifiée.</span>
+        <section className="local-notice" aria-label="Information">
+          <strong>Version bêta</strong>
+          <span>Les profils proposés dans la découverte sont des profils de démonstration, sans identité vérifiée.</span>
         </section>
 
         {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
@@ -558,11 +558,10 @@ function App() {
           <>
             <section className="hero-panel">
               <div className="hero-copy">
-                <span className="eyebrow">Expérience full-stack légère</span>
-                <h1>Une base Lifys prête à passer du prototype local à un MVP backend réel.</h1>
+                <span className="eyebrow">Bienvenue sur Lifys</span>
+                <h1>Rencontrez les bonnes personnes, pour la bonne raison.</h1>
                 <p>
-                  Vos profils, likes, matchs et messages sont maintenant gérés par un backend Express et une base SQLite,
-                  sans bouleverser l’expérience premium construite sur React + Vite.
+                  Choisissez votre catégorie, découvrez des profils compatibles et échangez dès qu’un match se crée.
                 </p>
 
                 <div className="cta-row">
@@ -576,17 +575,17 @@ function App() {
                   <article className="metric-card">
                     <span>Profils</span>
                     <strong>{profiles.length}</strong>
-                    <small>résultats backend filtrés</small>
+                    <small>correspondant à vos filtres</small>
                   </article>
                   <article className="metric-card">
                     <span>Matchs</span>
                     <strong>{matches.length}</strong>
-                    <small>persistés en base</small>
+                    <small>personnes en commun</small>
                   </article>
                   <article className="metric-card">
                     <span>Messages</span>
                     <strong>{conversations.reduce((count, conversation) => count + conversation.messages.length, 0)}</strong>
-                    <small>conservés côté serveur</small>
+                    <small>échangés</small>
                   </article>
                 </div>
               </div>
@@ -603,9 +602,9 @@ function App() {
                   <p>{currentUser.email}</p>
                 </div>
                 <div className="mini-card">
-                  <span className="mini-label">Stack</span>
-                  <strong>React + Express</strong>
-                  <p>JWT · SQLite · Docker</p>
+                  <span className="mini-label">Catégories</span>
+                  <strong>5 façons de rencontrer</strong>
+                  <p>Amical · Amoureux · Sans lendemain · Mariage · Professionnel</p>
                 </div>
               </div>
             </section>
@@ -717,7 +716,7 @@ function App() {
             <SectionHeader
               eyebrow="Matchs"
               title="Vos correspondances"
-              description="Les matchs sont persistés dans SQLite et peuvent être retrouvés après redémarrage du serveur."
+              description="Retrouvez ici toutes les personnes avec qui vous avez matché."
             />
 
             {dashboardLoading ? (

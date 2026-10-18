@@ -12,6 +12,7 @@ import {
   verifyToken,
 } from './auth.js';
 import { createDatabase, sanitizeProfileInput } from './db.js';
+import { createRateLimiter } from './rate-limit.js';
 
 function createHttpError(status, message) {
   const error = new Error(message);
@@ -34,13 +35,29 @@ export function createApp(config) {
   const app = express();
 
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '1mb' }));
+  app.set('trust proxy', config.trustProxy);
+  app.use(express.json({ limit: '100kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; img-src 'self' data: https://images.unsplash.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    );
+    if (config.nodeEnv === 'production') {
+      res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+    }
     next();
   });
+
+  const authLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: config.nodeEnv === 'test' ? 1000 : 30,
+    message: 'Trop de tentatives. Réessayez dans quelques minutes.',
+  });
+  app.use('/api/auth', authLimiter);
 
   function requireAuth(req, _res, next) {
     const authorization = req.headers.authorization ?? '';

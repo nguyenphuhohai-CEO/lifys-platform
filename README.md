@@ -61,7 +61,14 @@ DATABASE_FILE=./data/lifys.sqlite
 JWT_SECRET=change-me-in-production
 JWT_EXPIRES_IN=7d
 NODE_ENV=development
+TRUST_PROXY=0
 ```
+
+En production (`NODE_ENV=production`), `JWT_SECRET` est obligatoire (32 caractères minimum) et `TRUST_PROXY` vaut `1` par défaut (déploiement derrière un reverse proxy). Les routes `/api/auth` sont limitées à 30 requêtes par 15 minutes et par IP, et les en-têtes de sécurité (CSP, HSTS, etc.) sont activés. Montez `DATABASE_FILE` sur un volume persistant.
+
+Pages de catégories : `/Amical`, `/Amoureux`, `/Sans-lendemain`, `/Mariage`, `/Professionnel`.
+
+Node.js 22 ou 24 requis (`better-sqlite3` 12).
 
 ## Scripts
 
