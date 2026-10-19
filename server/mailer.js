@@ -6,6 +6,11 @@ export function createMailer(config) {
 
   return {
     sent,
+    async verify() {
+      if (!transport) return false;
+      await transport.verify();
+      return true;
+    },
     async send({ to, subject, text }) {
       if (!transport) {
         sent.push({ to, subject, text });

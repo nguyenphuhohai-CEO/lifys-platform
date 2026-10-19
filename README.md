@@ -146,6 +146,13 @@ npm test
 - envoi avec `Enter` ;
 - récupération après redémarrage du serveur.
 
+## Déploiement
+
+- **Render** : `render.yaml` (service Docker + disque persistant `/data` pour SQLite). Créer un *Blueprint* depuis le dépôt, puis renseigner les variables marquées `sync: false`.
+- **Docker** : `docker build -t lifys .` puis `docker run -p 3001:3001 -v lifys-data:/data -e JWT_SECRET=... -e APP_URL=https://... -e SMTP_URL=... lifys`.
+- **E-mails** : `SMTP_URL` (ex. `smtps://user:pass@smtp.example.com:465`) et `MAIL_FROM` ; l’adresse d’envoi doit appartenir à un domaine authentifié (SPF/DKIM) chez votre fournisseur (Brevo, Mailjet, Postmark, Amazon SES…). Au démarrage, le log indique `SMTP: connexion OK` ou l’erreur. En production, `SMTP_URL` est obligatoire tant que la vérification d’e-mail est active.
+- Santé : `GET /api/health`. Sauvegardez régulièrement le fichier `/data/lifys.sqlite`.
+
 ## Offres : gratuit avec publicités / Premium sans publicités
 
 Deux formules : **Gratuit** (publicités affichées) et **Premium** (abonnement mensuel, aucune publicité). Le plan est stocké sur le compte (plan) et exposé dans le profil ; les emplacements publicitaires (AdSlot) disparaissent pour les abonnés. Le paiement passe par Stripe Checkout : configurer STRIPE_SECRET_KEY, STRIPE_PREMIUM_PRICE_ID, STRIPE_WEBHOOK_SECRET (voir .env.example) et déclarer le webhook POST /api/billing/webhook (événements checkout.session.completed, customer.subscription.updated, customer.subscription.deleted). Par défaut, les publicités sont un encart interne. Avec ADSENSE_CLIENT_ID et ADSENSE_SLOT_ID, Google AdSense est activé : la CSP est élargie automatiquement, un bandeau de consentement (Accepter/Refuser, modifiable via « Gérer les cookies » en pied de page) s’affiche, et le script publicitaire n’est chargé qu’après acceptation. Le bandeau et les publicités disparaissent pour les abonnés Premium.
@@ -268,6 +275,7 @@ Ne pas y stocker de données sensibles réelles sans :
 - `npm run build`
 - scan des secrets sur les fichiers modifiés
 - test manuel du backend et du frontend connecté
+
 
 
 
