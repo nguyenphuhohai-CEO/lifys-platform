@@ -148,7 +148,7 @@ npm test
 
 ## Offres : gratuit avec publicités / Premium sans publicités
 
-Deux formules : **Gratuit** (publicités affichées) et **Premium** (abonnement mensuel, aucune publicité). Le plan est stocké sur le compte (plan) et exposé dans le profil ; les emplacements publicitaires (AdSlot) disparaissent pour les abonnés. Le paiement passe par Stripe Checkout : configurer STRIPE_SECRET_KEY, STRIPE_PREMIUM_PRICE_ID, STRIPE_WEBHOOK_SECRET (voir .env.example) et déclarer le webhook POST /api/billing/webhook (événements checkout.session.completed, customer.subscription.updated, customer.subscription.deleted). Les publicités sont pour l’instant un encart interne ; un réseau publicitaire (ex. AdSense) nécessitera d’ajuster la CSP et le consentement cookies.
+Deux formules : **Gratuit** (publicités affichées) et **Premium** (abonnement mensuel, aucune publicité). Le plan est stocké sur le compte (plan) et exposé dans le profil ; les emplacements publicitaires (AdSlot) disparaissent pour les abonnés. Le paiement passe par Stripe Checkout : configurer STRIPE_SECRET_KEY, STRIPE_PREMIUM_PRICE_ID, STRIPE_WEBHOOK_SECRET (voir .env.example) et déclarer le webhook POST /api/billing/webhook (événements checkout.session.completed, customer.subscription.updated, customer.subscription.deleted). Par défaut, les publicités sont un encart interne. Avec ADSENSE_CLIENT_ID et ADSENSE_SLOT_ID, Google AdSense est activé : la CSP est élargie automatiquement, un bandeau de consentement (Accepter/Refuser, modifiable via « Gérer les cookies » en pied de page) s’affiche, et le script publicitaire n’est chargé qu’après acceptation. Le bandeau et les publicités disparaissent pour les abonnés Premium.
 
 ## Langues
 
@@ -268,5 +268,6 @@ Ne pas y stocker de données sensibles réelles sans :
 - `npm run build`
 - scan des secrets sur les fichiers modifiés
 - test manuel du backend et du frontend connecté
+
 
 

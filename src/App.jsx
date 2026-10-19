@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Avatar from './components/Avatar';
 import SiteFooter from './components/SiteFooter';
 import PricingPanel, { AdSlot } from './components/Pricing';
+import ConsentBanner from './components/ConsentBanner';
 import ToastRegion from './components/ToastRegion';
 import { MODES, defaultProfile } from './data/demoData';
 import LanguageSwitcher from './components/LanguageSwitcher';
@@ -102,6 +103,7 @@ function App() {
   });
   const [plans, setPlans] = useState([]);
   const [checkoutAvailable, setCheckoutAvailable] = useState(false);
+  const [ads, setAds] = useState(null);
   const [billingBusy, setBillingBusy] = useState(false);
   const [reportTarget, setReportTarget] = useState(null);
   const [reportReason, setReportReason] = useState('spam');
@@ -234,6 +236,7 @@ function App() {
     api.getPlans().then((data) => {
       setPlans(data.plans);
       setCheckoutAvailable(data.checkoutAvailable);
+      setAds(data.ads || null);
     }).catch(() => {});
   }, []);
 
@@ -639,7 +642,7 @@ function App() {
             </div>
           </section>
         </main>
-        <SiteFooter />
+        <><ConsentBanner ads={ads} hidden={isPremium} /><SiteFooter ads={ads} /></>
       </div>
     );
   }
@@ -762,7 +765,7 @@ function App() {
               </div>
             </section>
 
-            {!isPremium ? <AdSlot onUpgrade={() => setCurrentView('pricing')} /> : null}
+            {!isPremium ? <AdSlot ads={ads} onUpgrade={() => setCurrentView('pricing')} /> : null}
 
             <section className="mode-grid" aria-label={t('Choix de catégorie')}>
               {MODES.map((mode) => (
@@ -797,7 +800,7 @@ function App() {
               )}
             />
 
-            {!isPremium ? <AdSlot onUpgrade={() => setCurrentView('pricing')} /> : null}
+            {!isPremium ? <AdSlot ads={ads} onUpgrade={() => setCurrentView('pricing')} /> : null}
 
             <div className="discover-toolbar">
               <div className="mode-pills" aria-label={t('Filtre par catégorie')}>
@@ -886,7 +889,7 @@ function App() {
               <EmptyState title={t('Aucun match pour l’instant')} description={t('Commencez par liker des profils pour créer vos premières connexions.')} actionLabel={t('Voir la découverte')} onAction={() => setCurrentView('discover')} />
             ) : (
               <div className="matches-list">
-                {!isPremium ? <AdSlot onUpgrade={() => setCurrentView('pricing')} /> : null}
+                {!isPremium ? <AdSlot ads={ads} onUpgrade={() => setCurrentView('pricing')} /> : null}
                 {matches.map((match) => (
                   <article key={match.id} className="match-item">
                     <Avatar className="match-avatar" src={match.avatar} alt={match.name} fallback={match.name} />
@@ -1111,7 +1114,7 @@ function App() {
         </div>
       ) : null}
 
-      <SiteFooter />
+      <><ConsentBanner ads={ads} hidden={isPremium} /><SiteFooter ads={ads} /></>
     </div>
   );
 }

@@ -50,6 +50,10 @@ export function getConfig(overrides = {}) {
       premiumPriceCents: Number(overrides.PREMIUM_PRICE_CENTS ?? process.env.PREMIUM_PRICE_CENTS ?? 499),
       currency: `${overrides.PREMIUM_CURRENCY ?? process.env.PREMIUM_CURRENCY ?? 'eur'}`.toLowerCase(),
     },
+    ads: {
+      client: `${overrides.ADSENSE_CLIENT_ID ?? process.env.ADSENSE_CLIENT_ID ?? ''}`.trim(),
+      slot: `${overrides.ADSENSE_SLOT_ID ?? process.env.ADSENSE_SLOT_ID ?? ''}`.trim(),
+    },
     seedDemoData: flag('SEED_DEMO_DATA', !isProduction),
     requireEmailVerification,
     adminEmails: `${overrides.ADMIN_EMAILS ?? process.env.ADMIN_EMAILS ?? ''}`

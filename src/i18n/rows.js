@@ -343,5 +343,10 @@ export const ROWS = [
   ['Directeur de la publication', 'Publication director', 'Director de la publicación', 'Người chịu trách nhiệm xuất bản'],
   ['Contact', 'Contact', 'Contacto', 'Liên hệ'],
   ['Hébergeur', 'Host', 'Alojamiento', 'Nhà cung cấp lưu trữ'],
+  ['Publicités personnalisées', 'Personalised ads', 'Anuncios personalizados', 'Quảng cáo cá nhân hóa'],
+  ['Lifys affiche des publicités sur l’offre Gratuite. Avec votre accord, notre partenaire publicitaire peut utiliser des cookies pour les personnaliser. Vous pouvez changer d’avis à tout moment, ou passer à Premium pour ne plus en voir.', 'Lifys shows ads on the Free plan. With your consent, our advertising partner may use cookies to personalise them. You can change your mind at any time, or go Premium to stop seeing them.', 'Lifys muestra anuncios en el plan Gratuito. Con su consentimiento, nuestro socio publicitario puede usar cookies para personalizarlos. Puede cambiar de opinión en cualquier momento o pasarse a Premium para no verlos.', 'Lifys hiển thị quảng cáo ở gói Miễn phí. Nếu bạn đồng ý, đối tác quảng cáo có thể dùng cookie để cá nhân hóa. Bạn có thể đổi ý bất cứ lúc nào, hoặc nâng cấp Premium để không thấy quảng cáo.'],
+  ['Refuser', 'Decline', 'Rechazar', 'Từ chối'],
+  ['Accepter', 'Accept', 'Aceptar', 'Đồng ý'],
+  ['Gérer les cookies', 'Manage cookies', 'Gestionar cookies', 'Quản lý cookie'],
 ];
 

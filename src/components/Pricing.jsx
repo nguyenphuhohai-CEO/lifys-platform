@@ -1,9 +1,48 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 import { useI18n } from '../i18n';
+import { loadAdsScript, useConsent } from '../lib/consent';
 
-export function AdSlot({ onUpgrade }) {
+function NetworkAd({ ads }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadAdsScript(ads.client)
+      .then(() => {
+        if (cancelled || !ref.current || ref.current.dataset.adsbygoogleStatus) return;
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [ads.client]);
+
+  return (
+    <ins
+      ref={ref}
+      className="adsbygoogle"
+      style={{ display: 'block' }}
+      data-ad-client={ads.client}
+      data-ad-slot={ads.slot}
+      data-ad-format="auto"
+      data-full-width-responsive="true"
+    />
+  );
+}
+
+export function AdSlot({ onUpgrade, ads }) {
   const { t } = useI18n();
+  const consent = useConsent();
+
+  if (ads && ads.slot && consent === 'granted') {
+    return (
+      <aside className="ad-slot ad-network" aria-label={t('Publicité')}>
+        <span className="ad-label">{t('Publicité')}</span>
+        <NetworkAd ads={ads} />
+        <button type="button" className="secondary-button" onClick={onUpgrade}>{t('Supprimer les publicités')}</button>
+      </aside>
+    );
+  }
 
   return (
     <aside className="ad-slot" aria-label={t('Publicité')}>

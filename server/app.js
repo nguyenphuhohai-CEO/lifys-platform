@@ -69,15 +69,16 @@ export function createApp(config) {
   });
 
   app.use(express.json({ limit: '100kb' }));
+  const adsEnabled = Boolean(config.ads?.client);
+  const csp = adsEnabled
+    ? "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.adtrafficquality.google; connect-src 'self' https://*.googlesyndication.com https://*.google.com https://*.adtrafficquality.google; frame-src https://*.googlesyndication.com https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    : "default-src 'self'; img-src 'self' data: https://images.unsplash.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-    res.setHeader(
-      'Content-Security-Policy',
-      "default-src 'self'; img-src 'self' data: https://images.unsplash.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
-    );
+    res.setHeader('Content-Security-Policy', csp);
     if (config.nodeEnv === 'production') {
       res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
     }
@@ -253,7 +254,9 @@ export function createApp(config) {
   const billingConfigured = () => Boolean(config.billing.secretKey && config.billing.premiumPriceId);
 
   app.get('/api/billing/plans', (_req, res) => {
-    res.json({ plans: getPlans(config), checkoutAvailable: billingConfigured() });
+    res.json({ plans: getPlans(config), checkoutAvailable: billingConfigured(),
+      ads: adsEnabled ? { client: config.ads.client, slot: config.ads.slot } : null,
+    });
   });
 
   app.post('/api/billing/checkout', requireAuth, requireVerified, async (req, res, next) => {

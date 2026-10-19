@@ -1070,3 +1070,7 @@ textarea:focus-visible {
 .plan-price small { font-size: 1rem; font-weight: 400; }
 .plan-tagline { margin: 0; color: var(--primary-deep); font-weight: 600; }
 .plan-card ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.consent-banner{position:fixed;left:1rem;right:1rem;bottom:1rem;z-index:50;max-width:720px;margin:0 auto;display:flex;gap:1rem;align-items:center;flex-wrap:wrap;padding:1rem 1.25rem;border-radius:14px;background:#fff;color:#1f2430;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.consent-banner p{margin:0;flex:1 1 320px;font-size:.9rem}
+.consent-actions{display:flex;gap:.5rem}
+.ad-network{display:block}
