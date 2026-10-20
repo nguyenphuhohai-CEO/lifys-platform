@@ -556,3 +556,24 @@ test('gallery photos, content reports with auto-hide, tonight toggle and minimum
     await server.close();
   }
 });
+test('hub lists every site of the account', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false' });
+
+  try {
+    const user = await registerUser(server.baseUrl, 'hub@example.com', { mode: 'amoureux' });
+    const first = await request(server.baseUrl, '/api/hub', { headers: user.auth });
+    assert.equal(first.status, 200);
+    assert.deepEqual(Object.keys(first.body.sites), ['amoureux']);
+    assert.equal(first.body.sites.amoureux.completed, false);
+
+    const switched = await request(server.baseUrl, '/api/auth/switch-site', {
+      method: 'POST',
+      headers: user.auth,
+      body: JSON.stringify({ site: 'professionnel' }),
+    });
+    const second = await request(server.baseUrl, '/api/hub', { headers: { authorization: `Bearer ${switched.body.token}` } });
+    assert.deepEqual(Object.keys(second.body.sites).sort(), ['amoureux', 'professionnel']);
+  } finally {
+    await server.close();
+  }
+});

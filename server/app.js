@@ -334,6 +334,10 @@ export function createApp(config) {
     sendSession(res, req.auth.token, database.getProfileByUserId(req.auth.userId));
   });
 
+  app.get('/api/hub', requireAuth, (req, res) => {
+    res.json({ sites: database.getAccountOverview(req.auth.userId) });
+  });
+
   app.get('/api/bootstrap', requireAuth, (req, res) => {
     res.json({
       profile: database.getProfileByUserId(req.auth.userId),

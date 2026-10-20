@@ -1183,6 +1183,23 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
+/* Barre des sites du compte */
+.site-rail { display: flex; gap: .5rem; padding: .6rem 1.2rem; overflow-x: auto; background: rgba(255,255,255,.55); border-bottom: 1px solid var(--line); }
+.site-tab { --primary: #6646c8; position: relative; display: flex; align-items: center; gap: .55rem; flex: 1 0 11rem; padding: .5rem .8rem; border: 2px solid transparent; border-radius: 999px; background: rgba(255,255,255,.8); color: #222; cursor: pointer; text-align: left; font: inherit; }
+.site-tab[data-site='amoureux'] { --primary: #e6007e; }
+.site-tab[data-site='professionnel'] { --primary: #0a66c2; }
+.site-tab[data-site='amical'] { --primary: #f5a000; }
+.site-tab[data-site='sans-lendemain'] { --primary: #ff4458; }
+.site-tab[data-site='mariage'] { --primary: #b08a3e; }
+.site-tab:hover { border-color: var(--primary); }
+.site-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.site-tab.not-joined:not(.active) { opacity: .7; border-style: dashed; border-color: var(--primary); }
+.site-tab-icon { font-size: 1.3rem; }
+.site-tab-body { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.site-tab-body small { opacity: .85; }
+.site-tab-badge { position: absolute; top: -.35rem; right: .4rem; min-width: 1.3rem; padding: 0 .35rem; border-radius: 999px; background: #d00; color: #fff; font-size: .75rem; font-weight: 700; text-align: center; }
+.app-shell[data-site='sans-lendemain'] .site-rail { background: rgba(0,0,0,.25); }
+
 .site-card[data-site='amoureux'] { --primary: #e6007e; --primary-deep: #a3005a; }
 .site-card[data-site='professionnel'] { --primary: #0a66c2; --primary-deep: #004182; }
 .site-card[data-site='amical'] { --primary: #f5a000; --primary-deep: #b46f00; }

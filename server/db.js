@@ -1243,6 +1243,24 @@ export function createDatabase(databaseFile, options = {}) {
       : { count: profiles.length, profiles: [], locked: true };
   }
 
+  // Vue d'ensemble du compte : une entrée par site, avec ce qui attend l'utilisateur.
+  function getAccountOverview(userId) {
+    const sites = {};
+    for (const id of listAccountUserIds(userId)) {
+      const profile = getProfileByUserId(id);
+      if (!profile || profile.status === 'suspended') continue;
+      const conversations = listConversationsForUser(id);
+      sites[profile.mode] = {
+        joined: true,
+        completed: Boolean(profile.age && profile.city && profile.bio),
+        matches: listMatchesForUser(id).length,
+        conversations: conversations.length,
+        awaitingReply: conversations.filter((c) => c.messages.at(-1)?.sender === 'them').length,
+      };
+    }
+    return sites;
+  }
+
   function deleteAccount(userId) {
     return statements.deleteUser.run(userId).changes > 0;
   }
@@ -1273,6 +1291,7 @@ export function createDatabase(databaseFile, options = {}) {
     getUserById,
     getAccountByEmail,
     listAccountUserIds,
+    getAccountOverview,
     joinSite,
     createEmailVerification,
     verifyEmailToken,

@@ -50,6 +50,9 @@ export const api = {
   getSession(token) {
     return apiRequest('/api/auth/session', { token });
   },
+  getHub(token) {
+    return apiRequest('/api/hub', { token });
+  },
   getBootstrap(token) {
     return apiRequest('/api/bootstrap', { token });
   },

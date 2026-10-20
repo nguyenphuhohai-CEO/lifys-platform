@@ -6,6 +6,7 @@ import { GalleryManager, PhotoStrip } from './components/Gallery';
 import Onboarding from './components/Onboarding';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
 import SiteFooter from './components/SiteFooter';
+import SiteRail from './components/SiteRail';
 import PricingPanel, { AdSlot } from './components/Pricing';
 import ConsentBanner from './components/ConsentBanner';
 import ToastRegion from './components/ToastRegion';
@@ -802,9 +803,6 @@ function App({ site }) {
 
         <div className="topbar-actions">
           <LanguageSwitcher />
-          <select className="site-switcher" aria-label={t('Changer de site')} value={site} onChange={(event) => handleSiteChange(event.target.value)}>
-            {Object.entries(SITES).map(([id, item]) => <option key={id} value={id}>{item.icon} {item.brand}</option>)}
-          </select>
           {isPremium ? <span className="tag">{t('Premium')}</span> : null}
           <span className="prototype-badge">{currentUser.email}</span>
           <button type="button" className="secondary-button" onClick={handleResetPrototype} disabled={resetting}>
@@ -815,6 +813,8 @@ function App({ site }) {
           </button>
         </div>
       </header>
+
+      <SiteRail token={token} site={site} refreshKey={`${view}:${matches.length}:${conversations.length}:${profile?.age ?? ''}${profile?.city ?? ''}`} onSwitch={handleSiteChange} />
 
       <main className="page-shell">
         <section className="local-notice" aria-label={t('Information')}>

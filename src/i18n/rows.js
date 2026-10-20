@@ -587,5 +587,10 @@ export const ROWS = [
   ['Continuer', 'Continue', 'Continuar', 'Tiếp tục'],
   ['Terminer', 'Finish', 'Terminar', 'Hoàn tất'],
   ['Plus tard', 'Later', 'Más tarde', 'Để sau'],
+  ['Mes sites Lifys', 'My Lifys sites', 'Mis sitios Lifys', 'Các trang Lifys của tôi'],
+  ['Rejoindre', 'Join', 'Unirse', 'Tham gia'],
+  ['Profil à compléter', 'Profile to complete', 'Perfil por completar', 'Hồ sơ cần hoàn thiện'],
+  ['{count} match(s)', '{count} match(es)', '{count} match(es)', '{count} lượt ghép đôi'],
+  ['Messages en attente de réponse', 'Messages awaiting your reply', 'Mensajes pendientes de respuesta', 'Tin nhắn chờ bạn trả lời'],
 ];
 
