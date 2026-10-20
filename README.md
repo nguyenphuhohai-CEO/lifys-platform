@@ -153,6 +153,11 @@ npm test
 - **E-mails** : `SMTP_URL` (ex. `smtps://user:pass@smtp.example.com:465`) et `MAIL_FROM` ; l’adresse d’envoi doit appartenir à un domaine authentifié (SPF/DKIM) chez votre fournisseur (Brevo, Mailjet, Postmark, Amazon SES…). Au démarrage, le log indique `SMTP: connexion OK` ou l’erreur. En production, `SMTP_URL` est obligatoire tant que la vérification d’e-mail est active.
 - Santé : `GET /api/health`. Sauvegardez régulièrement le fichier `/data/lifys.sqlite`.
 
+## Photos et sauvegardes
+
+- **Photos** : les membres téléversent une image JPEG/PNG/WebP (3 Mo max, format vérifié par signature) depuis la page Profil. Les fichiers sont stockés dans `UPLOAD_DIR` (`/data/uploads` en production), servis sous `/uploads/` et supprimés au remplacement de la photo ou à la suppression du compte. Les URL externes restent acceptées.
+- **Sauvegardes** : en production, la base SQLite est copiée à chaud toutes les `BACKUP_INTERVAL_HOURS` (24 h) dans `BACKUP_DIR` (`/data/backups`) ; les `BACKUP_KEEP` (14) plus récentes sont conservées. Restauration : arrêter le service, remplacer `lifys.sqlite` par la copie voulue, redémarrer. Ces copies sont sur le même disque : activez aussi les *snapshots* du disque Render et copiez régulièrement `/data` hors site (photos incluses).
+
 ## Offres : gratuit avec publicités / Premium sans publicités
 
 Deux formules : **Gratuit** (publicités affichées) et **Premium** (abonnement mensuel, aucune publicité). Le plan est stocké sur le compte (plan) et exposé dans le profil ; les emplacements publicitaires (AdSlot) disparaissent pour les abonnés. Le paiement passe par Stripe Checkout : configurer STRIPE_SECRET_KEY, STRIPE_PREMIUM_PRICE_ID, STRIPE_WEBHOOK_SECRET (voir .env.example) et déclarer le webhook POST /api/billing/webhook (événements checkout.session.completed, customer.subscription.updated, customer.subscription.deleted). Par défaut, les publicités sont un encart interne. Avec ADSENSE_CLIENT_ID et ADSENSE_SLOT_ID, Google AdSense est activé : la CSP est élargie automatiquement, un bandeau de consentement (Accepter/Refuser, modifiable via « Gérer les cookies » en pied de page) s’affiche, et le script publicitaire n’est chargé qu’après acceptation. Le bandeau et les publicités disparaissent pour les abonnés Premium.
@@ -275,6 +280,7 @@ Ne pas y stocker de données sensibles réelles sans :
 - `npm run build`
 - scan des secrets sur les fichiers modifiés
 - test manuel du backend et du frontend connecté
+
 
 
 

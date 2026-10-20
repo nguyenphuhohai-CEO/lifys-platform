@@ -56,6 +56,14 @@ export const api = {
   updateProfile(token, payload) {
     return apiRequest('/api/profile', { method: 'PUT', token, body: payload });
   },
+  async uploadPhoto(token, file) {
+    const response = await fetch(`${API_BASE_URL}/api/profile/photo`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type, Authorization: 'Bearer ' + token },
+      body: file,
+    });
+    return parseResponse(response);
+  },
   getDiscovery(token, filters) {
     const search = new URLSearchParams({
       mode: filters.activeMode ?? 'all',

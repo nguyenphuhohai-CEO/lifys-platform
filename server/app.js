@@ -17,6 +17,7 @@ import { applyStripeEvent, createCheckoutSession, createPortalSession, getPlans,
 import { buildVerificationEmail } from './email-templates.js';
 import { createMailer } from './mailer.js';
 import { createRateLimiter } from './rate-limit.js';
+import { createUploadStore, detectImageType, MAX_UPLOAD_BYTES, ownUploadPattern, UPLOAD_MIME_TYPES } from './uploads.js';
 
 export const TERMS_VERSION = '2026-10-18';
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -50,6 +51,7 @@ export function createApp(config) {
     requireEmailVerification: config.requireEmailVerification,
   });
   const mailer = createMailer(config);
+  const uploads = createUploadStore(config.uploadDir);
   const app = express();
 
   app.disable('x-powered-by');
@@ -91,6 +93,18 @@ export function createApp(config) {
     message: 'Trop de tentatives. Réessayez dans quelques minutes.',
   });
   app.use('/api/auth', authLimiter);
+  const uploadLimiter = createRateLimiter({
+    windowMs: 60 * 60 * 1000,
+    max: config.nodeEnv === 'test' ? 1000 : 30,
+    message: 'Trop d’envois de photos. Réessayez plus tard.',
+  });
+  app.use('/uploads', express.static(uploads.directory, {
+    index: false,
+    dotfiles: 'ignore',
+    maxAge: '30d',
+    immutable: true,
+    setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff'),
+  }));
 
   function requireAuth(req, _res, next) {
     const authorization = req.headers.authorization ?? '';
@@ -314,11 +328,39 @@ export function createApp(config) {
         throw createHttpError(400, 'Nom, âge, ville et bio sont requis.');
       }
 
-      res.json({ profile: database.updateUserProfile(req.auth.userId, profile) });
+      const previous = database.getProfileByUserId(req.auth.userId)?.avatar ?? '';
+      if (profile.avatar.startsWith('/uploads/') && !ownUploadPattern(req.auth.userId).test(profile.avatar)) {
+        throw createHttpError(400, 'Photo invalide.');
+      }
+
+      const updated = database.updateUserProfile(req.auth.userId, profile);
+      if (previous !== profile.avatar) uploads.removeByUrl(previous);
+      res.json({ profile: updated });
     } catch (error) {
       next(error);
     }
   });
+
+  app.post(
+    '/api/profile/photo',
+    requireAuth,
+    uploadLimiter,
+    express.raw({ type: UPLOAD_MIME_TYPES, limit: MAX_UPLOAD_BYTES }),
+    (req, res, next) => {
+      try {
+        if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+          throw createHttpError(415, 'Envoyez une image JPEG, PNG ou WebP.');
+        }
+        const current = database.getProfileByUserId(req.auth.userId)?.avatar ?? '';
+        if (!detectImageType(req.body)) throw createHttpError(415, 'Envoyez une image JPEG, PNG ou WebP.');
+        uploads.removeAllForUser(req.auth.userId, current);
+        const url = uploads.save(req.auth.userId, req.body);
+        res.status(201).json({ url });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   app.get('/api/discovery', requireAuth, requireVerified, (req, res) => {
     res.json({
@@ -446,6 +488,7 @@ export function createApp(config) {
       }
 
       database.deleteAccount(req.auth.userId);
+      uploads.removeAllForUser(req.auth.userId);
       res.status(204).end();
     } catch (error) {
       next(error);
@@ -463,7 +506,7 @@ export function createApp(config) {
 
   if (fs.existsSync(config.staticDir)) {
     app.use(express.static(config.staticDir));
-    app.get(/^(?!\/api\/).*/, (req, res) => {
+    app.get(/^(?!\/(api|uploads)\/).*/, (req, res) => {
       res.sendFile('index.html', { root: config.staticDir });
     });
   }

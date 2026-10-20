@@ -42,7 +42,7 @@ export function sanitizeProfileInput(value = {}) {
     bio: `${value.bio ?? ''}`.trim(),
     interests: normalizeInterests(value.interests),
     mode: MODE_IDS.has(value.mode) ? value.mode : 'amoureux',
-    avatar: avatar && /^https?:\/\//i.test(avatar) ? avatar : '',
+    avatar: avatar && (/^https?:\/\//i.test(avatar) || /^\/uploads\/\d+-[a-f0-9]{32}\.(jpg|png|webp)$/.test(avatar)) ? avatar : '',
   };
 }
 

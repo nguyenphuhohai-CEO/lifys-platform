@@ -50,6 +50,12 @@ export function getConfig(overrides = {}) {
       premiumPriceCents: Number(overrides.PREMIUM_PRICE_CENTS ?? process.env.PREMIUM_PRICE_CENTS ?? 499),
       currency: `${overrides.PREMIUM_CURRENCY ?? process.env.PREMIUM_CURRENCY ?? 'eur'}`.toLowerCase(),
     },
+    uploadDir: overrides.UPLOAD_DIR ?? process.env.UPLOAD_DIR ?? path.join(path.dirname(databaseFile), 'uploads'),
+    backup: {
+      dir: overrides.BACKUP_DIR ?? process.env.BACKUP_DIR ?? path.join(path.dirname(databaseFile), 'backups'),
+      intervalHours: Number(overrides.BACKUP_INTERVAL_HOURS ?? process.env.BACKUP_INTERVAL_HOURS ?? (isProduction ? 24 : 0)) || 0,
+      keep: Math.max(1, Number(overrides.BACKUP_KEEP ?? process.env.BACKUP_KEEP ?? 14) || 14),
+    },
     ads: {
       client: `${overrides.ADSENSE_CLIENT_ID ?? process.env.ADSENSE_CLIENT_ID ?? ''}`.trim(),
       slot: `${overrides.ADSENSE_SLOT_ID ?? process.env.ADSENSE_SLOT_ID ?? ''}`.trim(),

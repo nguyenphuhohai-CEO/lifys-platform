@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 
 import { createApp } from './app.js';
+import { startBackupSchedule } from './backup.js';
 import { getConfig } from './config.js';
 
 const config = getConfig();
@@ -11,11 +12,18 @@ mailer.verify().then(
   (error) => console.error('SMTP: connexion impossible —', error.message),
 );
 
+const backups = startBackupSchedule(database.db, {
+  directory: config.backup.dir,
+  keep: config.backup.keep,
+  intervalHours: config.backup.intervalHours,
+});
+
 const server = createServer(app).listen(config.port, () => {
   console.log(`Lifys server listening on http://0.0.0.0:${config.port}`);
 });
 
 function shutdown() {
+  backups.stop();
   server.close(() => {
     database.db.close();
     process.exit(0);

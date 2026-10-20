@@ -104,6 +104,7 @@ function App() {
   const [plans, setPlans] = useState([]);
   const [checkoutAvailable, setCheckoutAvailable] = useState(false);
   const [ads, setAds] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [billingBusy, setBillingBusy] = useState(false);
   const [reportTarget, setReportTarget] = useState(null);
   const [reportReason, setReportReason] = useState('spam');
@@ -284,7 +285,7 @@ function App() {
     if (profileDraft.bio.trim().length < 20) {
       errors.bio = t('Décrivez-vous en au moins 20 caractères.');
     }
-    if (profileDraft.avatar && !/^https?:\/\//i.test(profileDraft.avatar.trim())) {
+    if (profileDraft.avatar && !/^(https?:\/\/|\/uploads\/)/i.test(profileDraft.avatar.trim())) {
       errors.avatar = t('Utilisez une URL commençant par http:// ou https://.');
     }
 
@@ -313,6 +314,28 @@ function App() {
       handleApiError(error, t('Impossible de démarrer votre session.'));
     } finally {
       setAuthSubmitting(false);
+    }
+  };
+
+  const handlePhotoSelected = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 3 * 1024 * 1024) {
+      setProfileErrors((current) => ({ ...current, avatar: t('Choisissez une image JPEG, PNG ou WebP de 3 Mo maximum.') }));
+      return;
+    }
+
+    setPhotoUploading(true);
+    try {
+      const { url } = await api.uploadPhoto(token, file);
+      updateProfileField('avatar', url);
+      setProfileErrors((current) => ({ ...current, avatar: undefined }));
+    } catch (error) {
+      setProfileErrors((current) => ({ ...current, avatar: error.message || t('Impossible d’envoyer la photo.') }));
+    } finally {
+      setPhotoUploading(false);
     }
   };
 
@@ -1036,9 +1059,18 @@ function App() {
                 </div>
 
                 <label>
+                  <span>{t('Photo')}</span>
+                  <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoSelected} disabled={photoUploading} />
+                  <small>{photoUploading ? t('Envoi en cours…') : t('JPEG, PNG ou WebP, 3 Mo maximum.')}</small>
+                  {profileDraft.avatar ? (
+                    <button type="button" className="link-button" onClick={() => updateProfileField('avatar', '')}>{t('Retirer la photo')}</button>
+                  ) : null}
+                  {profileErrors.avatar ? <small className="field-error">{profileErrors.avatar}</small> : null}
+                </label>
+
+                <label>
                   <span>{t('Photo (URL)')}</span>
                   <input value={profileDraft.avatar} onChange={(event) => updateProfileField('avatar', event.target.value)} aria-invalid={Boolean(profileErrors.avatar)} />
-                  {profileErrors.avatar ? <small className="field-error">{profileErrors.avatar}</small> : null}
                 </label>
 
                 <label>

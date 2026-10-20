@@ -348,5 +348,14 @@ export const ROWS = [
   ['Refuser', 'Decline', 'Rechazar', 'Từ chối'],
   ['Accepter', 'Accept', 'Aceptar', 'Đồng ý'],
   ['Gérer les cookies', 'Manage cookies', 'Gestionar cookies', 'Quản lý cookie'],
+  ['Photo', 'Photo', 'Foto', 'Ảnh'],
+  ['JPEG, PNG ou WebP, 3 Mo maximum.', 'JPEG, PNG or WebP, 3 MB maximum.', 'JPEG, PNG o WebP, 3 MB como máximo.', 'JPEG, PNG hoặc WebP, tối đa 3 MB.'],
+  ['Envoi en cours…', 'Uploading…', 'Enviando…', 'Đang tải lên…'],
+  ['Retirer la photo', 'Remove photo', 'Quitar la foto', 'Xóa ảnh'],
+  ['Choisissez une image JPEG, PNG ou WebP de 3 Mo maximum.', 'Choose a JPEG, PNG or WebP image of 3 MB maximum.', 'Elija una imagen JPEG, PNG o WebP de 3 MB como máximo.', 'Chọn ảnh JPEG, PNG hoặc WebP tối đa 3 MB.'],
+  ['Impossible d’envoyer la photo.', 'Unable to upload the photo.', 'No se pudo enviar la foto.', 'Không thể tải ảnh lên.'],
+  ['Envoyez une image JPEG, PNG ou WebP.', 'Send a JPEG, PNG or WebP image.', 'Envíe una imagen JPEG, PNG o WebP.', 'Hãy gửi ảnh JPEG, PNG hoặc WebP.'],
+  ['Photo invalide.', 'Invalid photo.', 'Foto no válida.', 'Ảnh không hợp lệ.'],
+  ['Trop d’envois de photos. Réessayez plus tard.', 'Too many photo uploads. Try again later.', 'Demasiados envíos de fotos. Inténtelo más tarde.', 'Tải ảnh quá nhiều. Hãy thử lại sau.'],
 ];
 
