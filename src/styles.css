@@ -1188,3 +1188,30 @@ textarea:focus-visible {
 .site-card[data-site='amical'] { --primary: #f5a000; --primary-deep: #b46f00; }
 .site-card[data-site='sans-lendemain'] { --primary: #ff4458; --primary-deep: #8f1021; }
 .site-card[data-site='mariage'] { --primary: #b08a3e; --primary-deep: #7a5b1c; }
+.app-shell[data-site] a:not(.site-card) {
+  color: var(--primary-deep);
+}
+
+.app-shell[data-site='sans-lendemain'] a:not(.site-card) {
+  color: #ff8a98;
+}
+
+.app-shell[data-site='sans-lendemain'] input,
+.app-shell[data-site='sans-lendemain'] select,
+.app-shell[data-site='sans-lendemain'] textarea {
+  background: #2d2d3a;
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.app-shell[data-site='sans-lendemain'] .secondary-button,
+.app-shell[data-site='sans-lendemain'] .nav-button {
+  background: #2d2d3a;
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.app-shell[data-site='sans-lendemain'] .nav-button.active {
+  background: var(--primary);
+  color: #fff;
+}
