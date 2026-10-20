@@ -146,8 +146,17 @@ function serializePublicProfile(row) {
   };
 }
 
+// Sur ces sites, un match disparaît si personne n'écrit dans les 24 h.
+const EXPIRING_SITES = new Set(['amoureux', 'sans-lendemain', 'amical']);
+const MATCH_TTL_MS = 24 * 60 * 60 * 1000;
+
+function isExpired(expiresAt) {
+  return Boolean(expiresAt) && expiresAt <= new Date().toISOString();
+}
+
 function serializeMatch(row) {
   return {
+    expiresAt: row.expires_at ?? null,
     id: row.match_public_id,
     profileId: row.profile_public_id,
     name: row.name,
@@ -333,6 +342,10 @@ export function createDatabase(databaseFile, options = {}) {
   }
   if (!profileColumns.has('photos')) {
     db.exec("ALTER TABLE profiles ADD COLUMN photos TEXT NOT NULL DEFAULT '[]'");
+  }
+  const matchColumns = new Set(db.prepare('PRAGMA table_info(matches)').all().map((column) => column.name));
+  if (!matchColumns.has('expires_at')) {
+    db.exec('ALTER TABLE matches ADD COLUMN expires_at TEXT');
   }
   const messageColumns = new Set(db.prepare('PRAGMA table_info(messages)').all().map((column) => column.name));
   if (!messageColumns.has('read_at')) {
@@ -520,6 +533,7 @@ export function createDatabase(databaseFile, options = {}) {
         matches.public_id AS match_public_id,
         matches.reason,
         matches.created_at,
+        matches.expires_at,
         profiles.public_id AS profile_public_id,
         profiles.name,
         profiles.city,
@@ -543,6 +557,7 @@ export function createDatabase(databaseFile, options = {}) {
         conversations.public_id AS conversation_public_id,
         conversations.created_at AS conversation_created_at,
         matches.public_id AS match_public_id,
+        matches.expires_at,
         profiles.public_id AS profile_public_id,
         profiles.name,
         profiles.mode,
@@ -798,16 +813,19 @@ export function createDatabase(databaseFile, options = {}) {
     const reason = buildMatchReason(currentProfile, targetProfile, reciprocal);
     const createdAt = now();
 
-    statements.insertMatch.run(
+    const inserted = statements.insertMatch.run(
       createPublicId('match'),
       key,
       Math.min(userId, targetUserId),
       Math.max(userId, targetUserId),
       reason,
       createdAt,
-    );
+    ).changes > 0;
 
     const matchRow = statements.findMatchByPairKey.get(key);
+    if (inserted && EXPIRING_SITES.has(currentProfile.mode)) {
+      db.prepare('UPDATE matches SET expires_at = ? WHERE id = ?').run(new Date(Date.now() + MATCH_TTL_MS).toISOString(), matchRow.id);
+    }
     statements.insertConversation.run(createPublicId('conversation'), matchRow.id, createdAt);
     const conversationRow = statements.findConversationByMatchId.get(matchRow.id);
     const existingMessages = statements.listMessagesForConversation.all({
@@ -890,11 +908,12 @@ export function createDatabase(databaseFile, options = {}) {
   }
 
   function listMatchesForUser(userId) {
-    return statements.listMatchesForUser.all({ user_id: userId }).map(serializeMatch);
+    return statements.listMatchesForUser.all({ user_id: userId }).filter((row) => !isExpired(row.expires_at)).map(serializeMatch);
   }
 
   function listConversationsForUser(userId) {
-    return statements.listConversationsForUser.all({ user_id: userId }).map((conversation) => ({
+    return statements.listConversationsForUser.all({ user_id: userId }).filter((row) => !isExpired(row.expires_at)).map((conversation) => ({
+      expiresAt: conversation.expires_at ?? null,
       id: conversation.conversation_public_id,
       matchId: conversation.match_public_id,
       profileId: conversation.profile_public_id,
@@ -938,7 +957,12 @@ export function createDatabase(databaseFile, options = {}) {
     if (statements.isBlockedPair.get({ a: userId, b: otherUserId }) || statements.findUserById.get(otherUserId)?.status !== 'active') {
       return null;
     }
+    const match = db.prepare('SELECT expires_at FROM matches WHERE id = (SELECT match_id FROM conversations WHERE id = ?)').get(conversation.id);
+    if (isExpired(match?.expires_at)) {
+      return null;
+    }
     statements.insertMessage.run(createPublicId('message'), conversation.id, userId, `${text}`.trim(), now());
+    db.prepare('UPDATE matches SET expires_at = NULL WHERE id = (SELECT match_id FROM conversations WHERE id = ?)').run(conversation.id);
     return listConversationsForUser(userId).find((item) => item.id === conversationPublicId) ?? null;
   }
 

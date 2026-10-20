@@ -622,5 +622,8 @@ export const ROWS = [
   ['Vu', 'Seen', 'Visto', 'Đã xem'],
   ['Envoyé', 'Sent', 'Enviado', 'Đã gửi'],
   ['Top du jour', 'Top picks', 'Selección del día', 'Gợi ý hàng đầu'],
+  ['Ce match expire dans {time} : écrivez un message pour le garder.', 'This match expires in {time}: send a message to keep it.', 'Este match caduca en {time}: escribe un mensaje para conservarlo.', 'Lượt ghép đôi này hết hạn sau {time}: hãy nhắn tin để giữ lại.'],
+  ['{h} h {m} min', '{h} h {m} min', '{h} h {m} min', '{h} giờ {m} phút'],
+  ['{m} min', '{m} min', '{m} min', '{m} phút'],
 ];
 

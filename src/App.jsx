@@ -7,6 +7,7 @@ import Onboarding from './components/Onboarding';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
 import SiteFooter from './components/SiteFooter';
 import SiteRail from './components/SiteRail';
+import ExpiryNotice from './components/ExpiryNotice';
 import AdminPanel from './components/AdminPanel';
 import PricingPanel, { AdSlot } from './components/Pricing';
 import ConsentBanner from './components/ConsentBanner';
@@ -1161,6 +1162,7 @@ function App({ site }) {
                       <h3>{match.name}</h3>
                       <p>{match.city || t('Ville non précisée')} · {t(getModeById(match.mode).label)}</p>
                       <small>{translateReason(match.reason)}</small>
+                      <ExpiryNotice expiresAt={match.expiresAt} />
                     </div>
                     <button type="button" className="secondary-button" onClick={() => {
                       const conversation = conversations.find((item) => item.profileId === match.profileId);
@@ -1216,6 +1218,7 @@ function App({ site }) {
                       <small>{t(getModeById(selectedConversationData.mode).label)}</small>
                     </div>
                   </div>
+                  <ExpiryNotice expiresAt={selectedConversationData.expiresAt} />
 
                   <div className="chat-body" aria-live="polite">
                     {selectedConversationData.messages.map((message, index, list) => (

@@ -26,6 +26,7 @@ async function startTestServer(extraConfig = {}) {
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     mailer,
+    database,
     async close() {
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
       database.db.close();
@@ -623,6 +624,41 @@ test('messages track unread count and read receipts', async () => {
     const asA = await request(server.baseUrl, '/api/conversations', { headers: a.auth });
     const sentByA = asA.body.conversations[0].messages.find((message) => message.text === 'Bonjour');
     assert.ok(sentByA.readAt);
+  } finally {
+    await server.close();
+  }
+});
+test('matches expire after 24h without a message on expiring sites', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false' });
+
+  try {
+    const a = await registerUser(server.baseUrl, 'ea@example.com', { mode: 'amoureux' });
+    const b = await registerUser(server.baseUrl, 'eb@example.com', { mode: 'amoureux' });
+    const complete = (auth, name) => request(server.baseUrl, '/api/profile', {
+      method: 'PUT',
+      headers: auth,
+      body: JSON.stringify({ name, age: 30, city: 'Paris', bio: 'Profil complet pour tester l’expiration des matchs.', interests: ['design'], mode: 'amoureux', avatar: '' }),
+    });
+    const profileA = await complete(a.auth, 'Ava');
+    const profileB = await complete(b.auth, 'Noah');
+    const like = (auth, id) => request(server.baseUrl, '/api/interactions/like', { method: 'POST', headers: auth, body: JSON.stringify({ profileId: id }) });
+    await like(b.auth, profileA.body.profile.id);
+    await like(a.auth, profileB.body.profile.id);
+
+    const first = await request(server.baseUrl, '/api/matches', { headers: a.auth });
+    assert.ok(first.body.matches[0].expiresAt);
+
+    const conversations = await request(server.baseUrl, '/api/conversations', { headers: a.auth });
+    const conversationId = conversations.body.conversations[0].id;
+    await request(server.baseUrl, `/api/conversations/${conversationId}/messages`, { method: 'POST', headers: a.auth, body: JSON.stringify({ text: 'Salut' }) });
+    const kept = await request(server.baseUrl, '/api/matches', { headers: a.auth });
+    assert.equal(kept.body.matches[0].expiresAt, null);
+
+    server.database.db.prepare('UPDATE matches SET expires_at = ?').run(new Date(Date.now() - 1000).toISOString());
+    const expired = await request(server.baseUrl, '/api/matches', { headers: a.auth });
+    assert.equal(expired.body.matches.length, 0);
+    const blocked = await request(server.baseUrl, `/api/conversations/${conversationId}/messages`, { method: 'POST', headers: b.auth, body: JSON.stringify({ text: 'Trop tard' }) });
+    assert.equal(blocked.status, 404);
   } finally {
     await server.close();
   }
