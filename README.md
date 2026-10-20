@@ -289,3 +289,8 @@ Ne pas y stocker de données sensibles réelles sans :
 ## Sites par catégorie, compte unique
 
 Chaque catégorie est un site à part entière (`/Amical`, `/Amoureux`, `/Sans-lendemain`, `/Mariage`, `/Professionnel`) avec sa marque, son thème, son vocabulaire, son profil et son pool de découverte. Le **compte est unique** : un même e-mail et un même mot de passe ouvrent les 5 sites, le profil du site étant créé à la première visite. Vérification d'e-mail, suspension, abonnement Premium et suppression du compte s'appliquent à tous les sites. L'API accepte le site via `site` / `mode` (`/api/auth/login`, `/api/auth/register`) et propose `POST /api/auth/switch-site` pour passer d'un site à l'autre sans se reconnecter. `/` est un portail vers les 5 sites. Les bases existantes sont migrées automatiquement.
+
+
+## Profils spécifiques par site
+
+Chaque site a ses champs facultatifs (`src/data/siteFields.js`, validés côté serveur et stockés dans `profiles.details`) : situation/enfants/tabac pour Amoureux, activités/disponibilités pour Amical, attentes/discrétion/consentement/« ce soir » (12 h) pour Sans lendemain, religion/valeurs/projet d'enfants pour Mariage, métier/secteur/compétences/LinkedIn pour Professionnel. La découverte filtre par âge, détail (secteur, valeurs, activités…) et « ce soir », et trie par score de compatibilité propre au site (`computeCompatibility`). Pro : message d'accroche à l'envoi du like (devient le premier message au match). Amoureux : Super like (1/jour gratuit, 5/jour Premium). Le badge « Profil vérifié » signifie e-mail confirmé + photo téléversée ; ce n'est pas une vérification d'identité. Les champs sensibles sont facultatifs (voir la politique de confidentialité, section 10).

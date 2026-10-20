@@ -1,4 +1,4 @@
-﻿import crypto from 'node:crypto';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 
 import express from 'express';
@@ -395,6 +395,10 @@ export function createApp(config) {
         activeMode: req.query.mode ?? 'all',
         query: req.query.query ?? '',
         city: req.query.city ?? '',
+        ageMin: req.query.ageMin,
+        ageMax: req.query.ageMax,
+        detail: req.query.detail ?? '',
+        tonight: req.query.tonight,
       }),
     });
   });
@@ -405,7 +409,15 @@ export function createApp(config) {
         throw createHttpError(400, 'profileId est requis.');
       }
 
-      res.json(database.likeProfile(req.auth.userId, req.body.profileId));
+      const result = database.likeProfile(req.auth.userId, req.body.profileId, {
+        note: req.body.note,
+        superLike: req.body.superLike === true,
+      });
+      if (result.limited) {
+        throw createHttpError(429, 'Limite de Super likes atteinte aujourd’hui. Passez Premium pour en avoir plus.');
+      }
+
+      res.json(result);
     } catch (error) {
       next(error);
     }

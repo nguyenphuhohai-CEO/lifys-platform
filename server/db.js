@@ -5,7 +5,11 @@ import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 
 import { DEMO_PROFILES, MODES } from '../src/data/demoData.js';
+import { computeCompatibility, sanitizeDetails } from '../src/data/siteFields.js';
 import { normalizeEmail } from './auth.js';
+
+const TONIGHT_DURATION_MS = 12 * 60 * 60 * 1000;
+const SUPER_LIKES_PER_DAY = { free: 1, premium: 5 };
 
 const MODE_IDS = new Set(MODES.map((mode) => mode.id));
 
@@ -35,7 +39,10 @@ export function sanitizeProfileInput(value = {}) {
   const age = Number(value.age);
   const avatar = `${value.avatar ?? ''}`.trim();
 
+  const mode = MODE_IDS.has(value.mode) ? value.mode : 'amoureux';
+
   return {
+    details: sanitizeDetails(mode, value.details),
     name: `${value.name ?? ''}`.trim(),
     age: Number.isFinite(age) && age >= 18 && age <= 80 ? age : null,
     city: `${value.city ?? ''}`.trim(),
@@ -52,6 +59,23 @@ function parseInterests(rawValue) {
   } catch {
     return [];
   }
+}
+
+function parseDetails(rawValue) {
+  try {
+    const parsed = JSON.parse(rawValue ?? '{}');
+    const { tonightUntil, ...details } = parsed && typeof parsed === 'object' ? parsed : {};
+    if (tonightUntil && new Date(tonightUntil).getTime() > Date.now()) {
+      details.tonight = true;
+    }
+    return details;
+  } catch {
+    return {};
+  }
+}
+
+function isVerifiedProfile(row) {
+  return Boolean(row.email_verified_at) && /^\/uploads\//.test(row.avatar ?? '');
 }
 
 function isPremium(row) {
@@ -71,6 +95,8 @@ function serializeProfile(row) {
     city: row.city,
     bio: row.bio,
     interests: parseInterests(row.interests),
+    details: parseDetails(row.details),
+    verified: isVerifiedProfile(row),
     mode: row.mode,
     avatar: row.avatar,
     isDemo: Boolean(row.is_demo),
@@ -87,6 +113,8 @@ function serializePublicProfile(row) {
     city: row.city,
     bio: row.bio,
     interests: parseInterests(row.interests),
+    details: parseDetails(row.details),
+    verified: isVerifiedProfile(row),
     mode: row.mode,
     avatar: row.avatar,
     isDemo: Boolean(row.is_demo),
@@ -245,6 +273,17 @@ export function createDatabase(databaseFile, options = {}) {
       db.exec(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
     }
   }
+  const profileColumns = new Set(db.prepare('PRAGMA table_info(profiles)').all().map((column) => column.name));
+  if (!profileColumns.has('details')) {
+    db.exec("ALTER TABLE profiles ADD COLUMN details TEXT NOT NULL DEFAULT '{}'");
+  }
+  const likeColumns = new Set(db.prepare('PRAGMA table_info(likes)').all().map((column) => column.name));
+  if (!likeColumns.has('note')) {
+    db.exec("ALTER TABLE likes ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+  }
+  if (!likeColumns.has('super')) {
+    db.exec('ALTER TABLE likes ADD COLUMN super INTEGER NOT NULL DEFAULT 0');
+  }
   if (!userColumns.has('site')) {
     db.exec('UPDATE users SET site = COALESCE((SELECT mode FROM profiles WHERE profiles.user_id = users.id), \'amoureux\')');
   }
@@ -371,10 +410,16 @@ export function createDatabase(databaseFile, options = {}) {
     `),
     updateProfile: db.prepare(`
       UPDATE profiles
-      SET name = @name, age = @age, city = @city, bio = @bio, interests = @interests, mode = @mode, avatar = @avatar, updated_at = @updated_at
+      SET name = @name, age = @age, city = @city, bio = @bio, interests = @interests, mode = @mode, avatar = @avatar, details = @details, updated_at = @updated_at
       WHERE user_id = @user_id
     `),
-    upsertLike: db.prepare(`INSERT OR IGNORE INTO likes (user_id, target_user_id, created_at) VALUES (?, ?, ?)`),
+    setProfileDetailsIfEmpty: db.prepare(`UPDATE profiles SET details = ? WHERE public_id = ? AND details = '{}'`),
+    upsertLike: db.prepare(`
+      INSERT INTO likes (user_id, target_user_id, created_at, note, super) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, target_user_id) DO UPDATE SET note = excluded.note, super = excluded.super
+    `),
+    getLike: db.prepare(`SELECT note, super FROM likes WHERE user_id = ? AND target_user_id = ?`),
+    countSuperLikesSince: db.prepare(`SELECT COUNT(*) AS count FROM likes WHERE user_id = ? AND super = 1 AND created_at >= ?`),
     deletePassForPair: db.prepare(`DELETE FROM passes WHERE user_id = ? AND target_user_id = ?`),
     upsertPass: db.prepare(`INSERT OR IGNORE INTO passes (user_id, target_user_id, created_at) VALUES (?, ?, ?)`),
     hiddenTargetIds: db.prepare(`
@@ -617,6 +662,10 @@ export function createDatabase(databaseFile, options = {}) {
 
   function updateUserProfile(userId, input) {
     const profile = sanitizeProfileInput(input);
+    const { tonight, ...storedDetails } = profile.details;
+    if (tonight) {
+      storedDetails.tonightUntil = new Date(Date.now() + TONIGHT_DURATION_MS).toISOString();
+    }
     statements.updateProfile.run({
       user_id: userId,
       name: profile.name,
@@ -626,6 +675,7 @@ export function createDatabase(databaseFile, options = {}) {
       interests: JSON.stringify(profile.interests),
       mode: profile.mode,
       avatar: profile.avatar,
+      details: JSON.stringify(storedDetails),
       updated_at: now(),
     });
     return getProfileByUserId(userId);
@@ -637,6 +687,11 @@ export function createDatabase(databaseFile, options = {}) {
     const siteMode = statements.findProfileByUserId.get(userId)?.mode ?? null;
     const query = `${filters.query ?? ''}`.trim().toLowerCase();
     const city = `${filters.city ?? ''}`.trim().toLowerCase();
+    const ageMin = Number(filters.ageMin) || 0;
+    const ageMax = Number(filters.ageMax) || 0;
+    const detail = `${filters.detail ?? ''}`.trim().toLowerCase();
+    const tonightOnly = filters.tonight === true || filters.tonight === 'true' || filters.tonight === '1';
+    const currentProfile = getProfileByUserId(userId);
 
     return statements.listProfilesExcludingUser.all({ user_id: userId, include_unverified: requireEmailVerification ? 0 : 1 })
       .filter((row) => !hiddenUserIds.has(row.user_id))
@@ -644,6 +699,10 @@ export function createDatabase(databaseFile, options = {}) {
       .filter((profile) => !siteMode || profile.mode === siteMode)
       .filter((profile) => activeMode === 'all' || profile.mode === activeMode)
       .filter((profile) => !city || profile.city.toLowerCase().includes(city))
+      .filter((profile) => !ageMin || (profile.age ?? 0) >= ageMin)
+      .filter((profile) => !ageMax || (profile.age ?? 0) <= ageMax)
+      .filter((profile) => !tonightOnly || profile.details.tonight)
+      .filter((profile) => !detail || Object.values(profile.details).flat().join(' ').toLowerCase().includes(detail))
       .filter((profile) => {
         if (!query) {
           return true;
@@ -653,7 +712,9 @@ export function createDatabase(databaseFile, options = {}) {
           .join(' ')
           .toLowerCase()
           .includes(query);
-      });
+      })
+      .map((profile) => (currentProfile ? { ...profile, compatibility: computeCompatibility(currentProfile, profile) } : profile))
+      .sort((left, right) => (right.compatibility?.score ?? 0) - (left.compatibility?.score ?? 0));
   }
 
   function getOrCreateMatch(userId, targetUserId, currentProfile, targetProfile) {
@@ -680,6 +741,13 @@ export function createDatabase(databaseFile, options = {}) {
     });
 
     if (!existingMessages.length) {
+      for (const [senderId, receiverId] of [[userId, targetUserId], [targetUserId, userId]]) {
+        const like = statements.getLike.get(senderId, receiverId);
+        if (like?.note) {
+          statements.insertMessage.run(createPublicId('message'), conversationRow.id, senderId, like.note, createdAt);
+        }
+      }
+
       statements.insertMessage.run(
         createPublicId('message'),
         conversationRow.id,
@@ -695,7 +763,7 @@ export function createDatabase(databaseFile, options = {}) {
     };
   }
 
-  function likeProfile(userId, profilePublicId) {
+  function likeProfile(userId, profilePublicId, options = {}) {
     const currentProfile = getProfileByUserId(userId);
     const targetProfile = getProfileByPublicId(profilePublicId);
 
@@ -712,7 +780,17 @@ export function createDatabase(databaseFile, options = {}) {
       return { matched: false, match: null, conversationId: null };
     }
 
-    statements.upsertLike.run(userId, targetProfile.userId, now());
+    const note = `${options.note ?? ''}`.trim().slice(0, 280);
+    const superLike = Boolean(options.superLike);
+    if (superLike) {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const used = statements.countSuperLikesSince.get(userId, since).count;
+      if (used >= SUPER_LIKES_PER_DAY[currentProfile.plan]) {
+        return { matched: false, match: null, conversationId: null, limited: true };
+      }
+    }
+
+    statements.upsertLike.run(userId, targetProfile.userId, now(), note, superLike ? 1 : 0);
     statements.deletePassForPair.run(userId, targetProfile.userId);
 
     const reciprocal = Boolean(statements.hasReciprocalLike.get(targetProfile.userId, userId));
@@ -931,6 +1009,9 @@ export function createDatabase(databaseFile, options = {}) {
 function seedDemoData(db, statements) {
   const existing = db.prepare('SELECT COUNT(*) AS count FROM users WHERE is_demo = 1').get();
   if (existing.count > 0) {
+    for (const demoProfile of DEMO_PROFILES) {
+      statements.setProfileDetailsIfEmpty.run(JSON.stringify(sanitizeDetails(demoProfile.mode, demoProfile.details)), demoProfile.id);
+    }
     return;
   }
 
@@ -963,6 +1044,7 @@ function seedDemoData(db, statements) {
         created_at: createdAt,
         updated_at: createdAt,
       });
+      statements.setProfileDetailsIfEmpty.run(JSON.stringify(sanitizeDetails(demoProfile.mode, demoProfile.details)), demoProfile.id);
     }
   });
 

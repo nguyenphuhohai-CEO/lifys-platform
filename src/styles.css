@@ -1222,3 +1222,19 @@ textarea:focus-visible {
   gap: 8px;
   margin-bottom: 12px;
 }
+
+/* Champs spécifiques par site */
+.site-fields { border: 1px solid var(--line, rgba(128,128,128,.3)); border-radius: 14px; padding: 14px; margin: 0; display: grid; gap: 10px; }
+.site-fields legend { font-weight: 700; padding: 0 6px; }
+.site-fields-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; }
+.checkbox-row input { width: auto; }
+.badge-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.badge { font-size: .75rem; padding: 3px 8px; border-radius: 999px; border: 1px solid currentColor; text-decoration: none; color: inherit; opacity: .85; }
+.badge-ok { color: #1f9d55; }
+.badge-tonight { color: #ff9b58; }
+.compat-line { font-weight: 700; margin: 4px 0; }
+.compat-line small { font-weight: 400; opacity: .75; }
+.detail-row span { opacity: .9; }
+.hook-form { display: grid; gap: 8px; padding: 0 16px 12px; }
+.super-like { background: #f5b301; color: #1b1b1b; }

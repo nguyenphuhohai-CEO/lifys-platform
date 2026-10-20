@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Avatar from './components/Avatar';
+import { DetailChips, SiteFieldsForm } from './components/SiteFields';
 import SiteFooter from './components/SiteFooter';
 import PricingPanel, { AdSlot } from './components/Pricing';
 import ConsentBanner from './components/ConsentBanner';
@@ -91,6 +92,11 @@ function App({ site }) {
   const [draftMessage, setDraftMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [cityQuery, setCityQuery] = useState('');
+  const [ageRange, setAgeRange] = useState({ min: '', max: '' });
+  const [detailQuery, setDetailQuery] = useState('');
+  const [tonightOnly, setTonightOnly] = useState(false);
+  const [hookFor, setHookFor] = useState(null);
+  const [hookText, setHookText] = useState('');
   const filtersPrefilled = useRef(false);
   const [toasts, setToasts] = useState([]);
   const [sessionLoading, setSessionLoading] = useState(true);
@@ -193,6 +199,10 @@ function App({ site }) {
         activeMode,
         query: searchQuery,
         city: cityQuery,
+        ageMin: ageRange.min,
+        ageMax: ageRange.max,
+        detail: detailQuery,
+        tonight: tonightOnly,
       });
       setProfiles(response.profiles);
       setPageError('');
@@ -201,7 +211,7 @@ function App({ site }) {
     } finally {
       setDiscoveryLoading(false);
     }
-  }, [activeMode, cityQuery, handleApiError, searchQuery]);
+  }, [activeMode, cityQuery, handleApiError, searchQuery, ageRange, detailQuery, tonightOnly]);
 
   const loadDashboard = useCallback(async (authToken) => {
     setDashboardLoading(true);
@@ -214,6 +224,10 @@ function App({ site }) {
           activeMode,
           query: searchQuery,
           city: cityQuery,
+          ageMin: ageRange.min,
+          ageMax: ageRange.max,
+          detail: detailQuery,
+          tonight: tonightOnly,
         }).catch((error) => {
           if (error instanceof ApiError && error.details?.code === 'email_not_verified') {
             return { profiles: [] };
@@ -253,7 +267,7 @@ function App({ site }) {
       setDashboardLoading(false);
       setSessionLoading(false);
     }
-  }, [activeMode, cityQuery, handleApiError, searchQuery]);
+  }, [activeMode, cityQuery, handleApiError, searchQuery, ageRange, detailQuery, tonightOnly]);
 
   useEffect(() => {
     if (!token) {
@@ -269,7 +283,7 @@ function App({ site }) {
     if (currentUser && token) {
       loadDiscovery(token);
     }
-  }, [activeMode, cityQuery, currentUser, loadDiscovery, searchQuery, token]);
+  }, [activeMode, cityQuery, currentUser, loadDiscovery, searchQuery, token, ageRange, detailQuery, tonightOnly]);
 
   useEffect(() => {
     setProfileDraft((current) => ({
@@ -432,9 +446,19 @@ function App({ site }) {
     }
   };
 
-  const handleLike = async (profileId) => {
+  const resetFilters = () => {
+    setSearchQuery('');
+    setCityQuery('');
+    setAgeRange({ min: '', max: '' });
+    setDetailQuery('');
+    setTonightOnly(false);
+  };
+
+  const handleLike = async (profileId, options = {}) => {
     try {
-      const response = await api.likeProfile(token, profileId);
+      const response = await api.likeProfile(token, profileId, options);
+      setHookFor(null);
+      setHookText('');
       await loadDashboard(token);
 
       if (response.matched) {
@@ -598,6 +622,10 @@ function App({ site }) {
       title: t('Session fermée'),
       message: t('À bientôt sur Lifys !'),
     });
+  };
+
+  const updateDetails = (details) => {
+    setProfileDraft((current) => ({ ...current, details }));
   };
 
   const updateProfileField = (field, value) => {
@@ -782,7 +810,7 @@ function App({ site }) {
                     <small>{t('correspondant à vos filtres')}</small>
                   </article>
                   <article className="metric-card">
-                    <span>{t('Matchs')}</span>
+                    <span>{t(siteInfo.nav.matches ?? 'Matchs')}</span>
                     <strong>{matches.length}</strong>
                     <small>{t('personnes en commun')}</small>
                   </article>
@@ -845,8 +873,22 @@ function App({ site }) {
                     # {interest}
                   </button>
                 ))}
-                {searchQuery || cityQuery ? (
-                  <button type="button" className="link-button" onClick={() => { setSearchQuery(''); setCityQuery(''); }}>{t('Effacer les filtres')}</button>
+                {profile.age ? (
+                  <button
+                    type="button"
+                    className={ageRange.min ? 'pill active' : 'pill'}
+                    onClick={() => setAgeRange(ageRange.min ? { min: '', max: '' } : { min: String(Math.max(18, profile.age - 6)), max: String(profile.age + 6) })}
+                  >
+                    🎂 {t('Âge proche : {min}–{max}', { min: Math.max(18, profile.age - 6), max: profile.age + 6 })}
+                  </button>
+                ) : null}
+                {site === 'professionnel' && profile.details?.sector ? (
+                  <button type="button" className={detailQuery === profile.details.sector ? 'pill active' : 'pill'} onClick={() => setDetailQuery(detailQuery === profile.details.sector ? '' : profile.details.sector)}>
+                    💼 {t('Mon secteur : {sector}', { sector: profile.details.sector })}
+                  </button>
+                ) : null}
+                {searchQuery || cityQuery || ageRange.min || ageRange.max || detailQuery || tonightOnly ? (
+                  <button type="button" className="link-button" onClick={resetFilters}>{t('Effacer les filtres')}</button>
                 ) : null}
               </div>
 
@@ -862,6 +904,24 @@ function App({ site }) {
                     {availableCities.map((city) => <option key={city} value={city} />)}
                   </datalist>
                 </label>
+                <label>
+                  <span>{t('Âge min')}</span>
+                  <input type="number" min="18" max="99" value={ageRange.min} onChange={(event) => setAgeRange((current) => ({ ...current, min: event.target.value }))} />
+                </label>
+                <label>
+                  <span>{t('Âge max')}</span>
+                  <input type="number" min="18" max="99" value={ageRange.max} onChange={(event) => setAgeRange((current) => ({ ...current, max: event.target.value }))} />
+                </label>
+                <label>
+                  <span>{site === 'professionnel' ? t('Métier, secteur ou compétence') : t('Détails (valeurs, activités…)')}</span>
+                  <input type="search" value={detailQuery} onChange={(event) => setDetailQuery(event.target.value)} />
+                </label>
+                {site === 'sans-lendemain' ? (
+                  <label className="checkbox-row">
+                    <input type="checkbox" checked={tonightOnly} onChange={(event) => setTonightOnly(event.target.checked)} />
+                    <span>🌙 {t('Disponibles ce soir')}</span>
+                  </label>
+                ) : null}
               </div>
             </div>
 
@@ -872,10 +932,7 @@ function App({ site }) {
                 title={t('Aucun profil disponible')}
                 description={t('Essayez une autre catégorie, élargissez vos filtres ou réinitialisez vos interactions.')}
                 actionLabel={t('Effacer les filtres')}
-                onAction={() => {
-                  setSearchQuery('');
-                  setCityQuery('');
-                }}
+                onAction={resetFilters}
               />
             ) : (
               <div className="discover-grid">
@@ -890,6 +947,13 @@ function App({ site }) {
                         </div>
                         <span className="tag">{t(getModeById(person.mode).label)}</span>
                       </div>
+                      {person.compatibility ? (
+                        <p className="compat-line" title={person.compatibility.reasons.map((reason) => t(reason)).join(' · ')}>
+                          💞 {t('{score} % compatible', { score: person.compatibility.score })}
+                          {person.compatibility.reasons.length ? <small> — {person.compatibility.reasons.map((reason) => t(reason)).join(', ')}</small> : null}
+                        </p>
+                      ) : null}
+                      <DetailChips person={person} t={t} />
                       <p>{person.bio || t('Profil en cours de complétion.')}</p>
                       <div className="interest-row">
                         {(person.interests.length ? person.interests : ['profil']).map((item) => (
@@ -900,7 +964,19 @@ function App({ site }) {
                     <div className="card-actions">
                       <button type="button" className="pass-button" onClick={() => handlePass(person.id)}>{t('Pass')}</button>
                       <button type="button" className="like-button" onClick={() => handleLike(person.id)}>{t('Like')}</button>
+                      {site === 'amoureux' ? (
+                        <button type="button" className="like-button super-like" onClick={() => handleLike(person.id, { superLike: true })}>⭐ {t('Super like')}</button>
+                      ) : null}
+                      {site === 'professionnel' ? (
+                        <button type="button" className="like-button" onClick={() => setHookFor(hookFor === person.id ? null : person.id)}>✉ {t('Message d’accroche')}</button>
+                      ) : null}
                     </div>
+                    {hookFor === person.id ? (
+                      <form className="hook-form" onSubmit={(event) => { event.preventDefault(); handleLike(person.id, { note: hookText }); }}>
+                        <textarea rows="2" maxLength="280" value={hookText} onChange={(event) => setHookText(event.target.value)} placeholder={t('Présentez-vous en une phrase…')} />
+                        <button type="submit" className="primary-button" disabled={!hookText.trim()}>{t('Envoyer et se connecter')}</button>
+                      </form>
+                    ) : null}
                     <div className="card-actions card-safety">
                       <button type="button" className="link-button" onClick={() => { setReportTarget(person); setReportReason('spam'); }}>{t('Signaler')}</button>
                       <button type="button" className="link-button" onClick={() => handleBlock(person)}>{t('Bloquer')}</button>
@@ -915,7 +991,7 @@ function App({ site }) {
         {view === 'matches' && (
           <section className="content-panel">
             <SectionHeader
-              eyebrow={t('Matchs')}
+              eyebrow={t(siteInfo.nav.matches ?? 'Matchs')}
               title={t('Vos correspondances')}
               description={t('Retrouvez ici toutes les personnes avec qui vous avez matché.')}
             />
@@ -1096,6 +1172,8 @@ function App({ site }) {
                     placeholder={t('Voyage, Musique, Sport')}
                   />
                 </label>
+
+                <SiteFieldsForm site={site} details={profileDraft.details ?? {}} onChange={updateDetails} t={t} />
 
                 <div className="form-actions">
                   <button type="submit" className="primary-button" disabled={profileSaving}>

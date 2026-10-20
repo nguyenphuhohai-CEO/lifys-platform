@@ -1,4 +1,4 @@
-﻿const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -73,10 +73,14 @@ export const api = {
       query: filters.query ?? '',
       city: filters.city ?? '',
     });
+    for (const key of ['ageMin', 'ageMax', 'detail']) {
+      if (filters[key]) search.set(key, filters[key]);
+    }
+    if (filters.tonight) search.set('tonight', '1');
     return apiRequest(`/api/discovery?${search.toString()}`, { token });
   },
-  likeProfile(token, profileId) {
-    return apiRequest('/api/interactions/like', { method: 'POST', token, body: { profileId } });
+  likeProfile(token, profileId, options = {}) {
+    return apiRequest('/api/interactions/like', { method: 'POST', token, body: { profileId, ...options } });
   },
   passProfile(token, profileId) {
     return apiRequest('/api/interactions/pass', { method: 'POST', token, body: { profileId } });

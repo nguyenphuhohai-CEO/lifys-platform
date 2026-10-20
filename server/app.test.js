@@ -412,3 +412,49 @@ test('one account works on every site, with a separate profile and pool per site
     await server.close();
   }
 });
+
+test('site-specific details are sanitized, scored, filtered and super likes are limited', async () => {
+  const server = await startTestServer();
+
+  try {
+    const user = await registerUser(server.baseUrl, 'pro@example.com', { mode: 'professionnel' });
+    const save = await request(server.baseUrl, '/api/profile', {
+      method: 'PUT',
+      headers: user.auth,
+      body: JSON.stringify({
+        name: 'Pro', age: 33, city: 'Paris', bio: 'Designer produit.', interests: 'design',
+        details: { sector: 'Design', skills: 'UX, Figma', goal: 'Collaborer', linkedin: 'javascript:alert(1)', religion: 'x', sector2: 'y' },
+      }),
+    });
+    assert.equal(save.status, 200);
+    assert.deepEqual(save.body.profile.details, { sector: 'Design', skills: ['ux', 'figma'], goal: 'Collaborer' });
+
+    const discovery = await request(server.baseUrl, '/api/discovery?mode=all&detail=design&ageMin=30', { headers: user.auth });
+    assert.deepEqual(discovery.body.profiles.map((profile) => profile.name), ['Omar']);
+    assert.ok(discovery.body.profiles[0].compatibility.score > 40);
+    assert.ok(discovery.body.profiles[0].compatibility.reasons.includes('Même secteur'));
+
+    const tooYoung = await request(server.baseUrl, '/api/discovery?mode=all&ageMax=20', { headers: user.auth });
+    assert.equal(tooYoung.body.profiles.length, 0);
+
+    const hooked = await request(server.baseUrl, '/api/interactions/like', {
+      method: 'POST', headers: user.auth, body: JSON.stringify({ profileId: 'p6', note: 'Bonjour Omar, collaborons !' }),
+    });
+    assert.equal(hooked.body.matched, true);
+    const conversations = await request(server.baseUrl, '/api/conversations', { headers: user.auth });
+    assert.ok(conversations.body.conversations[0].messages.some((message) => message.text === 'Bonjour Omar, collaborons !' && message.sender === 'me'));
+
+    const love = await registerUser(server.baseUrl, 'pro@example.com', { mode: 'amoureux' });
+    assert.ok([201, 200].includes(love.status));
+    const first = await request(server.baseUrl, '/api/interactions/like', {
+      method: 'POST', headers: love.auth, body: JSON.stringify({ profileId: 'p1', superLike: true }),
+    });
+    assert.equal(first.status, 200);
+    const second = await request(server.baseUrl, '/api/interactions/like', {
+      method: 'POST', headers: love.auth, body: JSON.stringify({ profileId: 'p2', superLike: true }),
+    });
+    assert.equal(second.status, 429);
+  } finally {
+    await server.close();
+  }
+});
