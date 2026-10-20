@@ -592,5 +592,13 @@ export const ROWS = [
   ['Profil à compléter', 'Profile to complete', 'Perfil por completar', 'Hồ sơ cần hoàn thiện'],
   ['{count} match(s)', '{count} match(es)', '{count} match(es)', '{count} lượt ghép đôi'],
   ['Messages en attente de réponse', 'Messages awaiting your reply', 'Mensajes pendientes de respuesta', 'Tin nhắn chờ bạn trả lời'],
+  ['Bien démarrer', 'Get started', 'Primeros pasos', 'Bắt đầu'],
+  ['Comment ça marche', 'How it works', 'Cómo funciona', 'Cách hoạt động'],
+  ['Y aller', 'Go', 'Ir', 'Đi tới'],
+  ['Renseigner âge, ville et bio', 'Fill in age, city and bio', 'Indicar edad, ciudad y bio', 'Điền tuổi, thành phố và giới thiệu'],
+  ['Remplir le questionnaire du site', 'Complete the site questionnaire', 'Completar el cuestionario del sitio', 'Hoàn thành bảng câu hỏi của trang'],
+  ['Ajouter une photo', 'Add a photo', 'Añadir una foto', 'Thêm ảnh'],
+  ['Obtenir un premier match', 'Get a first match', 'Conseguir un primer match', 'Có lượt ghép đôi đầu tiên'],
+  ['Envoyer un premier message', 'Send a first message', 'Enviar un primer mensaje', 'Gửi tin nhắn đầu tiên'],
 ];
 

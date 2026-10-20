@@ -342,6 +342,14 @@ function App({ site }) {
   const selectedConversationData = conversations.find((conversation) => conversation.id === selectedConversation) ?? null;
   const availableCities = useMemo(() => [...new Set(profiles.map((item) => item.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [profiles]);
   const completedProfile = Boolean(profile.name && profile.age && profile.city && profile.bio);
+  const checklist = [
+    { id: 'basics', label: 'Renseigner âge, ville et bio', done: completedProfile, view: 'profile' },
+    { id: 'details', label: 'Remplir le questionnaire du site', done: Object.values(profile.details ?? {}).some((value) => value && value !== false && !(Array.isArray(value) && !value.length)), view: 'profile' },
+    { id: 'photo', label: 'Ajouter une photo', done: Boolean(profile.avatar), view: 'profile' },
+    { id: 'match', label: 'Obtenir un premier match', done: matches.length > 0, view: 'discover' },
+    { id: 'message', label: 'Envoyer un premier message', done: conversations.some((conversation) => conversation.messages.some((message) => message.sender === 'me')), view: 'messages' },
+  ];
+  const checklistDone = checklist.filter((item) => item.done).length;
 
   const validateProfile = () => {
     const errors = {};
@@ -836,9 +844,9 @@ function App({ site }) {
           <>
             <section className="hero-panel">
               <div className="hero-copy">
-                <span className="eyebrow">{t('Bienvenue sur Lifys')}</span>
-                <h1>{t('Rencontrez les bonnes personnes, pour la bonne raison.')}</h1>
-                <p>{t('Choisissez votre catégorie, découvrez des profils compatibles et échangez dès qu’un match se crée.')}</p>
+                <span className="eyebrow">{siteInfo.icon} {siteInfo.brand}</span>
+                <h1>{t(content.headline)}</h1>
+                <p>{t(content.intro)}</p>
 
                 <div className="cta-row">
                   <button type="button" className="primary-button" onClick={() => setCurrentView('discover')}>{t('Découvrir les profils')}</button>
@@ -883,6 +891,36 @@ function App({ site }) {
                   <p><a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>{t('Découvrir les autres sites Lifys')}</a></p>
                 </div>
               </div>
+            </section>
+
+            <section className="home-grid">
+              <article className="content-panel checklist-card">
+                <div className="checklist-head">
+                  <h2>{t('Bien démarrer')}</h2>
+                  <span className="counter-badge">{checklistDone}/{checklist.length}</span>
+                </div>
+                <div className="progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={checklist.length} aria-valuenow={checklistDone}>
+                  <span style={{ width: `${(checklistDone / checklist.length) * 100}%` }} />
+                </div>
+                <ul className="checklist">
+                  {checklist.map((item) => (
+                    <li key={item.id} className={item.done ? 'done' : ''}>
+                      <span aria-hidden="true">{item.done ? '✓' : '○'}</span>
+                      <span>{t(item.label)}</span>
+                      {item.done ? null : <button type="button" className="secondary-button" onClick={() => setCurrentView(item.view)}>{t('Y aller')}</button>}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+              <article className="content-panel">
+                <h2>{t('Comment ça marche')}</h2>
+                <ol className="steps-list">
+                  {content.steps.map((step) => <li key={step}>{t(step)}</li>)}
+                </ol>
+                <ul className="category-list">
+                  {content.highlights.map((item) => <li key={item}>{t(item)}</li>)}
+                </ul>
+              </article>
             </section>
 
             {!isPremium ? <AdSlot ads={ads} onUpgrade={() => setCurrentView('pricing')} /> : null}
