@@ -41,7 +41,6 @@ function HubPage() {
               >
                 <span className="site-card-icon">{site.icon}</span>
                 <strong>{site.brand}</strong>
-                <small>{t(site.inspiredBy)}</small>
                 <p>{t(CATEGORY_CONTENT[mode.id].intro)}</p>
                 <span className="site-card-cta">{t('Rejoindre {mode}', { mode: site.brand })} →</span>
               </a>
