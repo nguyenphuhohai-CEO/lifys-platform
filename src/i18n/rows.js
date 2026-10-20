@@ -381,6 +381,8 @@ export const ROWS = [
     ['Réseau', 'Network', 'Red', 'Mạng lưới'],
     ['Connexions', 'Connections', 'Conexiones', 'Kết nối'],
   ['Un seul compte Lifys pour les 5 sites : si vous en avez déjà un, connectez-vous avec le même e-mail et le même mot de passe.', 'One Lifys account for all 5 sites: if you already have one, sign in with the same e-mail and password.', 'Una sola cuenta Lifys para los 5 sitios: si ya tiene una, inicie sesión con el mismo correo y la misma contraseña.', 'Một tài khoản Lifys cho cả 5 trang: nếu đã có, hãy đăng nhập bằng cùng e-mail và mật khẩu.'],
+  ['Pré-remplissage', 'Prefill', 'Autocompletar', 'Điền sẵn'],
+  ['Ma ville : {city}', 'My city: {city}', 'Mi ciudad: {city}', 'Thành phố của tôi: {city}'],
   ['Changer de site', 'Switch site', 'Cambiar de sitio', 'Đổi trang'],
   ['Impossible de changer de site.', 'Unable to switch site.', 'No se pudo cambiar de sitio.', 'Không thể đổi trang.'],
   ];

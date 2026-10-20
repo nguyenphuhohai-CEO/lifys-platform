@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Avatar from './components/Avatar';
 import SiteFooter from './components/SiteFooter';
@@ -91,6 +91,7 @@ function App({ site }) {
   const [draftMessage, setDraftMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [cityQuery, setCityQuery] = useState('');
+  const filtersPrefilled = useRef(false);
   const [toasts, setToasts] = useState([]);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [dashboardLoading, setDashboardLoading] = useState(false);
@@ -143,6 +144,13 @@ function App({ site }) {
       resetPrototypeStorage([authKey]);
     }
   }, [authKey, token]);
+
+  // Pré-remplit la recherche avec la ville du profil, une seule fois par session.
+  useEffect(() => {
+    if (filtersPrefilled.current || !profile.city) return;
+    filtersPrefilled.current = true;
+    setCityQuery(profile.city);
+  }, [profile.city]);
 
   // Compte unique : une session ouverte sur un autre site Lifys ouvre automatiquement celui-ci.
   useEffect(() => {
@@ -826,6 +834,21 @@ function App({ site }) {
             {!isPremium ? <AdSlot ads={ads} onUpgrade={() => setCurrentView('pricing')} /> : null}
 
             <div className="discover-toolbar">
+              <div className="prefill-row" aria-label={t('Pré-remplissage')}>
+                {profile.city ? (
+                  <button type="button" className={cityQuery === profile.city ? 'pill active' : 'pill'} onClick={() => setCityQuery(cityQuery === profile.city ? '' : profile.city)}>
+                    📍 {t('Ma ville : {city}', { city: profile.city })}
+                  </button>
+                ) : null}
+                {(profile.interests ?? []).slice(0, 6).map((interest) => (
+                  <button type="button" key={interest} className={searchQuery === interest ? 'pill active' : 'pill'} onClick={() => setSearchQuery(searchQuery === interest ? '' : interest)}>
+                    # {interest}
+                  </button>
+                ))}
+                {searchQuery || cityQuery ? (
+                  <button type="button" className="link-button" onClick={() => { setSearchQuery(''); setCityQuery(''); }}>{t('Effacer les filtres')}</button>
+                ) : null}
+              </div>
 
               <div className="filter-grid">
                 <label>
