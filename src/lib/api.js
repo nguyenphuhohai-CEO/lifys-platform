@@ -67,13 +67,30 @@ export const api = {
     });
     return parseResponse(response);
   },
+  async addPhoto(token, file) {
+    const response = await fetch(`${API_BASE_URL}/api/profile/photos`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type, Authorization: 'Bearer ' + token },
+      body: file,
+    });
+    return parseResponse(response);
+  },
+  removePhoto(token, url) {
+    return apiRequest('/api/profile/photos/remove', { method: 'POST', token, body: { url } });
+  },
+  setTonight(token, active) {
+    return apiRequest('/api/tonight', { method: 'POST', token, body: { active } });
+  },
+  reportContent(token, payload) {
+    return apiRequest('/api/reports', { method: 'POST', token, body: payload });
+  },
   getDiscovery(token, filters) {
     const search = new URLSearchParams({
       mode: filters.activeMode ?? 'all',
       query: filters.query ?? '',
       city: filters.city ?? '',
     });
-    for (const key of ['ageMin', 'ageMax', 'detail']) {
+    for (const key of ['ageMin', 'ageMax', 'detail', 'minScore']) {
       if (filters[key]) search.set(key, filters[key]);
     }
     if (filters.tonight) search.set('tonight', '1');

@@ -294,3 +294,11 @@ Chaque catégorie est un site à part entière (`/Amical`, `/Amoureux`, `/Sans-l
 ## Profils spécifiques par site
 
 Chaque site a ses champs facultatifs (`src/data/siteFields.js`, validés côté serveur et stockés dans `profiles.details`) : situation/enfants/tabac pour Amoureux, activités/disponibilités pour Amical, attentes/discrétion/consentement/« ce soir » (12 h) pour Sans lendemain, religion/valeurs/projet d'enfants pour Mariage, métier/secteur/compétences/LinkedIn pour Professionnel. La découverte filtre par âge, détail (secteur, valeurs, activités…) et « ce soir », et trie par score de compatibilité propre au site (`computeCompatibility`). Pro : message d'accroche à l'envoi du like (devient le premier message au match). Amoureux : Super like (1/jour gratuit, 5/jour Premium). Le badge « Profil vérifié » signifie e-mail confirmé + photo téléversée ; ce n'est pas une vérification d'identité. Les champs sensibles sont facultatifs (voir la politique de confidentialité, section 10).
+
+
+## Onboarding, galerie, communauté et modération
+
+- **Assistant d'accueil** (`Onboarding.jsx`) : à la première connexion sur un site, 3 étapes (infos de base, questionnaire spécifique au site, photo). Ignorable (« Plus tard ») ; l'état est mémorisé dans le navigateur.
+- **Galerie** : jusqu'à 4 photos supplémentaires par profil (`POST /api/profile/photos`, `POST /api/profile/photos/remove`, colonne `profiles.photos`), en plus de la photo principale.
+- **Amis** : onglet « Sorties » (créer/rejoindre/quitter, capacité limitée). **Pro** : « Fil d'actualité » (publications, offres, recherches de mission). **Amoureux** : « Likes reçus » (profils visibles en Premium, compteur en gratuit). **Éphémère** : onglet « Ce soir » (`POST /api/tonight`, 12 h, conseils de sécurité). **Mariage** : onglet « Sélection » (`minScore` sur `/api/discovery`).
+- **Signalement des contenus** : `POST /api/reports` accepte `postId` ou `eventId` en plus de `profileId`. Un contenu signalé par 3 membres distincts est masqué automatiquement ; l'admin (`ADMIN_EMAILS`) peut `dismiss`, `suspend` ou `remove` (supprime le contenu) via `POST /api/admin/reports/:id/resolve`. Il n'y a pas encore d'interface d'administration, seulement l'API.

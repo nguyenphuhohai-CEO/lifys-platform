@@ -1247,3 +1247,22 @@ textarea:focus-visible {
 .feed-author small { display: block; opacity: .7; }
 .feed-author .tag { margin-left: auto; }
 .feed-avatar { width: 40px; height: 40px; border-radius: 50%; }
+
+.photo-strip { display: flex; gap: 6px; padding: 6px 0; flex-wrap: wrap; }
+.photo-strip img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; display: block; }
+.photo-item { position: relative; }
+.photo-item button { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; border: 0; cursor: pointer; line-height: 1; }
+.gallery-manager { display: grid; gap: 6px; }
+.report-inline { display: inline-flex; gap: 6px; align-items: center; }
+.tonight-toggle { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+.safety-tips { margin: 0 0 16px; padding-left: 20px; opacity: .85; display: grid; gap: 4px; }
+.score-filter { display: inline-grid; gap: 4px; margin-bottom: 16px; }
+.onboarding-card { max-width: 560px; max-height: 90vh; overflow: auto; display: grid; gap: 12px; }
+.onboarding-progress { display: flex; gap: 6px; }
+.onboarding-progress span { flex: 1; height: 4px; border-radius: 2px; background: rgba(128,128,128,.3); }
+.onboarding-progress span.is-done { background: currentColor; }
+.onboarding-avatar { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; }
+
+.modal-card label > span, .modal-card legend, .modal-card .muted { color: #e8e6f7; opacity: 1; }
+.modal-card .profile-form label, .modal-card .site-fields label { color: #e8e6f7; }
+.modal-card .field-error { color: #ffb4b4; }

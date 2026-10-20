@@ -19,14 +19,14 @@ export const SITES = {
     icon: '🔥',
     tagline: 'Des rencontres spontanées et assumées',
     inspiredBy: 'Façon Tinder',
-    nav: { discover: 'Explorer' },
+    nav: { discover: 'Explorer', community: 'Ce soir' },
   },
   mariage: {
     brand: 'Lifys Mariage',
     icon: '💍',
     tagline: 'Construire un avenir à deux',
     inspiredBy: 'Façon Jdate / Shaadi',
-    nav: { discover: 'Rencontres', matches: 'Compatibilités' },
+    nav: { discover: 'Rencontres', matches: 'Compatibilités', community: 'Sélection' },
   },
   professionnel: {
     brand: 'Lifys Pro',

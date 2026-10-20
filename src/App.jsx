@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Avatar from './components/Avatar';
-import { EventsPanel, FeedPanel, LikesPanel } from './components/Community';
+import { EventsPanel, FeedPanel, LikesPanel, SelectionPanel, TonightPanel } from './components/Community';
+import { GalleryManager, PhotoStrip } from './components/Gallery';
+import Onboarding from './components/Onboarding';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
 import SiteFooter from './components/SiteFooter';
 import PricingPanel, { AdSlot } from './components/Pricing';
@@ -385,6 +387,46 @@ function App({ site }) {
     } finally {
       setAuthSubmitting(false);
     }
+  };
+
+  const handlePhotosChanged = (updated) => {
+    setProfile(updated);
+    setProfileDraft((current) => ({ ...current, photos: updated.photos }));
+  };
+
+  const handleTonightProfile = (updated) => {
+    setProfile(updated);
+    setProfileDraft((current) => ({ ...current, details: { ...current.details, tonight: Boolean(updated.details.tonight) } }));
+  };
+
+  const onboardingKey = profile.userPublicId ? `lifys.onboarded.${profile.userPublicId}.${site}` : '';
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  useEffect(() => {
+    if (!onboardingKey) return;
+    let seen = true;
+    try {
+      seen = window.localStorage.getItem(onboardingKey) === '1';
+    } catch {
+      // stockage indisponible : pas d'assistant
+    }
+    const incomplete = !profile.age || !profile.city || !profile.bio || !Object.keys(profile.details ?? {}).length;
+    setOnboardingOpen(!seen && incomplete);
+  }, [onboardingKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const closeOnboarding = () => {
+    try {
+      window.localStorage.setItem(onboardingKey, '1');
+    } catch {
+      // ignoré
+    }
+    setOnboardingOpen(false);
+  };
+
+  const handleOnboardingDone = (saved) => {
+    setProfile(saved);
+    setProfileDraft({ ...saved, interests: serializeInterests(saved.interests) });
+    closeOnboarding();
+    loadDiscovery(token);
   };
 
   const handlePhotoSelected = async (event) => {
@@ -941,6 +983,7 @@ function App({ site }) {
                 {profiles.map((person) => (
                   <article key={person.id} className="profile-card">
                     <Avatar className="profile-avatar" src={person.avatar} alt={person.name} fallback={person.name} />
+                    <PhotoStrip photos={person.photos} />
                     <div className="profile-card-body">
                       <div className="identity-row">
                         <div>
@@ -998,6 +1041,13 @@ function App({ site }) {
         )}
         {view === 'community' && site === 'amoureux' && (
           <LikesPanel token={token} t={t} onError={handleApiError} onUpgrade={() => setCurrentView('pricing')} onDiscover={() => setCurrentView('discover')} />
+        )}
+
+        {view === 'community' && site === 'sans-lendemain' && (
+          <TonightPanel token={token} t={t} locale={lang} profile={profile} onProfile={handleTonightProfile} onError={handleApiError} showToast={showToast} />
+        )}
+        {view === 'community' && site === 'mariage' && (
+          <SelectionPanel token={token} t={t} onError={handleApiError} showToast={showToast} />
         )}
 
         {view === 'matches' && (
@@ -1164,6 +1214,8 @@ function App({ site }) {
                   {profileErrors.avatar ? <small className="field-error">{profileErrors.avatar}</small> : null}
                 </label>
 
+                <GalleryManager token={token} photos={profile.photos} t={t} onChange={handlePhotosChanged} onError={handleApiError} />
+
                 <label>
                   <span>{t('Photo (URL)')}</span>
                   <input value={profileDraft.avatar} onChange={(event) => updateProfileField('avatar', event.target.value)} aria-invalid={Boolean(profileErrors.avatar)} />
@@ -1197,6 +1249,7 @@ function App({ site }) {
               <aside className="profile-preview">
                 <p className="eyebrow">{t('Aperçu')}</p>
                 <Avatar className="profile-preview-avatar" src={profileDraft.avatar} alt={profileDraft.name || t('Votre profil')} fallback={profileDraft.name || 'Lifys'} />
+                <PhotoStrip photos={profile.photos} />
                 <h3>{profileDraft.name || t('Votre prénom')}</h3>
                 <p>{profileDraft.city || 'Ville'} · {profileDraft.age || '18+'} ans</p>
                 <span className="tag">{getModeById(profileDraft.mode).label}</span>
@@ -1220,6 +1273,10 @@ function App({ site }) {
           </section>
         )}
       </main>
+
+      {onboardingOpen ? (
+        <Onboarding token={token} site={site} brand={siteInfo.brand} profile={profile} t={t} onDone={handleOnboardingDone} onSkip={closeOnboarding} onError={handleApiError} />
+      ) : null}
 
       {reportTarget ? (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={t('Signaler un profil')}>

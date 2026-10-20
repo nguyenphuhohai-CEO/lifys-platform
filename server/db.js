@@ -35,6 +35,10 @@ export function normalizeInterests(value) {
   )];
 }
 
+const MAX_PHOTOS = 4;
+const OWN_UPLOAD = /^\/uploads\/\d+-[a-f0-9]{32}\.(jpg|png|webp)$/;
+const CONTENT_HIDE_THRESHOLD = 3;
+
 export function sanitizeProfileInput(value = {}) {
   const age = Number(value.age);
   const avatar = `${value.avatar ?? ''}`.trim();
@@ -74,6 +78,24 @@ function parseDetails(rawValue) {
   }
 }
 
+function parsePhotos(rawValue) {
+  try {
+    const parsed = JSON.parse(rawValue ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((url) => typeof url === 'string').slice(0, MAX_PHOTOS) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseTonightUntil(rawValue) {
+  try {
+    const { tonightUntil } = JSON.parse(rawValue ?? '{}');
+    return tonightUntil && new Date(tonightUntil).getTime() > Date.now() ? tonightUntil : null;
+  } catch {
+    return null;
+  }
+}
+
 function isVerifiedProfile(row) {
   return Boolean(row.email_verified_at) && /^\/uploads\//.test(row.avatar ?? '');
 }
@@ -96,6 +118,8 @@ function serializeProfile(row) {
     bio: row.bio,
     interests: parseInterests(row.interests),
     details: parseDetails(row.details),
+    tonightUntil: parseTonightUntil(row.details),
+    photos: parsePhotos(row.photos),
     verified: isVerifiedProfile(row),
     mode: row.mode,
     avatar: row.avatar,
@@ -114,6 +138,7 @@ function serializePublicProfile(row) {
     bio: row.bio,
     interests: parseInterests(row.interests),
     details: parseDetails(row.details),
+    photos: parsePhotos(row.photos),
     verified: isVerifiedProfile(row),
     mode: row.mode,
     avatar: row.avatar,
@@ -306,6 +331,17 @@ export function createDatabase(databaseFile, options = {}) {
   if (!profileColumns.has('details')) {
     db.exec("ALTER TABLE profiles ADD COLUMN details TEXT NOT NULL DEFAULT '{}'");
   }
+  if (!profileColumns.has('photos')) {
+    db.exec("ALTER TABLE profiles ADD COLUMN photos TEXT NOT NULL DEFAULT '[]'");
+  }
+  const reportColumns = new Set(db.prepare('PRAGMA table_info(reports)').all().map((column) => column.name));
+  for (const [column, definition] of [
+    ['content_kind', "TEXT NOT NULL DEFAULT 'profile'"],
+    ['content_ref', "TEXT NOT NULL DEFAULT ''"],
+    ['content_excerpt', "TEXT NOT NULL DEFAULT ''"],
+  ]) {
+    if (!reportColumns.has(column)) db.exec(`ALTER TABLE reports ADD COLUMN ${column} ${definition}`);
+  }
   const likeColumns = new Set(db.prepare('PRAGMA table_info(likes)').all().map((column) => column.name));
   if (!likeColumns.has('note')) {
     db.exec("ALTER TABLE likes ADD COLUMN note TEXT NOT NULL DEFAULT ''");
@@ -411,11 +447,12 @@ export function createDatabase(databaseFile, options = {}) {
       LIMIT 1
     `),
     insertReport: db.prepare(`
-      INSERT INTO reports (public_id, reporter_user_id, target_user_id, reason, details, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO reports (public_id, reporter_user_id, target_user_id, reason, details, created_at, content_kind, content_ref, content_excerpt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     listOpenReports: db.prepare(`
       SELECT reports.public_id, reports.reason, reports.details, reports.created_at,
+        reports.content_kind, reports.content_ref, reports.content_excerpt,
         reporter.email AS reporter_email, target.email AS target_email, target.public_id AS target_user_public_id,
         target.status AS target_status, target_profile.name AS target_name
       FROM reports
@@ -442,6 +479,8 @@ export function createDatabase(databaseFile, options = {}) {
       SET name = @name, age = @age, city = @city, bio = @bio, interests = @interests, mode = @mode, avatar = @avatar, details = @details, updated_at = @updated_at
       WHERE user_id = @user_id
     `),
+    setPhotos: db.prepare('UPDATE profiles SET photos = ? WHERE user_id = ?'),
+    setDetails: db.prepare('UPDATE profiles SET details = ? WHERE user_id = ?'),
     setProfileDetailsIfEmpty: db.prepare(`UPDATE profiles SET details = ? WHERE public_id = ? AND details = '{}'`),
     upsertLike: db.prepare(`
       INSERT INTO likes (user_id, target_user_id, created_at, note, super) VALUES (?, ?, ?, ?, ?)
@@ -719,6 +758,7 @@ export function createDatabase(databaseFile, options = {}) {
     const ageMin = Number(filters.ageMin) || 0;
     const ageMax = Number(filters.ageMax) || 0;
     const detail = `${filters.detail ?? ''}`.trim().toLowerCase();
+    const minScore = Number(filters.minScore) || 0;
     const tonightOnly = filters.tonight === true || filters.tonight === 'true' || filters.tonight === '1';
     const currentProfile = getProfileByUserId(userId);
 
@@ -743,6 +783,7 @@ export function createDatabase(databaseFile, options = {}) {
           .includes(query);
       })
       .map((profile) => (currentProfile ? { ...profile, compatibility: computeCompatibility(currentProfile, profile) } : profile))
+      .filter((profile) => !minScore || (profile.compatibility?.score ?? 0) >= minScore)
       .sort((left, right) => (right.compatibility?.score ?? 0) - (left.compatibility?.score ?? 0));
   }
 
@@ -938,8 +979,65 @@ export function createDatabase(databaseFile, options = {}) {
     }
 
     const publicId = createPublicId('report');
-    statements.insertReport.run(publicId, userId, target.userId, reason, details, now());
+    statements.insertReport.run(publicId, userId, target.userId, reason, details, now(), 'profile', '', '');
     return publicId;
+  }
+
+  function reportContent(userId, kind, ref, { reason, details }) {
+    const row = kind === 'post'
+      ? db.prepare('SELECT user_id AS owner, content AS excerpt FROM posts WHERE public_id = ?').get(ref)
+      : db.prepare('SELECT host_user_id AS owner, title AS excerpt FROM events WHERE public_id = ?').get(ref);
+    if (!row || row.owner === userId) {
+      return null;
+    }
+
+    const existing = db.prepare("SELECT public_id FROM reports WHERE reporter_user_id = ? AND content_kind = ? AND content_ref = ? AND status = 'open'").get(userId, kind, ref);
+    if (existing) {
+      return existing.public_id;
+    }
+
+    const publicId = createPublicId('report');
+    statements.insertReport.run(publicId, userId, row.owner, reason, details, now(), kind, ref, row.excerpt.slice(0, 200));
+    return publicId;
+  }
+
+  function isContentHidden(kind, ref) {
+    const { count } = db.prepare("SELECT COUNT(DISTINCT reporter_user_id) AS count FROM reports WHERE content_kind = ? AND content_ref = ? AND status = 'open'").get(kind, ref);
+    return count >= CONTENT_HIDE_THRESHOLD;
+  }
+
+  function addProfilePhoto(userId, url) {
+    const profile = getProfileByUserId(userId);
+    const photos = profile?.photos ?? [];
+    if (!profile || !OWN_UPLOAD.test(url) || photos.length >= MAX_PHOTOS) {
+      return null;
+    }
+    statements.setPhotos.run(JSON.stringify([...photos, url]), userId);
+    return getProfileByUserId(userId);
+  }
+
+  function removeProfilePhoto(userId, url) {
+    const photos = getProfileByUserId(userId)?.photos ?? [];
+    if (!photos.includes(url)) {
+      return null;
+    }
+    statements.setPhotos.run(JSON.stringify(photos.filter((item) => item !== url)), userId);
+    return getProfileByUserId(userId);
+  }
+
+  function setTonight(userId, active) {
+    const row = statements.findProfileByUserId.get(userId);
+    if (!row || row.mode !== 'sans-lendemain') {
+      throw Object.assign(new Error('Fonctionnalité indisponible sur ce site.'), { status: 403 });
+    }
+    const stored = JSON.parse(row.details || '{}');
+    if (active) {
+      stored.tonightUntil = new Date(Date.now() + TONIGHT_DURATION_MS).toISOString();
+    } else {
+      delete stored.tonightUntil;
+    }
+    statements.setDetails.run(JSON.stringify(stored), userId);
+    return getProfileByUserId(userId);
   }
 
   function listOpenReports() {
@@ -949,6 +1047,7 @@ export function createDatabase(databaseFile, options = {}) {
       details: row.details,
       createdAt: row.created_at,
       reporterEmail: row.reporter_email,
+      content: { kind: row.content_kind, ref: row.content_ref, excerpt: row.content_excerpt },
       target: {
         userId: row.target_user_public_id,
         email: row.target_email,
@@ -964,7 +1063,14 @@ export function createDatabase(databaseFile, options = {}) {
       return false;
     }
 
-    if (action === 'suspend') {
+    if (action === 'remove' && report.content_kind !== 'profile') {
+      if (report.content_kind === 'post') {
+        db.prepare('DELETE FROM posts WHERE public_id = ?').run(report.content_ref);
+      } else {
+        db.prepare('DELETE FROM events WHERE public_id = ?').run(report.content_ref);
+      }
+      db.prepare("UPDATE reports SET status = 'actioned', resolved_at = ? WHERE content_kind = ? AND content_ref = ? AND status = 'open'").run(now(), report.content_kind, report.content_ref);
+    } else if (action === 'suspend') {
       statements.setUserStatus.run('suspended', report.target_user_id);
       statements.resolveReportsForTarget.run(now(), report.target_user_id);
     } else {
@@ -1025,6 +1131,7 @@ export function createDatabase(databaseFile, options = {}) {
       ORDER BY events.starts_at ASC LIMIT 100
     `).all(new Date().toISOString())
       .filter((row) => !isBlocked(userId, row.host_user_id))
+      .filter((row) => !isContentHidden('event', row.public_id))
       .filter((row) => !wanted || row.city.toLowerCase().includes(wanted))
       .map((row) => serializeEvent(row, userId));
   }
@@ -1091,6 +1198,7 @@ export function createDatabase(databaseFile, options = {}) {
       ORDER BY posts.created_at DESC LIMIT 50
     `).all()
       .filter((row) => !isBlocked(userId, row.user_id))
+      .filter((row) => !isContentHidden('post', row.public_id))
       .map((row) => {
         const details = parseDetails(row.details);
         return {
@@ -1171,6 +1279,10 @@ export function createDatabase(databaseFile, options = {}) {
     blockProfile,
     reportProfile,
     listOpenReports,
+      reportContent,
+      addProfilePhoto,
+      removeProfilePhoto,
+      setTonight,
     resolveReportById,
     deleteAccount,
     listEvents,

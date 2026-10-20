@@ -37,11 +37,11 @@ export function createUploadStore(directory) {
       if (!/^\d+-[a-f0-9]{32}\.(jpg|png|webp)$/.test(name)) return;
       fs.rmSync(path.join(directory, name), { force: true });
     },
-    removeAllForUser(userId, keepUrl = '') {
+    removeAllForUser(userId, keepUrls = []) {
       const prefix = `${Number(userId)}-`;
-      const keep = path.basename(keepUrl || '');
+      const keep = new Set([keepUrls].flat().filter(Boolean).map((url) => path.basename(url)));
       for (const name of fs.readdirSync(directory)) {
-        if (name.startsWith(prefix) && name !== keep) fs.rmSync(path.join(directory, name), { force: true });
+        if (name.startsWith(prefix) && !keep.has(name)) fs.rmSync(path.join(directory, name), { force: true });
       }
     },
   };

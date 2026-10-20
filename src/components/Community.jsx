@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import Avatar from './Avatar';
+import { PhotoStrip } from './Gallery';
+import { DetailChips } from './SiteFields';
 import { api } from '../lib/api';
 
 const formatDate = (iso, locale) => new Date(iso).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' });
@@ -14,6 +16,43 @@ function Header({ eyebrow, title, description }) {
         {description ? <p className="section-description">{description}</p> : null}
       </div>
     </div>
+  );
+}
+
+const REPORT_REASONS = [
+  ['spam', 'Spam ou publicité'],
+  ['harcelement', 'Harcèlement'],
+  ['faux-profil', 'Faux profil ou arnaque'],
+  ['contenu-inapproprie', 'Contenu inapproprié'],
+  ['autre', 'Autre'],
+];
+
+export function ReportInline({ token, target, t, onError, showToast }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('spam');
+
+  const send = async () => {
+    try {
+      await api.reportContent(token, { ...target, reason });
+      showToast({ type: 'success', title: t('Signalement envoyé'), message: t('Merci, notre équipe va examiner ce contenu.') });
+      setOpen(false);
+    } catch (error) {
+      onError(error, t('Signalement impossible.'));
+    }
+  };
+
+  if (!open) {
+    return <button type="button" className="link-button" onClick={() => setOpen(true)}>{t('Signaler')}</button>;
+  }
+
+  return (
+    <span className="report-inline">
+      <select value={reason} onChange={(event) => setReason(event.target.value)} aria-label={t('Motif')}>
+        {REPORT_REASONS.map(([id, label]) => <option key={id} value={id}>{t(label)}</option>)}
+      </select>
+      <button type="button" className="link-button" onClick={send}>{t('Envoyer')}</button>
+      <button type="button" className="link-button" onClick={() => setOpen(false)}>{t('Annuler')}</button>
+    </span>
   );
 }
 
@@ -94,6 +133,7 @@ export function EventsPanel({ token, t, locale, defaultCity, onError, showToast 
                     {item.attendees >= item.capacity ? t('Complet') : t('Je participe')}
                   </button>
                 )}
+                {!item.isHost ? <ReportInline token={token} target={{ eventId: item.id }} t={t} onError={onError} showToast={showToast} /> : null}
               </div>
             </article>
           ))}
@@ -163,7 +203,9 @@ export function FeedPanel({ token, t, locale, onError, showToast }) {
               </div>
               <p>{post.content}</p>
               <small className="muted">{formatDate(post.createdAt, locale)}</small>
-              {post.mine ? <button type="button" className="link-button" onClick={() => remove(post.id)}>{t('Supprimer')}</button> : null}
+              {post.mine
+                ? <button type="button" className="link-button" onClick={() => remove(post.id)}>{t('Supprimer')}</button>
+                : <ReportInline token={token} target={{ postId: post.id }} t={t} onError={onError} showToast={showToast} />}
             </article>
           ))}
         </div>
@@ -200,6 +242,110 @@ export function LikesPanel({ token, t, onError, onUpgrade, onDiscover }) {
             </article>
           ))}
         </div>
+      )}
+    </section>
+  );
+}
+
+function PersonCards({ people, token, t, onError, showToast, onLiked }) {
+  const like = async (person) => {
+    try {
+      await api.likeProfile(token, person.id);
+      showToast({ type: 'success', title: t('Like envoyé'), message: person.name });
+      onLiked();
+    } catch (error) {
+      onError(error, t('Impossible d’envoyer le like.'));
+    }
+  };
+
+  return (
+    <div className="discover-grid">
+      {people.map((person) => (
+        <article key={person.id} className="profile-card">
+          <Avatar className="profile-avatar" src={person.avatar} alt={person.name} fallback={person.name} />
+          <PhotoStrip photos={person.photos} />
+          <div className="profile-card-body">
+            <h3>{person.name}, {person.age ?? '18+'}</h3>
+            <p className="city-line">📍 {person.city}</p>
+            {person.compatibility ? (
+              <p className="compat-line">
+                💞 {t('{score} % compatible', { score: person.compatibility.score })}
+                {person.compatibility.reasons.length ? <small> — {person.compatibility.reasons.map((reason) => t(reason)).join(', ')}</small> : null}
+              </p>
+            ) : null}
+            <DetailChips person={person} t={t} />
+            <p>{person.bio}</p>
+          </div>
+          <div className="card-actions">
+            <button type="button" className="like-button" onClick={() => like(person)}>{t('Liker')}</button>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+const TONIGHT_TIPS = [
+  'Donnez rendez-vous dans un lieu public et fréquenté.',
+  'Prévenez un proche de l’heure et du lieu.',
+  'Le consentement est indispensable : un non est un non.',
+  'Signalez immédiatement tout comportement inapproprié.',
+];
+
+export function TonightPanel({ token, t, locale, profile, onProfile, onError, showToast }) {
+  const load = useCallback(() => api.getDiscovery(token, { activeMode: 'all', tonight: true }), [token]);
+  const [data, refresh] = useLoader(load, onError, t('Impossible de charger les profils.'));
+  const active = Boolean(profile.tonightUntil);
+
+  const toggle = async () => {
+    try {
+      const { profile: updated } = await api.setTonight(token, !active);
+      onProfile(updated);
+      await refresh();
+    } catch (error) {
+      onError(error, t('Action impossible.'));
+    }
+  };
+
+  return (
+    <section className="content-panel">
+      <Header eyebrow={t('Ce soir')} title={t('Disponibles ce soir')} description={t('Activez le mode « Ce soir » pour apparaître en tête pendant 12 h. Il se désactive tout seul.')} />
+      <div className="tonight-toggle">
+        <button type="button" className={active ? 'secondary-button' : 'primary-button'} onClick={toggle}>
+          {active ? t('Désactiver le mode Ce soir') : t('Activer le mode Ce soir')}
+        </button>
+        {active ? <span className="badge badge-tonight">🌙 {t('Actif jusqu’à {time}', { time: new Date(profile.tonightUntil).toLocaleTimeString(locale, { timeStyle: 'short' }) })}</span> : null}
+      </div>
+      <ul className="safety-tips">
+        {TONIGHT_TIPS.map((tip) => <li key={tip}>{t(tip)}</li>)}
+      </ul>
+      {!data ? null : data.profiles.length === 0 ? (
+        <div className="empty-state"><h3>{t('Personne pour l’instant')}</h3><p>{t('Revenez plus tard : les profils « Ce soir » apparaissent ici.')}</p></div>
+      ) : (
+        <PersonCards people={data.profiles} token={token} t={t} onError={onError} showToast={showToast} onLiked={refresh} />
+      )}
+    </section>
+  );
+}
+
+export function SelectionPanel({ token, t, onError, showToast }) {
+  const [minScore, setMinScore] = useState(60);
+  const load = useCallback(() => api.getDiscovery(token, { activeMode: 'all', minScore }), [token, minScore]);
+  const [data, refresh] = useLoader(load, onError, t('Impossible de charger les profils.'));
+
+  return (
+    <section className="content-panel">
+      <Header eyebrow={t('Sélection')} title={t('Votre sélection compatible')} description={t('Les profils les plus proches de vos valeurs, de votre projet de famille et de votre région.')} />
+      <label className="score-filter">
+        <span>{t('Compatibilité minimale')}</span>
+        <select value={minScore} onChange={(event) => setMinScore(Number(event.target.value))}>
+          {[40, 60, 80].map((value) => <option key={value} value={value}>{value} %</option>)}
+        </select>
+      </label>
+      {!data ? null : data.profiles.length === 0 ? (
+        <div className="empty-state"><h3>{t('Aucun profil à ce niveau')}</h3><p>{t('Baissez le seuil ou complétez votre profil (valeurs, projet d’enfants, région).')}</p></div>
+      ) : (
+        <PersonCards people={data.profiles} token={token} t={t} onError={onError} showToast={showToast} onLiked={refresh} />
       )}
     </section>
   );

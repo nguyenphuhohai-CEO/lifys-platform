@@ -355,13 +355,13 @@ export function createApp(config) {
         throw createHttpError(400, 'Nom, âge, ville et bio sont requis.');
       }
 
-      const previous = database.getProfileByUserId(req.auth.userId)?.avatar ?? '';
+      const previous = current?.avatar ?? '';
       if (profile.avatar.startsWith('/uploads/') && !ownUploadPattern(req.auth.userId).test(profile.avatar)) {
         throw createHttpError(400, 'Photo invalide.');
       }
 
       const updated = database.updateUserProfile(req.auth.userId, profile);
-      if (previous !== profile.avatar) uploads.removeByUrl(previous);
+      if (previous !== profile.avatar && !(current?.photos ?? []).includes(previous)) uploads.removeByUrl(previous);
       res.json({ profile: updated });
     } catch (error) {
       next(error);
@@ -380,7 +380,7 @@ export function createApp(config) {
         }
         const current = database.getProfileByUserId(req.auth.userId)?.avatar ?? '';
         if (!detectImageType(req.body)) throw createHttpError(415, 'Envoyez une image JPEG, PNG ou WebP.');
-        uploads.removeAllForUser(req.auth.userId, current);
+        uploads.removeAllForUser(req.auth.userId, [current, ...(database.getProfileByUserId(req.auth.userId)?.photos ?? [])]);
         const url = uploads.save(req.auth.userId, req.body);
         res.status(201).json({ url });
       } catch (error) {
@@ -388,6 +388,41 @@ export function createApp(config) {
       }
     },
   );
+
+  app.post(
+    '/api/profile/photos',
+    requireAuth,
+    uploadLimiter,
+    express.raw({ type: UPLOAD_MIME_TYPES, limit: MAX_UPLOAD_BYTES }),
+    (req, res, next) => {
+      try {
+        if (!Buffer.isBuffer(req.body) || !detectImageType(req.body)) {
+          throw createHttpError(415, 'Envoyez une image JPEG, PNG ou WebP.');
+        }
+        if ((database.getProfileByUserId(req.auth.userId)?.photos ?? []).length >= 4) {
+          throw createHttpError(409, 'Vous pouvez ajouter 4 photos supplémentaires au maximum.');
+        }
+        const url = uploads.save(req.auth.userId, req.body);
+        res.status(201).json({ profile: database.addProfilePhoto(req.auth.userId, url) });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post('/api/profile/photos/remove', requireAuth, (req, res, next) => {
+    try {
+      const url = `${req.body.url ?? ''}`;
+      const profile = ownUploadPattern(req.auth.userId).test(url) ? database.removeProfilePhoto(req.auth.userId, url) : null;
+      if (!profile) {
+        throw createHttpError(404, 'Photo introuvable.');
+      }
+      uploads.removeByUrl(url);
+      res.json({ profile });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   app.get('/api/discovery', requireAuth, requireVerified, (req, res) => {
     res.json({
@@ -399,6 +434,7 @@ export function createApp(config) {
         ageMax: req.query.ageMax,
         detail: req.query.detail ?? '',
         tonight: req.query.tonight,
+        minScore: req.query.minScore,
       }),
     });
   });
@@ -472,6 +508,10 @@ export function createApp(config) {
     res.status(204).end();
   }));
 
+  app.post('/api/tonight', requireAuth, requireVerified, community((req, res) => {
+    res.json({ profile: database.setTonight(req.auth.userId, req.body.active === true) });
+  }));
+
   app.get('/api/likes/received', requireAuth, requireVerified, community((req, res) => {
     res.json(database.listLikesReceived(req.auth.userId));
   }));
@@ -506,13 +546,18 @@ export function createApp(config) {
   app.post('/api/reports', requireAuth, (req, res, next) => {
     try {
       const reason = `${req.body.reason ?? ''}`;
-      if (!req.body.profileId || !REPORT_REASONS.has(reason)) {
-        throw createHttpError(400, 'Profil et motif valides requis.');
+      const kind = req.body.postId ? 'post' : req.body.eventId ? 'event' : 'profile';
+      const ref = req.body.postId ?? req.body.eventId ?? req.body.profileId;
+      if (!ref || !REPORT_REASONS.has(reason)) {
+        throw createHttpError(400, 'Cible et motif valides requis.');
       }
 
       const details = `${req.body.details ?? ''}`.trim().slice(0, 1000);
-      if (!database.reportProfile(req.auth.userId, req.body.profileId, { reason, details })) {
-        throw createHttpError(404, 'Profil introuvable.');
+      const reported = kind === 'profile'
+        ? database.reportProfile(req.auth.userId, ref, { reason, details })
+        : database.reportContent(req.auth.userId, kind, `${ref}`, { reason, details });
+      if (!reported) {
+        throw createHttpError(404, 'Contenu introuvable.');
       }
 
       res.status(201).json({ reported: true });
@@ -540,7 +585,7 @@ export function createApp(config) {
   app.post('/api/admin/reports/:reportId/resolve', requireAuth, requireAdmin, (req, res, next) => {
     try {
       const action = req.body.action;
-      if (!['dismiss', 'suspend'].includes(action) || !database.resolveReportById(req.params.reportId, action)) {
+      if (!['dismiss', 'suspend', 'remove'].includes(action) || !database.resolveReportById(req.params.reportId, action)) {
         throw createHttpError(400, 'Signalement introuvable ou action invalide.');
       }
 

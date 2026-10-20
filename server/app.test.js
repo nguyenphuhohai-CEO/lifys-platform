@@ -493,3 +493,66 @@ test('events and posts are scoped to their site, and received likes are gated', 
     await server.close();
   }
 });
+test('gallery photos, content reports with auto-hide, tonight toggle and minimum score', async () => {
+  const server = await startTestServer({ ADMIN_EMAILS: 'admin@example.com' });
+
+  try {
+    const admin = await registerUser(server.baseUrl, 'admin@example.com', { mode: 'professionnel' });
+    const author = await registerUser(server.baseUrl, 'author@example.com', { mode: 'professionnel' });
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32)]);
+    const upload = () => fetch(`${server.baseUrl}/api/profile/photos`, {
+      method: 'POST', headers: { 'content-type': 'image/png', authorization: author.auth.authorization }, body: png,
+    });
+
+    const first = await upload();
+    assert.equal(first.status, 201);
+    const { profile } = await first.json();
+    assert.equal(profile.photos.length, 1);
+    for (let index = 0; index < 3; index += 1) await upload();
+    assert.equal((await upload()).status, 409);
+
+    const removed = await request(server.baseUrl, '/api/profile/photos/remove', {
+      method: 'POST', headers: author.auth, body: JSON.stringify({ url: profile.photos[0] }),
+    });
+    assert.equal(removed.body.profile.photos.length, 3);
+    const foreign = await request(server.baseUrl, '/api/profile/photos/remove', {
+      method: 'POST', headers: admin.auth, body: JSON.stringify({ url: removed.body.profile.photos[0] }),
+    });
+    assert.equal(foreign.status, 404);
+
+    const post = await request(server.baseUrl, '/api/posts', { method: 'POST', headers: author.auth, body: JSON.stringify({ content: 'Offre douteuse', kind: 'offre' }) });
+    const postId = post.body.post.id;
+    const reporters = [];
+    for (const name of ['r1', 'r2', 'r3']) reporters.push(await registerUser(server.baseUrl, `${name}@example.com`, { mode: 'professionnel' }));
+    for (const reporter of reporters) {
+      const response = await request(server.baseUrl, '/api/reports', { method: 'POST', headers: reporter.auth, body: JSON.stringify({ postId, reason: 'spam' }) });
+      assert.equal(response.status, 201);
+    }
+    const self = await request(server.baseUrl, '/api/reports', { method: 'POST', headers: author.auth, body: JSON.stringify({ postId, reason: 'spam' }) });
+    assert.equal(self.status, 404);
+
+    const visible = await request(server.baseUrl, '/api/posts', { headers: admin.auth });
+    assert.equal(visible.body.posts.some((item) => item.id === postId), false);
+
+    const reports = await request(server.baseUrl, '/api/admin/reports', { headers: admin.auth });
+    assert.equal(reports.body.reports[0].content.kind, 'post');
+    const resolved = await request(server.baseUrl, `/api/admin/reports/${reports.body.reports[0].id}/resolve`, {
+      method: 'POST', headers: admin.auth, body: JSON.stringify({ action: 'remove' }),
+    });
+    assert.equal(resolved.status, 200);
+    assert.equal((await request(server.baseUrl, '/api/admin/reports', { headers: admin.auth })).body.reports.length, 0);
+
+    const night = await registerUser(server.baseUrl, 'night@example.com', { mode: 'sans-lendemain' });
+    const on = await request(server.baseUrl, '/api/tonight', { method: 'POST', headers: night.auth, body: JSON.stringify({ active: true }) });
+    assert.ok(on.body.profile.tonightUntil);
+    assert.equal(on.body.profile.details.tonight, true);
+    const off = await request(server.baseUrl, '/api/tonight', { method: 'POST', headers: night.auth, body: JSON.stringify({ active: false }) });
+    assert.equal(off.body.profile.tonightUntil, null);
+    assert.equal((await request(server.baseUrl, '/api/tonight', { method: 'POST', headers: author.auth, body: '{}' })).status, 403);
+
+    const none = await request(server.baseUrl, '/api/discovery?mode=all&minScore=101', { headers: night.auth });
+    assert.equal(none.body.profiles.length, 0);
+  } finally {
+    await server.close();
+  }
+});
