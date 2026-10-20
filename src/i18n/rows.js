@@ -625,5 +625,10 @@ export const ROWS = [
   ['Ce match expire dans {time} : écrivez un message pour le garder.', 'This match expires in {time}: send a message to keep it.', 'Este match caduca en {time}: escribe un mensaje para conservarlo.', 'Lượt ghép đôi này hết hạn sau {time}: hãy nhắn tin để giữ lại.'],
   ['{h} h {m} min', '{h} h {m} min', '{h} h {m} min', '{h} giờ {m} phút'],
   ['{m} min', '{m} min', '{m} min', '{m} phút'],
+  ['Cartes', 'Cards', 'Tarjetas', 'Thẻ'],
+  ['Grille', 'Grid', 'Cuadrícula', 'Lưới'],
+  ['{count} profils', '{count} profiles', '{count} perfiles', '{count} hồ sơ'],
+  ['Passer', 'Pass', 'Pasar', 'Bỏ qua'],
+  ['Glissez la carte ou utilisez les flèches ← →', 'Swipe the card or use the ← → arrows', 'Desliza la tarjeta o usa las flechas ← →', 'Vuốt thẻ hoặc dùng phím ← →'],
 ];
 

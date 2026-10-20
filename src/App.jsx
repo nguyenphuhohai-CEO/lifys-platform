@@ -5,6 +5,7 @@ import { EventsPanel, FeedPanel, LikesPanel, SelectionPanel, TonightPanel } from
 import { GalleryManager, PhotoStrip } from './components/Gallery';
 import Onboarding from './components/Onboarding';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
+import SwipeDeck from './components/SwipeDeck';
 import SiteFooter from './components/SiteFooter';
 import SiteRail from './components/SiteRail';
 import ExpiryNotice from './components/ExpiryNotice';
@@ -104,6 +105,7 @@ function App({ site }) {
   const [detailQuery, setDetailQuery] = useState('');
   const [tonightOnly, setTonightOnly] = useState(false);
   const [hookFor, setHookFor] = useState(null);
+  const [deckMode, setDeckMode] = useState(() => localStorage.getItem('lifys-deck') !== 'grid');
   const [hookText, setHookText] = useState('');
   const filtersPrefilled = useRef(false);
   const [toasts, setToasts] = useState([]);
@@ -1069,6 +1071,14 @@ function App({ site }) {
                 onAction={resetFilters}
               />
             ) : (
+              <>
+              <div className="deck-toggle" role="group">
+                <button type="button" className={deckMode ? 'active' : ''} onClick={() => { setDeckMode(true); localStorage.setItem('lifys-deck', 'deck'); }}>🃏 {t('Cartes')}</button>
+                <button type="button" className={deckMode ? '' : 'active'} onClick={() => { setDeckMode(false); localStorage.setItem('lifys-deck', 'grid'); }}>▦ {t('Grille')}</button>
+              </div>
+              {deckMode ? (
+                <SwipeDeck profiles={profiles} t={t} canSuperLike={site === 'amoureux'} onLike={(id) => handleLike(id)} onPass={handlePass} onSuperLike={(id) => handleLike(id, { superLike: true })} />
+              ) : (
               <div className="discover-grid">
                 {profiles.map((person) => (
                   <article key={person.id} className="profile-card">
@@ -1119,6 +1129,8 @@ function App({ site }) {
                   </article>
                 ))}
               </div>
+              )}
+              </>
             )}
           </section>
         )}
