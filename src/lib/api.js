@@ -50,6 +50,12 @@ export const api = {
   getSession(token) {
     return apiRequest('/api/auth/session', { token });
   },
+  getAdminReports(token) {
+    return apiRequest('/api/admin/reports', { token });
+  },
+  resolveAdminReport(token, reportId, action) {
+    return apiRequest(`/api/admin/reports/${reportId}/resolve`, { method: 'POST', token, body: { action } });
+  },
   getHub(token) {
     return apiRequest('/api/hub', { token });
   },

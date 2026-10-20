@@ -577,3 +577,19 @@ test('hub lists every site of the account', async () => {
     await server.close();
   }
 });
+test('session exposes isAdmin only for configured admin emails', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false', ADMIN_EMAILS: 'boss@example.com' });
+
+  try {
+    const boss = await registerUser(server.baseUrl, 'boss@example.com');
+    const user = await registerUser(server.baseUrl, 'user@example.com');
+    assert.equal(boss.body.user.isAdmin, true);
+    assert.equal(user.body.user.isAdmin, false);
+    const reports = await request(server.baseUrl, '/api/admin/reports', { headers: boss.auth });
+    assert.equal(reports.status, 200);
+    const denied = await request(server.baseUrl, '/api/admin/reports', { headers: user.auth });
+    assert.equal(denied.status, 403);
+  } finally {
+    await server.close();
+  }
+});

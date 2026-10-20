@@ -7,6 +7,7 @@ import Onboarding from './components/Onboarding';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
 import SiteFooter from './components/SiteFooter';
 import SiteRail from './components/SiteRail';
+import AdminPanel from './components/AdminPanel';
 import PricingPanel, { AdSlot } from './components/Pricing';
 import ConsentBanner from './components/ConsentBanner';
 import ToastRegion from './components/ToastRegion';
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { id: 'messages', label: 'Messages' },
   { id: 'pricing', label: 'Offres' },
   { id: 'profile', label: 'Profil' },
+  { id: 'admin', label: 'Modération' },
 ];
 
 const getAuthKey = (site) => `${STORAGE_KEYS.auth}-${site}`;
@@ -797,7 +799,7 @@ function App({ site }) {
         </button>
 
         <nav id="lifys-main-nav" className={isMobileNavOpen ? 'nav nav-open' : 'nav'} aria-label={t('Navigation principale')}>
-          {NAV_ITEMS.filter((item) => item.id !== 'community' || siteInfo.nav.community).map((item) => (
+          {NAV_ITEMS.filter((item) => (item.id !== 'community' || siteInfo.nav.community) && (item.id !== 'admin' || currentUser.isAdmin)).map((item) => (
             <button
               key={item.id}
               type="button"
@@ -1197,6 +1199,8 @@ function App({ site }) {
             </div>
           </section>
         )}
+
+        {view === 'admin' && currentUser.isAdmin ? <AdminPanel token={token} onError={handleApiError} /> : null}
 
         {view === 'pricing' && (
           <section className="content-panel">

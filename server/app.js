@@ -40,6 +40,7 @@ function sendSession(res, token, profile) {
     user: {
       email: profile.email,
       emailVerified: profile.emailVerified,
+      isAdmin: (res.app.locals.adminEmails ?? []).includes(profile.email),
       profile,
     },
   });
@@ -55,6 +56,7 @@ export function createApp(config) {
   const app = express();
 
   app.disable('x-powered-by');
+  app.locals.adminEmails = config.adminEmails;
   app.set('trust proxy', config.trustProxy);
   app.post('/api/billing/webhook', express.raw({ type: '*/*', limit: '100kb' }), (req, res, next) => {
     try {

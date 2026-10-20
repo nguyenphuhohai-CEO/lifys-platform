@@ -226,7 +226,7 @@ Ce MVP reste volontairement limité :
 - pas de paiement ;
 - pas de vérification d’identité (uniquement de l’adresse e-mail) ;
 - pas de temps réel WebSocket ;
-- modération manuelle via signalements (API admin, pas encore d’interface) ;
+- modération manuelle via signalements (onglet « Modération » pour les comptes ADMIN_EMAILS) ;
 - SQLite adapté au MVP, pas à une très forte montée en charge ;
 - les textes légaux (`src/pages/LegalPage.jsx`) sont des modèles à compléter (`[À COMPLÉTER]`) et à faire valider par un juriste.
 
@@ -301,4 +301,4 @@ Chaque site a ses champs facultatifs (`src/data/siteFields.js`, validés côté 
 - **Assistant d'accueil** (`Onboarding.jsx`) : à la première connexion sur un site, 3 étapes (infos de base, questionnaire spécifique au site, photo). Ignorable (« Plus tard ») ; l'état est mémorisé dans le navigateur.
 - **Galerie** : jusqu'à 4 photos supplémentaires par profil (`POST /api/profile/photos`, `POST /api/profile/photos/remove`, colonne `profiles.photos`), en plus de la photo principale.
 - **Amis** : onglet « Sorties » (créer/rejoindre/quitter, capacité limitée). **Pro** : « Fil d'actualité » (publications, offres, recherches de mission). **Amoureux** : « Likes reçus » (profils visibles en Premium, compteur en gratuit). **Éphémère** : onglet « Ce soir » (`POST /api/tonight`, 12 h, conseils de sécurité). **Mariage** : onglet « Sélection » (`minScore` sur `/api/discovery`).
-- **Signalement des contenus** : `POST /api/reports` accepte `postId` ou `eventId` en plus de `profileId`. Un contenu signalé par 3 membres distincts est masqué automatiquement ; l'admin (`ADMIN_EMAILS`) peut `dismiss`, `suspend` ou `remove` (supprime le contenu) via `POST /api/admin/reports/:id/resolve`. Il n'y a pas encore d'interface d'administration, seulement l'API.
+- **Signalement des contenus** : `POST /api/reports` accepte `postId` ou `eventId` en plus de `profileId`. Un contenu signalé par 3 membres distincts est masqué automatiquement ; l'admin (`ADMIN_EMAILS`) peut `dismiss`, `suspend` ou `remove` (supprime le contenu) via `POST /api/admin/reports/:id/resolve`. L'onglet « Modération » de l'application liste les signalements ouverts avec ces trois actions.

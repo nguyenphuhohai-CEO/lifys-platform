@@ -1190,6 +1190,12 @@ textarea:focus-visible {
   .topbar-actions { grid-column: 1 / -1; }
 }
 
+/* Administration */
+.admin-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.admin-report { padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-md, 12px); display: grid; gap: 8px; }
+.admin-report-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.admin-report blockquote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--primary); background: rgba(0,0,0,.04); }
+
 /* Accueil : démarrage guidé */
 .home-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
 .checklist-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
