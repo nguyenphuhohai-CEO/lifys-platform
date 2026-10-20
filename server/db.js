@@ -334,6 +334,11 @@ export function createDatabase(databaseFile, options = {}) {
   if (!profileColumns.has('photos')) {
     db.exec("ALTER TABLE profiles ADD COLUMN photos TEXT NOT NULL DEFAULT '[]'");
   }
+  const messageColumns = new Set(db.prepare('PRAGMA table_info(messages)').all().map((column) => column.name));
+  if (!messageColumns.has('read_at')) {
+    db.exec('ALTER TABLE messages ADD COLUMN read_at TEXT');
+    db.exec('UPDATE messages SET read_at = created_at');
+  }
   const reportColumns = new Set(db.prepare('PRAGMA table_info(reports)').all().map((column) => column.name));
   for (const [column, definition] of [
     ['content_kind', "TEXT NOT NULL DEFAULT 'profile'"],
@@ -557,7 +562,7 @@ export function createDatabase(databaseFile, options = {}) {
       ORDER BY conversations.created_at DESC
     `),
     listMessagesForConversation: db.prepare(`
-      SELECT messages.public_id, messages.content, messages.created_at, messages.sender_user_id
+      SELECT messages.public_id, messages.content, messages.created_at, messages.sender_user_id, messages.read_at
       FROM messages
       JOIN conversations ON conversations.id = messages.conversation_id
       JOIN matches ON matches.id = conversations.match_id
@@ -905,8 +910,22 @@ export function createDatabase(databaseFile, options = {}) {
         sender: message.sender_user_id === userId ? 'me' : 'them',
         text: message.content,
         createdAt: message.created_at,
+        readAt: message.read_at,
       })),
+    })).map((conversation) => ({
+      ...conversation,
+      unread: conversation.messages.filter((message) => message.sender === 'them' && !message.readAt).length,
     }));
+  }
+
+  function markConversationRead(userId, conversationPublicId) {
+    const conversation = statements.findConversationContext.get(conversationPublicId);
+    if (!conversation || (conversation.user_one_id !== userId && conversation.user_two_id !== userId)) {
+      return null;
+    }
+    db.prepare('UPDATE messages SET read_at = ? WHERE conversation_id = ? AND sender_user_id != ? AND read_at IS NULL')
+      .run(now(), conversation.id, userId);
+    return listConversationsForUser(userId).find((item) => item.id === conversationPublicId) ?? null;
   }
 
   function addMessage(userId, conversationPublicId, text) {
@@ -1322,6 +1341,7 @@ export function createDatabase(databaseFile, options = {}) {
     passProfile,
     listMatchesForUser,
     listConversationsForUser,
+    markConversationRead,
     addMessage,
     resetUserData,
   };

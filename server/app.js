@@ -549,6 +549,19 @@ export function createApp(config) {
     }
   });
 
+  app.post('/api/conversations/:conversationId/read', requireAuth, (req, res, next) => {
+    try {
+      const conversation = database.markConversationRead(req.auth.userId, req.params.conversationId);
+      if (!conversation) {
+        throw createHttpError(404, 'Conversation introuvable.');
+      }
+
+      res.json({ conversation });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post('/api/reports', requireAuth, (req, res, next) => {
     try {
       const reason = `${req.body.reason ?? ''}`;

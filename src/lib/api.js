@@ -56,6 +56,9 @@ export const api = {
   resolveAdminReport(token, reportId, action) {
     return apiRequest(`/api/admin/reports/${reportId}/resolve`, { method: 'POST', token, body: { action } });
   },
+  markConversationRead(token, conversationId) {
+    return apiRequest(`/api/conversations/${conversationId}/read`, { method: 'POST', token });
+  },
   getHub(token) {
     return apiRequest('/api/hub', { token });
   },

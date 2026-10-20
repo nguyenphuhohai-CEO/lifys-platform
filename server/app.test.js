@@ -593,3 +593,37 @@ test('session exposes isAdmin only for configured admin emails', async () => {
     await server.close();
   }
 });
+test('messages track unread count and read receipts', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false' });
+
+  try {
+    const a = await registerUser(server.baseUrl, 'ra@example.com', { mode: 'professionnel' });
+    const b = await registerUser(server.baseUrl, 'rb@example.com', { mode: 'professionnel' });
+    const complete = (auth, name) => request(server.baseUrl, '/api/profile', {
+      method: 'PUT',
+      headers: auth,
+      body: JSON.stringify({ name, age: 30, city: 'Paris', bio: 'Profil complet pour tester les accusés de lecture.', interests: ['design'], mode: 'professionnel', avatar: '' }),
+    });
+    const profileA = await complete(a.auth, 'Ava');
+    const profileB = await complete(b.auth, 'Noah');
+    const like = (auth, id) => request(server.baseUrl, '/api/interactions/like', { method: 'POST', headers: auth, body: JSON.stringify({ profileId: id }) });
+    await like(b.auth, profileA.body.profile.id);
+    await like(a.auth, profileB.body.profile.id);
+
+    const conversations = await request(server.baseUrl, '/api/conversations', { headers: a.auth });
+    const conversationId = conversations.body.conversations[0].id;
+    await request(server.baseUrl, `/api/conversations/${conversationId}/messages`, { method: 'POST', headers: a.auth, body: JSON.stringify({ text: 'Bonjour' }) });
+
+    const asB = await request(server.baseUrl, '/api/conversations', { headers: b.auth });
+    assert.equal(asB.body.conversations[0].unread, 1);
+
+    const read = await request(server.baseUrl, `/api/conversations/${conversationId}/read`, { method: 'POST', headers: b.auth });
+    assert.equal(read.body.conversation.unread, 0);
+
+    const asA = await request(server.baseUrl, '/api/conversations', { headers: a.auth });
+    const sentByA = asA.body.conversations[0].messages.find((message) => message.text === 'Bonjour');
+    assert.ok(sentByA.readAt);
+  } finally {
+    await server.close();
+  }
+});

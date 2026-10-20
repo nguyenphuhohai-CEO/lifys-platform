@@ -306,6 +306,33 @@ function App({ site }) {
     }
   }, [conversations, selectedConversation]);
 
+  const unreadTotal = conversations.reduce((count, conversation) => count + (conversation.unread ?? 0), 0);
+
+  // Marque la conversation ouverte comme lue (accusé de lecture « Vu »).
+  useEffect(() => {
+    const open = conversations.find((conversation) => conversation.id === selectedConversation);
+    if (view !== 'messages' || !open?.unread || !token) return;
+    api.markConversationRead(token, open.id).then((response) => {
+      setConversations((current) => current.map((conversation) => (
+        conversation.id === response.conversation.id ? response.conversation : conversation
+      )));
+    }).catch(() => {});
+  }, [view, selectedConversation, conversations, token]);
+
+  // Rafraîchit les conversations toutes les 15 s, onglet visible uniquement.
+  useEffect(() => {
+    if (!token || !currentUser) return undefined;
+    const timer = setInterval(() => {
+      if (document.hidden) return;
+      api.getBootstrap(token).then((data) => {
+        if (data.profile.mode !== site) return;
+        setConversations(data.conversations);
+        setMatches(data.matches);
+      }).catch(() => {});
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [token, currentUser, site]);
+
   const isPremium = currentUser?.profile?.plan === 'premium';
 
   useEffect(() => {
@@ -807,6 +834,7 @@ function App({ site }) {
               onClick={() => setCurrentView(item.id)}
             >
               {t(siteInfo.nav[item.id] ?? item.label)}
+              {item.id === 'messages' && unreadTotal > 0 ? <span className="nav-badge">{unreadTotal}</span> : null}
             </button>
           ))}
         </nav>
@@ -1150,6 +1178,7 @@ function App({ site }) {
                         <strong>{conversation.name}</strong>
                         <small>{t(getConversationPreview(conversation))}</small>
                       </div>
+                      {conversation.unread ? <span className="nav-badge">{conversation.unread}</span> : null}
                     </button>
                   ))}
                 </div>
@@ -1168,9 +1197,12 @@ function App({ site }) {
                   </div>
 
                   <div className="chat-body" aria-live="polite">
-                    {selectedConversationData.messages.map((message) => (
+                    {selectedConversationData.messages.map((message, index, list) => (
                       <div key={message.id} className={message.sender === 'me' ? 'bubble me' : 'bubble them'}>
                         {message.text}
+                        {message.sender === 'me' && index === list.map((item) => item.sender).lastIndexOf('me') ? (
+                          <small className="read-receipt">{message.readAt ? t('Vu') : t('Envoyé')}</small>
+                        ) : null}
                       </div>
                     ))}
                   </div>

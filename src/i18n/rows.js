@@ -619,5 +619,7 @@ export const ROWS = [
   ['Ignorer', 'Dismiss', 'Ignorar', 'Bỏ qua'],
   ['Supprimer le contenu', 'Delete content', 'Eliminar contenido', 'Xóa nội dung'],
   ['Suspendre l’auteur', 'Suspend author', 'Suspender al autor', 'Đình chỉ tác giả'],
+  ['Vu', 'Seen', 'Visto', 'Đã xem'],
+  ['Envoyé', 'Sent', 'Enviado', 'Đã gửi'],
 ];
 

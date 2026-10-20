@@ -1190,6 +1190,9 @@ textarea:focus-visible {
   .topbar-actions { grid-column: 1 / -1; }
 }
 
+.nav-badge { display: inline-block; margin-left: 6px; min-width: 1.2rem; padding: 0 .4rem; border-radius: 999px; background: #d00; color: #fff; font-size: .72rem; font-weight: 700; text-align: center; }
+.read-receipt { display: block; text-align: right; opacity: .7; font-size: .7rem; }
+
 /* Administration */
 .admin-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 .admin-report { padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-md, 12px); display: grid; gap: 8px; }
