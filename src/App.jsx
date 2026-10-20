@@ -5,12 +5,13 @@ import SiteFooter from './components/SiteFooter';
 import PricingPanel, { AdSlot } from './components/Pricing';
 import ConsentBanner from './components/ConsentBanner';
 import ToastRegion from './components/ToastRegion';
-import { MODES, defaultProfile } from './data/demoData';
+import { defaultProfile } from './data/demoData';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import { useI18n } from './i18n';
 import { api, ApiError } from './lib/api';
 import { getConversationPreview, getModeById, serializeInterests } from './utils/app-utils';
-import { getCategoryPath, getModeFromSearch, navigate } from './utils/routing';
+import { CATEGORY_CONTENT, getSite } from './data/sites';
+import { navigate } from './utils/routing';
 import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './utils/storage';
 
 const NAV_ITEMS = [
@@ -22,11 +23,15 @@ const NAV_ITEMS = [
   { id: 'profile', label: 'Profil' },
 ];
 
-const initialAuth = safeReadJSON(STORAGE_KEYS.auth, { token: '' }, {
-  sanitize: (value) => ({
-    token: typeof value?.token === 'string' ? value.token : '',
-  }),
-}).data;
+const getAuthKey = (site) => `${STORAGE_KEYS.auth}-${site}`;
+
+function readStoredToken(site) {
+  return safeReadJSON(getAuthKey(site), { token: '' }, {
+    sanitize: (value) => ({
+      token: typeof value?.token === 'string' ? value.token : '',
+    }),
+  }).data.token;
+}
 
 function translateReasonWith(t, reason) {
   const patterns = [
@@ -67,12 +72,15 @@ function SectionHeader({ eyebrow, title, description, aside }) {
   );
 }
 
-function App() {
+function App({ site }) {
   const { lang, t } = useI18n();
-  const [token, setToken] = useState(initialAuth.token);
+  const siteInfo = getSite(site);
+  const authKey = getAuthKey(site);
+  const content = CATEGORY_CONTENT[site];
+  const [token, setToken] = useState(() => readStoredToken(site));
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState('home');
-  const [activeMode, setActiveMode] = useState(() => getModeFromSearch(window.location.search) ?? 'all');
+  const activeMode = site;
   const [profile, setProfile] = useState(defaultProfile);
   const [profileDraft, setProfileDraft] = useState(defaultProfile);
   const [profileErrors, setProfileErrors] = useState({});
@@ -98,7 +106,6 @@ function App() {
     name: '',
     email: '',
     password: '',
-    mode: 'amoureux',
     acceptTerms: false,
   });
   const [plans, setPlans] = useState([]);
@@ -131,11 +138,19 @@ function App() {
 
   useEffect(() => {
     if (token) {
-      safeWriteJSON(STORAGE_KEYS.auth, { token });
+      safeWriteJSON(authKey, { token });
     } else {
-      resetPrototypeStorage([STORAGE_KEYS.auth]);
+      resetPrototypeStorage([authKey]);
     }
-  }, [token]);
+  }, [authKey, token]);
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = siteInfo.brand;
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [siteInfo.brand]);
 
   const loadDiscovery = useCallback(async (authToken) => {
     setDiscoveryLoading(true);
@@ -173,6 +188,12 @@ function App() {
           throw error;
         }),
       ]);
+
+      if (bootstrapData.profile.mode !== site) {
+        setToken('');
+        setCurrentUser(null);
+        return;
+      }
 
       setCurrentUser(sessionData.user);
       setProfile(bootstrapData.profile);
@@ -298,8 +319,8 @@ function App() {
 
     try {
       const response = authMode === 'register'
-        ? await api.register({ ...authForm, lang })
-        : await api.login({ email: authForm.email, password: authForm.password });
+        ? await api.register({ ...authForm, mode: site, lang })
+        : await api.login({ email: authForm.email, password: authForm.password, site });
 
       setToken(response.token);
       setCurrentUser(response.user);
@@ -514,7 +535,6 @@ function App() {
       setSelectedConversation(response.conversations[0]?.id ?? null);
       setSearchQuery('');
       setCityQuery('');
-      setActiveMode('all');
       setDraftMessage('');
       await loadDiscovery(token);
       showToast({
@@ -570,50 +590,27 @@ function App() {
 
   if (!token || !currentUser) {
     return (
-      <div className="app-shell">
+      <div className="app-shell" data-site={site}>
         <ToastRegion toasts={toasts} onDismiss={(toastId) => setToasts((current) => current.filter((item) => item.id !== toastId))} />
         <main className="page-shell">
           <section className="hero-panel auth-hero">
             <div className="hero-copy">
-              <p className="eyebrow">{t('Rencontres multi-catégories')}</p>
-              <h1>{t('Des rencontres qui vous ressemblent.')}</h1>
-              <p>{t('Amitié, amour, rencontres spontanées, mariage ou réseau professionnel : choisissez l’intention qui vous correspond et rencontrez des personnes qui la partagent.')}</p>
-              <div className="category-links">
-                {MODES.map((mode) => (
-                  <a
-                    key={mode.id}
-                    href={getCategoryPath(mode.id)}
-                    className="pill"
-                    onClick={(event) => { event.preventDefault(); navigate(getCategoryPath(mode.id)); }}
-                  >
-                    {mode.icon} {t(mode.label)}
-                  </a>
-                ))}
-              </div>
-              <div className="hero-metrics">
-                <article className="metric-card">
-                  <span>{t('5 catégories')}</span>
-                  <strong>{t('Votre intention')}</strong>
-                  <small>{t('chaque rencontre commence par un objectif clair')}</small>
-                </article>
-                <article className="metric-card">
-                  <span>{t('Confidentialité')}</span>
-                  <strong>{t('Vos données')}</strong>
-                  <small>{t('jamais d’identifiant interne exposé aux autres')}</small>
-                </article>
-                <article className="metric-card">
-                  <span>{t('Échanges')}</span>
-                  <strong>{t('Messagerie')}</strong>
-                  <small>{t('discutez dès qu’un match se crée')}</small>
-                </article>
-              </div>
+              <p className="eyebrow">{siteInfo.icon} {siteInfo.brand} · {t(siteInfo.inspiredBy)}</p>
+              <h1>{t(content.headline)}</h1>
+              <p>{t(content.intro)}</p>
+              <ul className="category-list">
+                {content.highlights.map((item) => <li key={item}>{t(item)}</li>)}
+              </ul>
+              <p>
+                <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>{t('Découvrir les autres sites Lifys')}</a>
+              </p>
             </div>
 
             <div className="content-panel auth-card">
               <SectionHeader
                 eyebrow={authMode === 'register' ? t('Créer un compte') : t('Connexion')}
-                title={authMode === 'register' ? t('Commencer sur Lifys') : t('Reprendre votre session')}
-                description={t('Créez votre compte en quelques secondes. Une confirmation par e-mail est nécessaire pour accéder aux rencontres.')}
+                title={authMode === 'register' ? t('Rejoindre {mode}', { mode: siteInfo.brand }) : t('Reprendre votre session')}
+                description={t('Ce compte est propre à {mode} : il n’est pas partagé avec les autres sites Lifys.', { mode: siteInfo.brand })}
               />
 
               {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
@@ -633,14 +630,6 @@ function App() {
                   <span>{t('Mot de passe')}</span>
                   <input type="password" value={authForm.password} onChange={(event) => setAuthForm((current) => ({ ...current, password: event.target.value }))} />
                 </label>
-                {authMode === 'register' ? (
-                  <label>
-                    <span>{t('Catégorie principale')}</span>
-                    <select value={authForm.mode} onChange={(event) => setAuthForm((current) => ({ ...current, mode: event.target.value }))}>
-                      {MODES.map((mode) => <option key={mode.id} value={mode.id}>{t(mode.label)}</option>)}
-                    </select>
-                  </label>
-                ) : null}
                 {authMode === 'register' ? (
                   <label className="consent-row">
                     <input
@@ -671,15 +660,15 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-site={site}>
       <ToastRegion toasts={toasts} onDismiss={(toastId) => setToasts((current) => current.filter((item) => item.id !== toastId))} />
 
       <header className="topbar">
         <button type="button" className="brand-block" onClick={() => setCurrentView('home')}>
-          <span className="brand-icon">❤</span>
+          <span className="brand-icon">{siteInfo.icon}</span>
           <span>
-            <strong>{t('Lifys')}</strong>
-            <small>{t('Rencontres multi-catégories')}</small>
+            <strong>{siteInfo.brand}</strong>
+            <small>{t(siteInfo.tagline)}</small>
           </span>
         </button>
 
@@ -701,7 +690,7 @@ function App() {
               className={view === item.id ? 'nav-button active' : 'nav-button'}
               onClick={() => setCurrentView(item.id)}
             >
-              {t(item.label)}
+              {t(siteInfo.nav[item.id] ?? item.label)}
             </button>
           ))}
         </nav>
@@ -781,32 +770,15 @@ function App() {
                   <p>{currentUser.email}</p>
                 </div>
                 <div className="mini-card">
-                  <span className="mini-label">{t('Catégories')}</span>
-                  <strong>{t('5 façons de rencontrer')}</strong>
-                  <p>{MODES.map((item) => t(item.label)).join(' · ')}</p>
+                  <span className="mini-label">{siteInfo.brand}</span>
+                  <strong>{t(siteInfo.tagline)}</strong>
+                  <p><a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>{t('Découvrir les autres sites Lifys')}</a></p>
                 </div>
               </div>
             </section>
 
             {!isPremium ? <AdSlot ads={ads} onUpgrade={() => setCurrentView('pricing')} /> : null}
 
-            <section className="mode-grid" aria-label={t('Choix de catégorie')}>
-              {MODES.map((mode) => (
-                <button
-                  key={mode.id}
-                  type="button"
-                  className={activeMode === mode.id ? 'mode-card active' : 'mode-card'}
-                  onClick={() => {
-                    setActiveMode(mode.id);
-                    setCurrentView('discover');
-                  }}
-                >
-                  <span className="mode-icon" style={{ '--mode-accent': mode.accent }}>{mode.icon}</span>
-                  <strong>{t(mode.label)}</strong>
-                  <small>{t(mode.description)}</small>
-                </button>
-              ))}
-            </section>
           </>
         )}
 
@@ -826,14 +798,6 @@ function App() {
             {!isPremium ? <AdSlot ads={ads} onUpgrade={() => setCurrentView('pricing')} /> : null}
 
             <div className="discover-toolbar">
-              <div className="mode-pills" aria-label={t('Filtre par catégorie')}>
-                <button type="button" className={activeMode === 'all' ? 'pill active' : 'pill'} onClick={() => setActiveMode('all')}>{t('Tous')}</button>
-                {MODES.map((mode) => (
-                  <button type="button" key={mode.id} className={activeMode === mode.id ? 'pill active' : 'pill'} onClick={() => setActiveMode(mode.id)}>
-                    {t(mode.label)}
-                  </button>
-                ))}
-              </div>
 
               <div className="filter-grid">
                 <label>
@@ -860,7 +824,6 @@ function App() {
                 onAction={() => {
                   setSearchQuery('');
                   setCityQuery('');
-                  setActiveMode('all');
                 }}
               />
             ) : (
@@ -1049,12 +1012,6 @@ function App() {
                     <span>{t('Ville')}</span>
                     <input value={profileDraft.city} onChange={(event) => updateProfileField('city', event.target.value)} aria-invalid={Boolean(profileErrors.city)} />
                     {profileErrors.city ? <small className="field-error">{profileErrors.city}</small> : null}
-                  </label>
-                  <label>
-                    <span>{t('Catégorie principale')}</span>
-                    <select value={profileDraft.mode} onChange={(event) => updateProfileField('mode', event.target.value)}>
-                      {MODES.map((mode) => <option key={mode.id} value={mode.id}>{t(mode.label)}</option>)}
-                    </select>
                   </label>
                 </div>
 

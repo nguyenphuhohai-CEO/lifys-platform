@@ -134,6 +134,7 @@ test('discovery hides private identifiers and reset keeps real-user matches inta
         email: 'a@example.com',
         password: 'supersecret',
         name: 'Ava',
+        mode: 'professionnel',
         acceptTerms: true,
       }),
     });
@@ -143,6 +144,7 @@ test('discovery hides private identifiers and reset keeps real-user matches inta
         email: 'b@example.com',
         password: 'supersecret',
         name: 'Noah',
+        mode: 'professionnel',
         acceptTerms: true,
       }),
     });
@@ -351,6 +353,36 @@ test('blocked profiles disappear and accounts can be exported and deleted', asyn
     assert.equal(deleted.status, 204);
     const gone = await request(server.baseUrl, '/api/auth/session', { headers: a.auth });
     assert.equal(gone.status, 401);
+  } finally {
+    await server.close();
+  }
+});
+
+test('each category is a separate site with its own accounts and pool', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'true' });
+
+  try {
+    const love = await registerUser(server.baseUrl, 'same@example.com', { mode: 'amoureux' });
+    const pro = await registerUser(server.baseUrl, 'same@example.com', { mode: 'professionnel' });
+    assert.equal(love.status, 201);
+    assert.equal(pro.status, 201);
+    assert.equal((await registerUser(server.baseUrl, 'same@example.com', { mode: 'amoureux' })).status, 409);
+
+    const wrongSite = await request(server.baseUrl, '/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'same@example.com', password: 'supersecret', site: 'mariage' }),
+    });
+    assert.equal(wrongSite.status, 401);
+
+    const discovery = await request(server.baseUrl, '/api/discovery?mode=all', { headers: pro.auth });
+    assert.ok(discovery.body.profiles.every((profile) => profile.mode === 'professionnel'));
+
+    const forced = await request(server.baseUrl, '/api/profile', {
+      method: 'PUT',
+      headers: pro.auth,
+      body: JSON.stringify({ name: 'Pro', age: 30, city: 'Paris', bio: 'Bio pro', mode: 'amoureux' }),
+    });
+    assert.equal(forced.body.profile.mode, 'professionnel');
   } finally {
     await server.close();
   }

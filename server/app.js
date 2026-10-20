@@ -187,7 +187,7 @@ export function createApp(config) {
         throw createHttpError(400, 'Vous devez accepter les CGU et confirmer avoir au moins 18 ans.');
       }
 
-      if (database.getUserByEmail(email)) {
+      if (database.getUserByEmail(email, initialProfile.mode)) {
         throw createHttpError(409, 'Un compte existe déjà avec cet e-mail.');
       }
 
@@ -219,7 +219,8 @@ export function createApp(config) {
     try {
       const email = normalizeEmail(req.body.email);
       const password = req.body.password;
-      const user = database.getUserByEmail(email);
+      const site = sanitizeProfileInput({ mode: req.body.site ?? req.body.mode }).mode;
+      const user = database.getUserByEmail(email, site);
 
       if (typeof password !== 'string' || !password || !user || !comparePassword(password, user.password_hash)) {
         throw createHttpError(401, 'Identifiants invalides.');
@@ -322,7 +323,8 @@ export function createApp(config) {
 
   app.put('/api/profile', requireAuth, (req, res, next) => {
     try {
-      const profile = sanitizeProfileInput(req.body);
+      const current = database.getProfileByUserId(req.auth.userId);
+      const profile = sanitizeProfileInput({ ...req.body, mode: current?.mode ?? req.body.mode });
 
       if (!profile.name || !profile.city || !profile.bio || !profile.age) {
         throw createHttpError(400, 'Nom, âge, ville et bio sont requis.');

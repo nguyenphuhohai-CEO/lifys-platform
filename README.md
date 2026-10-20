@@ -285,3 +285,7 @@ Ne pas y stocker de données sensibles réelles sans :
 
 
 
+
+## Sites séparés par catégorie
+
+Chaque catégorie est un site à part entière (`/Amical`, `/Amoureux`, `/Sans-lendemain`, `/Mariage`, `/Professionnel`) avec sa marque, son thème, son vocabulaire et **ses propres comptes** : un même e-mail peut s'inscrire sur plusieurs sites, avec des profils, des mails de découverte, des matchs et des abonnements indépendants. L'API (`/api/auth/register` et `/api/auth/login`) reçoit le site via `mode` / `site`. La page `/` est un portail qui renvoie vers les 5 sites. Les bases existantes sont migrées automatiquement (site déduit du mode du profil).

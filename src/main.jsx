@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import CategoryPage from './pages/CategoryPage';
+import HubPage from './pages/HubPage';
 import LegalPage from './pages/LegalPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import { getLegalPage, getModeFromPathname } from './utils/routing';
@@ -27,7 +27,7 @@ function Root() {
   }
 
   const mode = getModeFromPathname(pathname);
-  return mode ? <CategoryPage mode={mode} /> : <App />;
+  return mode ? <App key={mode.id} site={mode.id} /> : <HubPage />;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(

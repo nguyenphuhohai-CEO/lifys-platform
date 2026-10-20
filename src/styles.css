@@ -1074,3 +1074,117 @@ textarea:focus-visible {
 .consent-banner p{margin:0;flex:1 1 320px;font-size:.9rem}
 .consent-actions{display:flex;gap:.5rem}
 .ad-network{display:block}
+
+/* Thèmes par site : chaque catégorie a sa propre identité visuelle. */
+.app-shell[data-site] {
+  min-height: 100vh;
+  background: var(--site-bg, transparent);
+}
+
+.app-shell[data-site='amoureux'] {
+  --primary: #e6007e;
+  --primary-deep: #a3005a;
+  --bg: #fff1f7;
+  --secondary: #4a1033;
+  --line: rgba(230, 0, 126, 0.18);
+  --site-bg: linear-gradient(180deg, #fff5fa 0%, #ffe3f0 100%);
+}
+
+.app-shell[data-site='professionnel'] {
+  --primary: #0a66c2;
+  --primary-deep: #004182;
+  --bg: #f3f2ef;
+  --secondary: #1d2226;
+  --line: rgba(0, 0, 0, 0.12);
+  --radius-xl: 10px;
+  --radius-lg: 8px;
+  --radius-md: 6px;
+  --radius-sm: 4px;
+  --shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+  --site-bg: #f3f2ef;
+}
+
+.app-shell[data-site='amical'] {
+  --primary: #f5a000;
+  --primary-deep: #b46f00;
+  --bg: #fffaf0;
+  --secondary: #3a2a00;
+  --line: rgba(245, 160, 0, 0.25);
+  --site-bg: linear-gradient(180deg, #fffbe9 0%, #ffefb8 100%);
+}
+
+.app-shell[data-site='sans-lendemain'] {
+  --primary: #ff4458;
+  --primary-deep: #c4172c;
+  --bg: #1b1b24;
+  --panel: rgba(36, 36, 48, 0.95);
+  --panel-strong: #242430;
+  --text: #f5f5f8;
+  --muted: #a9a9b8;
+  --secondary: #f5f5f8;
+  --secondary-soft: #2d2d3a;
+  --line: rgba(255, 68, 88, 0.3);
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  --site-bg: linear-gradient(180deg, #1b1b24 0%, #2a1119 100%);
+  color: var(--text);
+}
+
+.app-shell[data-site='mariage'] {
+  --primary: #b08a3e;
+  --primary-deep: #7a5b1c;
+  --bg: #fbf7ef;
+  --secondary: #3b2f1a;
+  --line: rgba(176, 138, 62, 0.3);
+  --site-bg: linear-gradient(180deg, #fdfaf3 0%, #f1e6cc 100%);
+}
+
+.app-shell[data-site='mariage'] h1,
+.app-shell[data-site='mariage'] h2 {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.site-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.site-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease;
+}
+
+.site-card:hover,
+.site-card:focus-visible {
+  transform: translateY(-3px);
+}
+
+.site-card p {
+  margin: 0;
+  opacity: 0.92;
+  font-size: 0.92rem;
+}
+
+.site-card-icon {
+  font-size: 2rem;
+}
+
+.site-card-cta {
+  margin-top: auto;
+  font-weight: 700;
+}
+
+.site-card[data-site='amoureux'] { --primary: #e6007e; --primary-deep: #a3005a; }
+.site-card[data-site='professionnel'] { --primary: #0a66c2; --primary-deep: #004182; }
+.site-card[data-site='amical'] { --primary: #f5a000; --primary-deep: #b46f00; }
+.site-card[data-site='sans-lendemain'] { --primary: #ff4458; --primary-deep: #8f1021; }
+.site-card[data-site='mariage'] { --primary: #b08a3e; --primary-deep: #7a5b1c; }

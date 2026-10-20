@@ -138,10 +138,12 @@ export function createDatabase(databaseFile, options = {}) {
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       public_id TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       is_demo INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      site TEXT NOT NULL DEFAULT 'amoureux',
+      UNIQUE(email, site)
     );
 
     CREATE TABLE IF NOT EXISTS profiles (
@@ -237,23 +239,70 @@ export function createDatabase(databaseFile, options = {}) {
     ['plan_until', 'TEXT'],
     ['stripe_customer_id', 'TEXT'],
     ['stripe_subscription_id', 'TEXT'],
+    ['site', "TEXT NOT NULL DEFAULT 'amoureux'"],
   ]) {
     if (!userColumns.has(column)) {
       db.exec(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
+    }
+  }
+  if (!userColumns.has('site')) {
+    db.exec('UPDATE users SET site = COALESCE((SELECT mode FROM profiles WHERE profiles.user_id = users.id), \'amoureux\')');
+  }
+
+  // Bases créées avant les sites séparés : l'e-mail était unique globalement, il doit l'être par site.
+  const hasGlobalEmailUnique = db.prepare('PRAGMA index_list(users)').all().some((index) => {
+    if (!index.unique) return false;
+    const columns = db.prepare(`PRAGMA index_info(${JSON.stringify(index.name)})`).all();
+    return columns.length === 1 && columns[0].name === 'email';
+  });
+  if (hasGlobalEmailUnique) {
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE users_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            public_id TEXT NOT NULL UNIQUE,
+            email TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            is_demo INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            site TEXT NOT NULL DEFAULT 'amoureux',
+            email_verified_at TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            terms_accepted_at TEXT,
+            terms_version TEXT,
+            plan TEXT NOT NULL DEFAULT 'free',
+            plan_until TEXT,
+            stripe_customer_id TEXT,
+            stripe_subscription_id TEXT,
+            UNIQUE(email, site)
+          );
+          INSERT INTO users_new (id, public_id, email, password_hash, is_demo, created_at, site, email_verified_at, status, terms_accepted_at, terms_version, plan, plan_until, stripe_customer_id, stripe_subscription_id)
+          SELECT id, public_id, email, password_hash, is_demo, created_at, site, email_verified_at, status, terms_accepted_at, terms_version, plan, plan_until, stripe_customer_id, stripe_subscription_id FROM users;
+          DROP TABLE users;
+          ALTER TABLE users_new RENAME TO users;
+        `);
+        if (db.pragma('foreign_key_check').length) {
+          throw new Error('users migration broke foreign keys');
+        }
+      })();
+    } finally {
+      db.pragma('foreign_keys = ON');
     }
   }
   db.exec('UPDATE users SET email_verified_at = created_at WHERE is_demo = 1 AND email_verified_at IS NULL');
 
   const statements = {
     insertUser: db.prepare(`
-      INSERT INTO users (public_id, email, password_hash, is_demo, created_at, terms_accepted_at, terms_version, email_verified_at)
-      VALUES (@public_id, @email, @password_hash, @is_demo, @created_at, @terms_accepted_at, @terms_version, @email_verified_at)
+      INSERT INTO users (public_id, email, password_hash, is_demo, created_at, terms_accepted_at, terms_version, email_verified_at, site)
+      VALUES (@public_id, @email, @password_hash, @is_demo, @created_at, @terms_accepted_at, @terms_version, @email_verified_at, @site)
     `),
     insertProfile: db.prepare(`
       INSERT INTO profiles (user_id, public_id, name, age, city, bio, interests, mode, avatar, created_at, updated_at)
       VALUES (@user_id, @public_id, @name, @age, @city, @bio, @interests, @mode, @avatar, @created_at, @updated_at)
     `),
-    findUserByEmail: db.prepare(`SELECT * FROM users WHERE email = ?`),
+    findUserByEmail: db.prepare(`SELECT * FROM users WHERE email = ? AND site = ?`),
     findUserById: db.prepare(`SELECT * FROM users WHERE id = ?`),
     findProfileByUserId: db.prepare(`
       SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status, users.plan, users.plan_until
@@ -484,6 +533,7 @@ export function createDatabase(databaseFile, options = {}) {
       terms_accepted_at: termsVersion ? createdAt : null,
       terms_version: termsVersion,
       email_verified_at: requireEmailVerification ? null : createdAt,
+      site: mode,
     });
 
     statements.insertProfile.run({
@@ -506,8 +556,8 @@ export function createDatabase(databaseFile, options = {}) {
     };
   }
 
-  function getUserByEmail(email) {
-    return statements.findUserByEmail.get(normalizeEmail(email));
+  function getUserByEmail(email, site = 'amoureux') {
+    return statements.findUserByEmail.get(normalizeEmail(email), site);
   }
 
   function getProfileByUserId(userId) {
@@ -539,12 +589,14 @@ export function createDatabase(databaseFile, options = {}) {
   function listDiscoveryProfiles(userId, filters = {}) {
     const hiddenUserIds = new Set(statements.hiddenTargetIds.all(userId, userId).map((row) => row.id));
     const activeMode = `${filters.activeMode ?? 'all'}`;
+    const siteMode = statements.findProfileByUserId.get(userId)?.mode ?? null;
     const query = `${filters.query ?? ''}`.trim().toLowerCase();
     const city = `${filters.city ?? ''}`.trim().toLowerCase();
 
     return statements.listProfilesExcludingUser.all({ user_id: userId, include_unverified: requireEmailVerification ? 0 : 1 })
       .filter((row) => !hiddenUserIds.has(row.user_id))
       .map(serializePublicProfile)
+      .filter((profile) => !siteMode || profile.mode === siteMode)
       .filter((profile) => activeMode === 'all' || profile.mode === activeMode)
       .filter((profile) => !city || profile.city.toLowerCase().includes(city))
       .filter((profile) => {
@@ -602,7 +654,7 @@ export function createDatabase(databaseFile, options = {}) {
     const currentProfile = getProfileByUserId(userId);
     const targetProfile = getProfileByPublicId(profilePublicId);
 
-    if (!currentProfile || !targetProfile || targetProfile.userId === userId) {
+    if (!currentProfile || !targetProfile || targetProfile.userId === userId || targetProfile.mode !== currentProfile.mode) {
       return { matched: false, match: null, conversationId: null };
     }
 
@@ -847,6 +899,7 @@ function seedDemoData(db, statements) {
         terms_accepted_at: null,
         terms_version: null,
         email_verified_at: createdAt,
+        site: demoProfile.mode,
       });
 
       statements.insertProfile.run({
