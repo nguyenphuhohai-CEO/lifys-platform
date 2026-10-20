@@ -1193,6 +1193,13 @@ textarea:focus-visible {
 .nav-badge { display: inline-block; margin-left: 6px; min-width: 1.2rem; padding: 0 .4rem; border-radius: 999px; background: #d00; color: #fff; font-size: .72rem; font-weight: 700; text-align: center; }
 .read-receipt { display: block; text-align: right; opacity: .7; font-size: .7rem; }
 
+.top-picks { padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-md, 12px); }
+.top-picks h3 { margin: 0 0 10px; }
+.top-picks-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.top-pick { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; background: rgba(255,255,255,.6); }
+.top-pick > div { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.app-shell[data-site='sans-lendemain'] .top-pick { background: rgba(255,255,255,.06); }
+
 /* Administration */
 .admin-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 .admin-report { padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-md, 12px); display: grid; gap: 8px; }

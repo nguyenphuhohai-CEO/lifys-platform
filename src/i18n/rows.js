@@ -621,5 +621,6 @@ export const ROWS = [
   ['Suspendre l’auteur', 'Suspend author', 'Suspender al autor', 'Đình chỉ tác giả'],
   ['Vu', 'Seen', 'Visto', 'Đã xem'],
   ['Envoyé', 'Sent', 'Enviado', 'Đã gửi'],
+  ['Top du jour', 'Top picks', 'Selección del día', 'Gợi ý hàng đầu'],
 ];
 

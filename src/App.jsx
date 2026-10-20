@@ -369,6 +369,9 @@ function App({ site }) {
   };
 
   const selectedConversationData = conversations.find((conversation) => conversation.id === selectedConversation) ?? null;
+  const topPicks = useMemo(() => profiles
+    .filter((item) => (item.compatibility?.score ?? 0) >= 50)
+    .slice(0, 3), [profiles]);
   const availableCities = useMemo(() => [...new Set(profiles.map((item) => item.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [profiles]);
   const completedProfile = Boolean(profile.name && profile.age && profile.city && profile.bio);
   const checklist = [
@@ -1036,6 +1039,24 @@ function App({ site }) {
                 ) : null}
               </div>
             </div>
+
+            {!discoveryLoading && topPicks.length ? (
+              <section className="top-picks" aria-label={t('Top du jour')}>
+                <h3>⭐ {t('Top du jour')}</h3>
+                <div className="top-picks-row">
+                  {topPicks.map((person) => (
+                    <article key={person.id} className="top-pick">
+                      <Avatar className="conversation-avatar" src={person.avatar} alt={person.name} fallback={person.name} />
+                      <div>
+                        <strong>{person.name}, {person.age ?? '18+'}</strong>
+                        <small>💞 {t('{score} % compatible', { score: person.compatibility.score })}</small>
+                      </div>
+                      <button type="button" className="like-button" onClick={() => handleLike(person.id)}>{t('Like')}</button>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             {discoveryLoading ? (
               <EmptyState title={t('Chargement des profils')} description={t('Nous préparons vos recommandations.')} />
