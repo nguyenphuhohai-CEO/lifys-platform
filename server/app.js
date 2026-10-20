@@ -187,8 +187,18 @@ export function createApp(config) {
         throw createHttpError(400, 'Vous devez accepter les CGU et confirmer avoir au moins 18 ans.');
       }
 
-      if (database.getUserByEmail(email, initialProfile.mode)) {
-        throw createHttpError(409, 'Un compte existe déjà avec cet e-mail.');
+      const account = database.getAccountByEmail(email);
+      if (account) {
+        if (database.getUserByEmail(email, initialProfile.mode) || !comparePassword(password, account.password_hash)) {
+          throw createHttpError(409, 'Un compte existe déjà avec cet e-mail.');
+        }
+        if (account.status !== 'active') {
+          throw createHttpError(403, 'Ce compte est suspendu.', 'account_suspended');
+        }
+        const joined = database.joinSite(account, initialProfile.mode, initialProfile.name || 'Profil Lifys');
+        res.status(201);
+        sendSession(res, createToken({ userId: joined.id, email }, config), database.getProfileByUserId(joined.id));
+        return;
       }
 
       const created = database.createUser({
@@ -220,11 +230,14 @@ export function createApp(config) {
       const email = normalizeEmail(req.body.email);
       const password = req.body.password;
       const site = sanitizeProfileInput({ mode: req.body.site ?? req.body.mode }).mode;
-      const user = database.getUserByEmail(email, site);
+      const account = database.getAccountByEmail(email);
 
-      if (typeof password !== 'string' || !password || !user || !comparePassword(password, user.password_hash)) {
+      if (typeof password !== 'string' || !password || !account || !comparePassword(password, account.password_hash)) {
         throw createHttpError(401, 'Identifiants invalides.');
       }
+
+      const user = database.getUserByEmail(email, site)
+        ?? (account.status === 'active' ? database.joinSite(account, site, account.email.split('@')[0] || 'Profil Lifys') : account);
 
       if (user.status !== 'active') {
         throw createHttpError(403, 'Ce compte est suspendu.', 'account_suspended');
@@ -232,6 +245,18 @@ export function createApp(config) {
 
       const token = createToken({ userId: user.id, email }, config);
       sendSession(res, token, database.getProfileByUserId(user.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/auth/switch-site', requireAuth, (req, res, next) => {
+    try {
+      const site = sanitizeProfileInput({ mode: req.body.site }).mode;
+      const account = database.getUserById(req.auth.userId);
+      const user = database.getUserByEmail(account.email, site)
+        ?? database.joinSite(account, site, req.auth.profile.name || account.email.split('@')[0]);
+      sendSession(res, createToken({ userId: user.id, email: account.email }, config), database.getProfileByUserId(user.id));
     } catch (error) {
       next(error);
     }
@@ -489,8 +514,9 @@ export function createApp(config) {
         throw createHttpError(401, 'Mot de passe incorrect.');
       }
 
+      const userIds = database.listAccountUserIds(req.auth.userId);
       database.deleteAccount(req.auth.userId);
-      uploads.removeAllForUser(req.auth.userId);
+      userIds.forEach((userId) => uploads.removeAllForUser(userId));
       res.status(204).end();
     } catch (error) {
       next(error);

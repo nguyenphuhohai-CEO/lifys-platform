@@ -24,7 +24,7 @@ function HubPage() {
           <div className="hero-copy">
             <p className="eyebrow">Lifys</p>
             <h1>{t('Cinq sites de rencontre, une seule intention à la fois.')}</h1>
-            <p>{t('Chaque site Lifys a son propre univers, ses propres membres et son propre compte : choisissez celui qui correspond à ce que vous cherchez.')}</p>
+            <p>{t('Chaque site Lifys a son propre univers et ses propres membres, avec un seul compte pour tous : choisissez celui qui correspond à ce que vous cherchez.')}</p>
           </div>
         </section>
 

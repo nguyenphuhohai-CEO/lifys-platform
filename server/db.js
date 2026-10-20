@@ -334,8 +334,8 @@ export function createDatabase(databaseFile, options = {}) {
     deleteVerificationsForUser: db.prepare(`DELETE FROM email_verifications WHERE user_id = ?`),
     findVerification: db.prepare(`SELECT * FROM email_verifications WHERE token_hash = ?`),
     setPlanByCustomer: db.prepare(`UPDATE users SET plan = @plan, plan_until = @plan_until, stripe_subscription_id = COALESCE(@subscription_id, stripe_subscription_id) WHERE stripe_customer_id = @customer_id`),
-    setPlanById: db.prepare(`UPDATE users SET plan = @plan, plan_until = @plan_until, stripe_customer_id = COALESCE(@customer_id, stripe_customer_id), stripe_subscription_id = COALESCE(@subscription_id, stripe_subscription_id) WHERE id = @user_id`),
-    markEmailVerified: db.prepare(`UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL`),
+    setPlanById: db.prepare(`UPDATE users SET plan = @plan, plan_until = @plan_until, stripe_customer_id = COALESCE(@customer_id, stripe_customer_id), stripe_subscription_id = COALESCE(@subscription_id, stripe_subscription_id) WHERE email = (SELECT email FROM users u WHERE u.id = @user_id)`),
+    markEmailVerified: db.prepare(`UPDATE users SET email_verified_at = ? WHERE email = (SELECT email FROM users u WHERE u.id = ?) AND email_verified_at IS NULL`),
     insertBlock: db.prepare(`INSERT OR IGNORE INTO blocks (user_id, blocked_user_id, created_at) VALUES (?, ?, ?)`),
     isBlockedPair: db.prepare(`
       SELECT 1 FROM blocks
@@ -360,8 +360,10 @@ export function createDatabase(databaseFile, options = {}) {
     findReport: db.prepare(`SELECT * FROM reports WHERE public_id = ?`),
     resolveReport: db.prepare(`UPDATE reports SET status = ?, resolved_at = ? WHERE id = ?`),
     resolveReportsForTarget: db.prepare(`UPDATE reports SET status = 'actioned', resolved_at = ? WHERE target_user_id = ? AND status = 'open'`),
-    setUserStatus: db.prepare(`UPDATE users SET status = ? WHERE id = ?`),
-    deleteUser: db.prepare(`DELETE FROM users WHERE id = ? AND is_demo = 0`),
+    setUserStatus: db.prepare(`UPDATE users SET status = ? WHERE email = (SELECT email FROM users u WHERE u.id = ?)`),
+    listAccountUserIds: db.prepare(`SELECT id FROM users WHERE email = (SELECT email FROM users u WHERE u.id = ?)`),
+    findAnyUserByEmail: db.prepare(`SELECT * FROM users WHERE email = ? AND is_demo = 0 ORDER BY id LIMIT 1`),
+    deleteUser: db.prepare(`DELETE FROM users WHERE email = (SELECT email FROM users u WHERE u.id = ?) AND is_demo = 0`),
     deleteDemoUsers: db.prepare(`DELETE FROM users WHERE is_demo = 1`),
     listLikesGiven: db.prepare(`
       SELECT profiles.public_id AS profile_id, likes.created_at FROM likes
@@ -554,6 +556,49 @@ export function createDatabase(databaseFile, options = {}) {
       userId: userResult.lastInsertRowid,
       profile: getProfileByUserId(userResult.lastInsertRowid),
     };
+  }
+
+  // Un compte = un e-mail et un mot de passe ; chaque site en tient un profil distinct.
+  function getAccountByEmail(email) {
+    return statements.findAnyUserByEmail.get(normalizeEmail(email));
+  }
+
+  function listAccountUserIds(userId) {
+    return statements.listAccountUserIds.all(userId).map((row) => row.id);
+  }
+
+  function joinSite(account, site, name) {
+    const createdAt = now();
+    const userResult = statements.insertUser.run({
+      public_id: createPublicId('user'),
+      email: account.email,
+      password_hash: account.password_hash,
+      is_demo: 0,
+      created_at: createdAt,
+      terms_accepted_at: account.terms_accepted_at,
+      terms_version: account.terms_version,
+      email_verified_at: account.email_verified_at,
+      site,
+    });
+    const userId = userResult.lastInsertRowid;
+    db.prepare('UPDATE users SET status = ?, plan = ?, plan_until = ?, stripe_customer_id = ?, stripe_subscription_id = ? WHERE id = ?')
+      .run(account.status, account.plan, account.plan_until, account.stripe_customer_id, account.stripe_subscription_id, userId);
+
+    statements.insertProfile.run({
+      user_id: userId,
+      public_id: createPublicId('profile'),
+      name,
+      age: null,
+      city: '',
+      bio: '',
+      interests: '[]',
+      mode: site,
+      avatar: '',
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+
+    return statements.findUserById.get(userId);
   }
 
   function getUserByEmail(email, site = 'amoureux') {
@@ -858,6 +903,9 @@ export function createDatabase(databaseFile, options = {}) {
     createUser,
     getUserByEmail,
     getUserById,
+    getAccountByEmail,
+    listAccountUserIds,
+    joinSite,
     createEmailVerification,
     verifyEmailToken,
     blockProfile,

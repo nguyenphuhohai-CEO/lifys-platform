@@ -1,4 +1,4 @@
-﻿// Chaque ligne : [français (clé), anglais, espagnol, vietnamien]
+// Chaque ligne : [français (clé), anglais, espagnol, vietnamien]
 export const ROWS = [
   // Navigation et en-tête
   ['Rencontres multi-catégories', 'Dating across 5 categories', 'Citas en 5 categorías', 'Hẹn hò theo 5 chủ đề'],
@@ -359,11 +359,10 @@ export const ROWS = [
   ['Trop d’envois de photos. Réessayez plus tard.', 'Too many photo uploads. Try again later.', 'Demasiados envíos de fotos. Inténtelo más tarde.', 'Tải ảnh quá nhiều. Hãy thử lại sau.'],
     // Sites séparés par catégorie
     ['Cinq sites de rencontre, une seule intention à la fois.', 'Five dating sites, one intention at a time.', 'Cinco sitios de citas, una sola intención a la vez.', 'Năm trang hẹn hò, mỗi lần một mục đích.'],
-    ['Chaque site Lifys a son propre univers, ses propres membres et son propre compte : choisissez celui qui correspond à ce que vous cherchez.', 'Each Lifys site has its own universe, its own members and its own account: pick the one that matches what you are looking for.', 'Cada sitio de Lifys tiene su propio universo, sus propios miembros y su propia cuenta: elija el que corresponda a lo que busca.', 'Mỗi trang Lifys có thế giới, thành viên và tài khoản riêng: hãy chọn trang phù hợp với điều bạn tìm kiếm.'],
+    ['Chaque site Lifys a son propre univers et ses propres membres, avec un seul compte pour tous : choisissez celui qui correspond à ce que vous cherchez.', 'Each Lifys site has its own universe and its own members, with a single account for all: pick the one that matches what you are looking for.', 'Cada sitio de Lifys tiene su propio universo, sus propios miembros, con una sola cuenta para todos: elija el que corresponda a lo que busca.', 'Mỗi trang Lifys có thế giới và thành viên riêng, chỉ với một tài khoản chung: hãy chọn trang phù hợp với điều bạn tìm kiếm.'],
     ['Les sites Lifys', 'The Lifys sites', 'Los sitios de Lifys', 'Các trang Lifys'],
     ['Découvrir les autres sites Lifys', 'Discover the other Lifys sites', 'Descubrir los otros sitios de Lifys', 'Khám phá các trang Lifys khác'],
-    ['Ce compte est propre à {mode} : il n’est pas partagé avec les autres sites Lifys.', 'This account is specific to {mode}: it is not shared with the other Lifys sites.', 'Esta cuenta es propia de {mode}: no se comparte con los otros sitios de Lifys.', 'Tài khoản này chỉ dành cho {mode}: không dùng chung với các trang Lifys khác.'],
-    ['Se faire des amis près de chez soi', 'Make friends close to home', 'Hacer amigos cerca de casa', 'Kết bạn ngay gần nhà'],
+      ['Se faire des amis près de chez soi', 'Make friends close to home', 'Hacer amigos cerca de casa', 'Kết bạn ngay gần nhà'],
     ['Trouver l’amour, durablement', 'Find lasting love', 'Encontrar el amor, de forma duradera', 'Tìm tình yêu bền lâu'],
     ['Des rencontres spontanées et assumées', 'Spontaneous, openly assumed encounters', 'Encuentros espontáneos y asumidos', 'Những cuộc gặp tự nhiên và rõ ràng'],
     ['Construire un avenir à deux', 'Build a future together', 'Construir un futuro en pareja', 'Cùng xây dựng tương lai'],
@@ -381,5 +380,8 @@ export const ROWS = [
     ['Fil d’actualité', 'Feed', 'Novedades', 'Bảng tin'],
     ['Réseau', 'Network', 'Red', 'Mạng lưới'],
     ['Connexions', 'Connections', 'Conexiones', 'Kết nối'],
+  ['Un seul compte Lifys pour les 5 sites : si vous en avez déjà un, connectez-vous avec le même e-mail et le même mot de passe.', 'One Lifys account for all 5 sites: if you already have one, sign in with the same e-mail and password.', 'Una sola cuenta Lifys para los 5 sitios: si ya tiene una, inicie sesión con el mismo correo y la misma contraseña.', 'Một tài khoản Lifys cho cả 5 trang: nếu đã có, hãy đăng nhập bằng cùng e-mail và mật khẩu.'],
+  ['Changer de site', 'Switch site', 'Cambiar de sitio', 'Đổi trang'],
+  ['Impossible de changer de site.', 'Unable to switch site.', 'No se pudo cambiar de sitio.', 'Không thể đổi trang.'],
   ];
 

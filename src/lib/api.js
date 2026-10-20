@@ -44,6 +44,9 @@ export const api = {
   login(payload) {
     return apiRequest('/api/auth/login', { method: 'POST', body: payload });
   },
+  switchSite(token, site) {
+    return apiRequest('/api/auth/switch-site', { method: 'POST', token, body: { site } });
+  },
   getSession(token) {
     return apiRequest('/api/auth/session', { token });
   },

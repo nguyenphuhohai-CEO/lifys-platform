@@ -1,4 +1,4 @@
-﻿# Lifys Platform
+# Lifys Platform
 
 Lifys est désormais un **MVP full-stack léger** pour une plateforme de rencontres multi-catégories.  
 Le frontend reste en **React + Vite**, et le déploiement repose maintenant sur un **backend Express**, une **base SQLite réelle** et une **authentification JWT**.
@@ -286,6 +286,6 @@ Ne pas y stocker de données sensibles réelles sans :
 
 
 
-## Sites séparés par catégorie
+## Sites par catégorie, compte unique
 
-Chaque catégorie est un site à part entière (`/Amical`, `/Amoureux`, `/Sans-lendemain`, `/Mariage`, `/Professionnel`) avec sa marque, son thème, son vocabulaire et **ses propres comptes** : un même e-mail peut s'inscrire sur plusieurs sites, avec des profils, des mails de découverte, des matchs et des abonnements indépendants. L'API (`/api/auth/register` et `/api/auth/login`) reçoit le site via `mode` / `site`. La page `/` est un portail qui renvoie vers les 5 sites. Les bases existantes sont migrées automatiquement (site déduit du mode du profil).
+Chaque catégorie est un site à part entière (`/Amical`, `/Amoureux`, `/Sans-lendemain`, `/Mariage`, `/Professionnel`) avec sa marque, son thème, son vocabulaire, son profil et son pool de découverte. Le **compte est unique** : un même e-mail et un même mot de passe ouvrent les 5 sites, le profil du site étant créé à la première visite. Vérification d'e-mail, suspension, abonnement Premium et suppression du compte s'appliquent à tous les sites. L'API accepte le site via `site` / `mode` (`/api/auth/login`, `/api/auth/register`) et propose `POST /api/auth/switch-site` pour passer d'un site à l'autre sans se reconnecter. `/` est un portail vers les 5 sites. Les bases existantes sont migrées automatiquement.

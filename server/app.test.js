@@ -358,31 +358,56 @@ test('blocked profiles disappear and accounts can be exported and deleted', asyn
   }
 });
 
-test('each category is a separate site with its own accounts and pool', async () => {
+test('one account works on every site, with a separate profile and pool per site', async () => {
   const server = await startTestServer({ SEED_DEMO_DATA: 'true' });
 
   try {
     const love = await registerUser(server.baseUrl, 'same@example.com', { mode: 'amoureux' });
-    const pro = await registerUser(server.baseUrl, 'same@example.com', { mode: 'professionnel' });
     assert.equal(love.status, 201);
-    assert.equal(pro.status, 201);
     assert.equal((await registerUser(server.baseUrl, 'same@example.com', { mode: 'amoureux' })).status, 409);
 
-    const wrongSite = await request(server.baseUrl, '/api/auth/login', {
+    const wrongPassword = await request(server.baseUrl, '/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email: 'same@example.com', password: 'supersecret', site: 'mariage' }),
+      body: JSON.stringify({ email: 'same@example.com', password: 'other-pass-1', acceptTerms: true, mode: 'mariage' }),
     });
-    assert.equal(wrongSite.status, 401);
+    assert.equal(wrongPassword.status, 409);
 
-    const discovery = await request(server.baseUrl, '/api/discovery?mode=all', { headers: pro.auth });
+    const pro = await request(server.baseUrl, '/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'same@example.com', password: 'supersecret', site: 'professionnel' }),
+    });
+    assert.equal(pro.status, 200);
+    assert.equal(pro.body.user.profile.mode, 'professionnel');
+    const proAuth = { authorization: 'Bearer ' + pro.body.token };
+
+    const switched = await request(server.baseUrl, '/api/auth/switch-site', {
+      method: 'POST',
+      headers: love.auth,
+      body: JSON.stringify({ site: 'mariage' }),
+    });
+    assert.equal(switched.body.user.profile.mode, 'mariage');
+
+    const discovery = await request(server.baseUrl, '/api/discovery?mode=all', { headers: proAuth });
     assert.ok(discovery.body.profiles.every((profile) => profile.mode === 'professionnel'));
 
     const forced = await request(server.baseUrl, '/api/profile', {
       method: 'PUT',
-      headers: pro.auth,
+      headers: proAuth,
       body: JSON.stringify({ name: 'Pro', age: 30, city: 'Paris', bio: 'Bio pro', mode: 'amoureux' }),
     });
     assert.equal(forced.body.profile.mode, 'professionnel');
+
+    const removed = await request(server.baseUrl, '/api/account', {
+      method: 'DELETE',
+      headers: proAuth,
+      body: JSON.stringify({ password: 'supersecret' }),
+    });
+    assert.equal(removed.status, 204);
+    const gone = await request(server.baseUrl, '/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'same@example.com', password: 'supersecret', site: 'amoureux' }),
+    });
+    assert.equal(gone.status, 401);
   } finally {
     await server.close();
   }

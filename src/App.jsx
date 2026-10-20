@@ -10,8 +10,8 @@ import LanguageSwitcher from './components/LanguageSwitcher';
 import { useI18n } from './i18n';
 import { api, ApiError } from './lib/api';
 import { getConversationPreview, getModeById, serializeInterests } from './utils/app-utils';
-import { CATEGORY_CONTENT, getSite } from './data/sites';
-import { navigate } from './utils/routing';
+import { CATEGORY_CONTENT, SITES, getSite } from './data/sites';
+import { getCategoryPath, navigate } from './utils/routing';
 import { STORAGE_KEYS, resetPrototypeStorage, safeReadJSON, safeWriteJSON } from './utils/storage';
 
 const NAV_ITEMS = [
@@ -143,6 +143,31 @@ function App({ site }) {
       resetPrototypeStorage([authKey]);
     }
   }, [authKey, token]);
+
+  // Compte unique : une session ouverte sur un autre site Lifys ouvre automatiquement celui-ci.
+  useEffect(() => {
+    if (token) return undefined;
+    let cancelled = false;
+    const otherToken = Object.keys(SITES).filter((id) => id !== site).map(readStoredToken).find(Boolean);
+    if (!otherToken) return undefined;
+    api.switchSite(otherToken, site).then((response) => {
+      if (!cancelled) setToken(response.token);
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [site, token]);
+
+  const handleSiteChange = async (nextSite) => {
+    if (!nextSite || nextSite === site) return;
+    try {
+      const response = await api.switchSite(token, nextSite);
+      safeWriteJSON(getAuthKey(nextSite), { token: response.token });
+      navigate(getCategoryPath(nextSite));
+    } catch (error) {
+      handleApiError(error, t('Impossible de changer de site.'));
+    }
+  };
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -610,7 +635,7 @@ function App({ site }) {
               <SectionHeader
                 eyebrow={authMode === 'register' ? t('Créer un compte') : t('Connexion')}
                 title={authMode === 'register' ? t('Rejoindre {mode}', { mode: siteInfo.brand }) : t('Reprendre votre session')}
-                description={t('Ce compte est propre à {mode} : il n’est pas partagé avec les autres sites Lifys.', { mode: siteInfo.brand })}
+                description={t('Un seul compte Lifys pour les 5 sites : si vous en avez déjà un, connectez-vous avec le même e-mail et le même mot de passe.')}
               />
 
               {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
@@ -697,6 +722,9 @@ function App({ site }) {
 
         <div className="topbar-actions">
           <LanguageSwitcher />
+          <select className="site-switcher" aria-label={t('Changer de site')} value={site} onChange={(event) => handleSiteChange(event.target.value)}>
+            {Object.entries(SITES).map(([id, item]) => <option key={id} value={id}>{item.icon} {item.brand}</option>)}
+          </select>
           {isPremium ? <span className="tag">{t('Premium')}</span> : null}
           <span className="prototype-badge">{currentUser.email}</span>
           <button type="button" className="secondary-button" onClick={handleResetPrototype} disabled={resetting}>
