@@ -22,7 +22,7 @@ function HubPage() {
       <main className="page-shell">
         <section className="hero-panel category-hero">
           <div className="hero-copy">
-            <p className="eyebrow">Lifys</p>
+            <p className="eyebrow">Lifys is life</p>
             <h1>{t('Cinq sites de rencontre, une seule intention à la fois.')}</h1>
             <p>{t('Chaque site Lifys a son propre univers et ses propres membres, avec un seul compte pour tous : choisissez celui qui correspond à ce que vous cherchez.')}</p>
           </div>

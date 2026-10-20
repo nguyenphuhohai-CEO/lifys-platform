@@ -656,7 +656,7 @@ function App({ site }) {
         <main className="page-shell">
           <section className="hero-panel auth-hero">
             <div className="hero-copy">
-              <p className="eyebrow">{siteInfo.icon} {siteInfo.brand}</p>
+              <p className="eyebrow">{siteInfo.icon} {siteInfo.brand} · Lifys is life</p>
               <h1>{t(content.headline)}</h1>
               <p>{t(content.intro)}</p>
               <ul className="category-list">
