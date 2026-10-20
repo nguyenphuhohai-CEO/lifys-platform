@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Avatar from './components/Avatar';
+import { EventsPanel, FeedPanel, LikesPanel } from './components/Community';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
 import SiteFooter from './components/SiteFooter';
 import PricingPanel, { AdSlot } from './components/Pricing';
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { id: 'home', label: 'Accueil' },
   { id: 'discover', label: 'Découvrir' },
   { id: 'matches', label: 'Matchs' },
+  { id: 'community', label: 'Communauté' },
   { id: 'messages', label: 'Messages' },
   { id: 'pricing', label: 'Offres' },
   { id: 'profile', label: 'Profil' },
@@ -744,7 +746,7 @@ function App({ site }) {
         </button>
 
         <nav id="lifys-main-nav" className={isMobileNavOpen ? 'nav nav-open' : 'nav'} aria-label={t('Navigation principale')}>
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.filter((item) => item.id !== 'community' || siteInfo.nav.community).map((item) => (
             <button
               key={item.id}
               type="button"
@@ -986,6 +988,16 @@ function App({ site }) {
               </div>
             )}
           </section>
+        )}
+
+        {view === 'community' && site === 'amical' && (
+          <EventsPanel token={token} t={t} locale={lang} defaultCity={profile.city} onError={handleApiError} showToast={showToast} />
+        )}
+        {view === 'community' && site === 'professionnel' && (
+          <FeedPanel token={token} t={t} locale={lang} onError={handleApiError} showToast={showToast} />
+        )}
+        {view === 'community' && site === 'amoureux' && (
+          <LikesPanel token={token} t={t} onError={handleApiError} onUpgrade={() => setCurrentView('pricing')} onDiscover={() => setCurrentView('discover')} />
         )}
 
         {view === 'matches' && (

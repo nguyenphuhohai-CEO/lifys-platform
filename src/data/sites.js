@@ -5,14 +5,14 @@ export const SITES = {
     icon: '🤝',
     tagline: 'Se faire des amis près de chez soi',
     inspiredBy: 'Façon Bumble BFF',
-    nav: { discover: 'Rencontrer', matches: 'Amis' },
+    nav: { discover: 'Rencontrer', matches: 'Amis', community: 'Sorties' },
   },
   amoureux: {
     brand: 'Lifys Love',
     icon: '❤',
     tagline: 'Trouver l’amour, durablement',
     inspiredBy: 'Façon Meetic',
-    nav: {},
+    nav: { community: 'Likes reçus' },
   },
   'sans-lendemain': {
     brand: 'Lifys Éphémère',
@@ -33,7 +33,7 @@ export const SITES = {
     icon: '💼',
     tagline: 'Le réseau professionnel qui vous ressemble',
     inspiredBy: 'Façon LinkedIn',
-    nav: { home: 'Fil d’actualité', discover: 'Réseau', matches: 'Connexions' },
+    nav: { home: 'Tableau de bord', discover: 'Réseau', matches: 'Connexions', community: 'Fil d’actualité' },
   },
 };
 

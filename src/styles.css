@@ -1238,3 +1238,12 @@ textarea:focus-visible {
 .detail-row span { opacity: .9; }
 .hook-form { display: grid; gap: 8px; padding: 0 16px 12px; }
 .super-like { background: #f5b301; color: #1b1b1b; }
+.profile-prompt { margin: 8px 0; padding: 8px 12px; border-left: 3px solid currentColor; display: grid; gap: 2px; opacity: .9; }
+.profile-prompt span { font-style: italic; }
+.community-form { margin-bottom: 18px; }
+.feed-list { display: grid; gap: 12px; }
+.feed-post { border: 1px solid rgba(128,128,128,.3); border-radius: 14px; padding: 14px; display: grid; gap: 8px; }
+.feed-author { display: flex; align-items: center; gap: 10px; }
+.feed-author small { display: block; opacity: .7; }
+.feed-author .tag { margin-left: auto; }
+.feed-avatar { width: 40px; height: 40px; border-radius: 50%; }

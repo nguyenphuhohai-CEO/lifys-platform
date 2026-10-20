@@ -31,6 +31,8 @@ export function SiteFieldsForm({ site, details, onChange, t }) {
                 </select>
               ) : field.type === 'tags' ? (
                 <input value={Array.isArray(value) ? value.join(', ') : value ?? ''} onChange={(event) => set(field.id, event.target.value)} placeholder={t('Séparés par des virgules')} />
+              ) : field.type === 'longtext' ? (
+                <textarea rows="2" maxLength="240" value={value ?? ''} onChange={(event) => set(field.id, event.target.value)} />
               ) : field.type === 'number' ? (
                 <input type="number" min="18" max="99" value={value ?? ''} onChange={(event) => set(field.id, event.target.value)} />
               ) : (
@@ -68,6 +70,12 @@ export function DetailChips({ person, t }) {
         {details.consent ? <span className="badge">🤝 {t('Consentement affiché')}</span> : null}
         {details.linkedin ? <a className="badge" href={details.linkedin} target="_blank" rel="noopener noreferrer nofollow">in LinkedIn</a> : null}
       </div>
+      {details.promptQ && details.promptA ? (
+        <blockquote className="profile-prompt">
+          <strong>{t(details.promptQ)}</strong>
+          <span>{details.promptA}</span>
+        </blockquote>
+      ) : null}
       {chips.length ? (
         <div className="interest-row detail-row">
           {chips.map((chip) => <span key={chip.key}>{chip.text}</span>)}

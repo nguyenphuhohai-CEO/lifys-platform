@@ -439,6 +439,43 @@ export function createApp(config) {
     }
   });
 
+  const community = (handler) => (req, res, next) => {
+    try {
+      handler(req, res);
+    } catch (error) {
+      next(error.status ? createHttpError(error.status, error.message) : error);
+    }
+  };
+
+  app.get('/api/events', requireAuth, requireVerified, community((req, res) => {
+    res.json({ events: database.listEvents(req.auth.userId, { city: req.query.city ?? '' }) });
+  }));
+  app.post('/api/events', requireAuth, requireVerified, community((req, res) => {
+    res.status(201).json({ event: database.createEvent(req.auth.userId, req.body) });
+  }));
+  app.post('/api/events/:eventId/join', requireAuth, requireVerified, community((req, res) => {
+    res.json({ event: database.joinEvent(req.auth.userId, req.params.eventId) });
+  }));
+  app.post('/api/events/:eventId/leave', requireAuth, requireVerified, community((req, res) => {
+    if (!database.leaveEvent(req.auth.userId, req.params.eventId)) throw Object.assign(new Error('Sortie introuvable.'), { status: 404 });
+    res.status(204).end();
+  }));
+
+  app.get('/api/posts', requireAuth, requireVerified, community((req, res) => {
+    res.json({ posts: database.listPosts(req.auth.userId) });
+  }));
+  app.post('/api/posts', requireAuth, requireVerified, community((req, res) => {
+    res.status(201).json({ post: database.createPost(req.auth.userId, req.body) });
+  }));
+  app.delete('/api/posts/:postId', requireAuth, community((req, res) => {
+    if (!database.deletePost(req.auth.userId, req.params.postId)) throw Object.assign(new Error('Publication introuvable.'), { status: 404 });
+    res.status(204).end();
+  }));
+
+  app.get('/api/likes/received', requireAuth, requireVerified, community((req, res) => {
+    res.json(database.listLikesReceived(req.auth.userId));
+  }));
+
   app.get('/api/matches', requireAuth, (req, res) => {
     res.json({ matches: database.listMatchesForUser(req.auth.userId) });
   });

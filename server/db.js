@@ -237,6 +237,35 @@ export function createDatabase(databaseFile, options = {}) {
       expires_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      public_id TEXT NOT NULL UNIQUE,
+      host_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      place TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      starts_at TEXT NOT NULL,
+      capacity INTEGER NOT NULL DEFAULT 6,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS event_attendees (
+      event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      UNIQUE(event_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      public_id TEXT NOT NULL UNIQUE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL DEFAULT 'post',
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS blocks (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       blocked_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -953,6 +982,159 @@ export function createDatabase(databaseFile, options = {}) {
     return Boolean(customerId) && statements.setPlanByCustomer.run(params).changes > 0;
   }
 
+  const COMMUNITY_ERROR = (message) => Object.assign(new Error(message), { status: 400 });
+
+  function requireMode(userId, mode) {
+    const profile = getProfileByUserId(userId);
+    if (!profile || profile.mode !== mode) {
+      throw Object.assign(new Error('Fonctionnalité indisponible sur ce site.'), { status: 403 });
+    }
+    return profile;
+  }
+
+  function isBlocked(userId, otherId) {
+    return Boolean(statements.isBlockedPair.get({ a: userId, b: otherId }));
+  }
+
+  function serializeEvent(row, userId) {
+    const attendees = db.prepare('SELECT COUNT(*) AS count FROM event_attendees WHERE event_id = ?').get(row.id).count;
+    const joined = Boolean(db.prepare('SELECT 1 FROM event_attendees WHERE event_id = ? AND user_id = ?').get(row.id, userId));
+    return {
+      id: row.public_id,
+      title: row.title,
+      place: row.place,
+      city: row.city,
+      description: row.description,
+      startsAt: row.starts_at,
+      capacity: row.capacity,
+      attendees,
+      joined,
+      isHost: row.host_user_id === userId,
+      hostName: row.host_name,
+    };
+  }
+
+  function listEvents(userId, { city = '' } = {}) {
+    requireMode(userId, 'amical');
+    const wanted = `${city}`.trim().toLowerCase();
+    return db.prepare(`
+      SELECT events.*, profiles.name AS host_name FROM events
+      JOIN users ON users.id = events.host_user_id
+      JOIN profiles ON profiles.user_id = events.host_user_id
+      WHERE events.starts_at >= ? AND users.status = 'active' AND profiles.mode = 'amical'
+      ORDER BY events.starts_at ASC LIMIT 100
+    `).all(new Date().toISOString())
+      .filter((row) => !isBlocked(userId, row.host_user_id))
+      .filter((row) => !wanted || row.city.toLowerCase().includes(wanted))
+      .map((row) => serializeEvent(row, userId));
+  }
+
+  function createEvent(userId, input = {}) {
+    const profile = requireMode(userId, 'amical');
+    const title = `${input.title ?? ''}`.trim().slice(0, 80);
+    const startsAt = new Date(input.startsAt);
+    const capacity = Math.round(Number(input.capacity) || 6);
+
+    if (title.length < 3) throw COMMUNITY_ERROR('Le titre doit contenir au moins 3 caractères.');
+    if (Number.isNaN(startsAt.getTime()) || startsAt.getTime() < Date.now()) throw COMMUNITY_ERROR('La date doit être dans le futur.');
+    if (capacity < 2 || capacity > 50) throw COMMUNITY_ERROR('Le nombre de places doit être compris entre 2 et 50.');
+
+    const publicId = createPublicId('event');
+    const result = db.prepare(`
+      INSERT INTO events (public_id, host_user_id, title, place, city, description, starts_at, capacity, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      publicId,
+      userId,
+      title,
+      `${input.place ?? ''}`.trim().slice(0, 80),
+      `${input.city ?? profile.city ?? ''}`.trim().slice(0, 60),
+      `${input.description ?? ''}`.trim().slice(0, 500),
+      startsAt.toISOString(),
+      capacity,
+      now(),
+    );
+    db.prepare('INSERT INTO event_attendees (event_id, user_id, created_at) VALUES (?, ?, ?)').run(result.lastInsertRowid, userId, now());
+    return listEvents(userId).find((event) => event.id === publicId);
+  }
+
+  function joinEvent(userId, eventPublicId) {
+    requireMode(userId, 'amical');
+    const event = db.prepare('SELECT * FROM events WHERE public_id = ?').get(eventPublicId);
+    if (!event || isBlocked(userId, event.host_user_id)) throw Object.assign(new Error('Sortie introuvable.'), { status: 404 });
+    const count = db.prepare('SELECT COUNT(*) AS count FROM event_attendees WHERE event_id = ?').get(event.id).count;
+    const already = db.prepare('SELECT 1 FROM event_attendees WHERE event_id = ? AND user_id = ?').get(event.id, userId);
+    if (!already && count >= event.capacity) throw Object.assign(new Error('Cette sortie est complète.'), { status: 409 });
+    db.prepare('INSERT OR IGNORE INTO event_attendees (event_id, user_id, created_at) VALUES (?, ?, ?)').run(event.id, userId, now());
+    return listEvents(userId).find((item) => item.id === eventPublicId);
+  }
+
+  function leaveEvent(userId, eventPublicId) {
+    const event = db.prepare('SELECT * FROM events WHERE public_id = ?').get(eventPublicId);
+    if (!event) return false;
+    if (event.host_user_id === userId) {
+      db.prepare('DELETE FROM events WHERE id = ?').run(event.id);
+    } else {
+      db.prepare('DELETE FROM event_attendees WHERE event_id = ? AND user_id = ?').run(event.id, userId);
+    }
+    return true;
+  }
+
+  function listPosts(userId) {
+    requireMode(userId, 'professionnel');
+    return db.prepare(`
+      SELECT posts.*, profiles.name, profiles.avatar, profiles.details, users.email_verified_at
+      FROM posts
+      JOIN users ON users.id = posts.user_id
+      JOIN profiles ON profiles.user_id = posts.user_id
+      WHERE users.status = 'active' AND profiles.mode = 'professionnel'
+      ORDER BY posts.created_at DESC LIMIT 50
+    `).all()
+      .filter((row) => !isBlocked(userId, row.user_id))
+      .map((row) => {
+        const details = parseDetails(row.details);
+        return {
+          id: row.public_id,
+          kind: row.kind,
+          content: row.content,
+          createdAt: row.created_at,
+          authorName: row.name,
+          authorAvatar: row.avatar,
+          authorJob: [details.job, details.company].filter(Boolean).join(' · '),
+          mine: row.user_id === userId,
+        };
+      });
+  }
+
+  function createPost(userId, input = {}) {
+    requireMode(userId, 'professionnel');
+    const content = `${input.content ?? ''}`.trim().slice(0, 1000);
+    const kind = ['post', 'offre', 'recherche'].includes(input.kind) ? input.kind : 'post';
+    if (content.length < 3) throw COMMUNITY_ERROR('La publication est trop courte.');
+    const publicId = createPublicId('post');
+    db.prepare('INSERT INTO posts (public_id, user_id, kind, content, created_at) VALUES (?, ?, ?, ?, ?)').run(publicId, userId, kind, content, now());
+    return listPosts(userId).find((post) => post.id === publicId);
+  }
+
+  function deletePost(userId, postPublicId) {
+    return db.prepare('DELETE FROM posts WHERE public_id = ? AND user_id = ?').run(postPublicId, userId).changes > 0;
+  }
+
+  function listLikesReceived(userId) {
+    const me = requireMode(userId, 'amoureux');
+    const hidden = new Set(statements.hiddenTargetIds.all(userId, userId).map((row) => row.id));
+    const rows = db.prepare('SELECT user_id FROM likes WHERE target_user_id = ? ORDER BY created_at DESC LIMIT 100').all(userId)
+      .filter((row) => !hidden.has(row.user_id) && !isBlocked(userId, row.user_id));
+    const profiles = rows
+      .map((row) => statements.findProfileByUserId.get(row.user_id))
+      .filter((row) => row && row.mode === 'amoureux' && row.status === 'active')
+      .map(serializePublicProfile);
+
+    return me.plan === 'premium'
+      ? { count: profiles.length, profiles, locked: false }
+      : { count: profiles.length, profiles: [], locked: true };
+  }
+
   function deleteAccount(userId) {
     return statements.deleteUser.run(userId).changes > 0;
   }
@@ -991,6 +1173,14 @@ export function createDatabase(databaseFile, options = {}) {
     listOpenReports,
     resolveReportById,
     deleteAccount,
+    listEvents,
+    createEvent,
+    joinEvent,
+    leaveEvent,
+    listPosts,
+    createPost,
+    deletePost,
+    listLikesReceived,
     setUserPlan,
     exportUserData,
     getProfileByUserId,

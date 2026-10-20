@@ -122,6 +122,30 @@ export const api = {
   blockProfile(token, profileId) {
     return apiRequest('/api/blocks', { method: 'POST', token, body: { profileId } });
   },
+  getEvents(token) {
+    return apiRequest('/api/events', { token });
+  },
+  createEvent(token, body) {
+    return apiRequest('/api/events', { method: 'POST', token, body });
+  },
+  joinEvent(token, id) {
+    return apiRequest(`/api/events/${id}/join`, { method: 'POST', token });
+  },
+  leaveEvent(token, id) {
+    return apiRequest(`/api/events/${id}/leave`, { method: 'POST', token });
+  },
+  getPosts(token) {
+    return apiRequest('/api/posts', { token });
+  },
+  createPost(token, body) {
+    return apiRequest('/api/posts', { method: 'POST', token, body });
+  },
+  deletePost(token, id) {
+    return apiRequest(`/api/posts/${id}`, { method: 'DELETE', token });
+  },
+  getLikesReceived(token) {
+    return apiRequest('/api/likes/received', { token });
+  },
   exportAccount(token) {
     return apiRequest('/api/account/export', { token });
   },

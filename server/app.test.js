@@ -458,3 +458,38 @@ test('site-specific details are sanitized, scored, filtered and super likes are 
     await server.close();
   }
 });
+test('events and posts are scoped to their site, and received likes are gated', async () => {
+  const server = await startTestServer();
+
+  try {
+    const friend = await registerUser(server.baseUrl, 'ami@example.com', { mode: 'amical' });
+    const other = await registerUser(server.baseUrl, 'ami2@example.com', { mode: 'amical' });
+    const love = await registerUser(server.baseUrl, 'love@example.com', { mode: 'amoureux' });
+    const startsAt = new Date(Date.now() + 86400000).toISOString();
+
+    const created = await request(server.baseUrl, '/api/events', {
+      method: 'POST', headers: friend.auth, body: JSON.stringify({ title: 'Rando', city: 'Lyon', startsAt, capacity: 2 }),
+    });
+    assert.equal(created.status, 201);
+    const id = created.body.event.id;
+
+    const wrongSite = await request(server.baseUrl, '/api/events', { headers: love.auth });
+    assert.equal(wrongSite.status, 403);
+
+    const join = await request(server.baseUrl, `/api/events/${id}/join`, { method: 'POST', headers: other.auth });
+    assert.equal(join.status, 200);
+    const list = await request(server.baseUrl, '/api/events', { headers: other.auth });
+    assert.equal(list.body.events[0].attendees, 2);
+
+    const postOnAmical = await request(server.baseUrl, '/api/posts', {
+      method: 'POST', headers: friend.auth, body: JSON.stringify({ content: 'Bonjour', kind: 'post' }),
+    });
+    assert.equal(postOnAmical.status, 403);
+
+    const likes = await request(server.baseUrl, '/api/likes/received', { headers: love.auth });
+    assert.equal(likes.status, 200);
+    assert.equal(likes.body.count, 0);
+  } finally {
+    await server.close();
+  }
+});

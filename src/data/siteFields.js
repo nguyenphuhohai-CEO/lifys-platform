@@ -6,18 +6,24 @@ export const SITE_FIELDS = {
     { id: 'children', type: 'select', label: 'Enfants', options: ['Sans enfant', 'Avec enfant(s)', 'Souhaite des enfants'] },
     { id: 'smoker', type: 'select', label: 'Fumeur', options: ['Non', 'Occasionnellement', 'Oui'] },
     { id: 'looking', type: 'select', label: 'Je recherche', options: ['Relation durable', 'À découvrir', 'Peu importe'] },
+    { id: 'promptQ', type: 'select', label: 'Question de profil', options: ['Mon dimanche idéal','Ce qui me fait craquer','Un voyage inoubliable','Ma plus grande passion'] },
+    { id: 'promptA', type: 'longtext', label: 'Ma réponse' },
   ],
   amical: [
     { id: 'activities', type: 'tags', label: 'Activités favorites' },
     { id: 'availability', type: 'select', label: 'Disponibilités', options: ['En semaine', 'Le week-end', 'En soirée', 'Flexible'] },
     { id: 'wantedAgeMin', type: 'number', label: 'Âge recherché (min)' },
     { id: 'wantedAgeMax', type: 'number', label: 'Âge recherché (max)' },
+    { id: 'promptQ', type: 'select', label: 'Question de profil', options: ['Mon activité préférée entre amis','Un lieu à me faire découvrir','Ce que j’aimerais apprendre','Mon meilleur souvenir entre amis'] },
+    { id: 'promptA', type: 'longtext', label: 'Ma réponse' },
   ],
   'sans-lendemain': [
     { id: 'expectations', type: 'select', label: 'Attentes', options: ['Une soirée', 'Discuter puis voir', 'Récurrent sans attache'] },
     { id: 'discretion', type: 'select', label: 'Discrétion', options: ['Très discret(e)', 'Normale', 'Aucune'] },
     { id: 'consent', type: 'bool', label: 'Je m’engage au respect et au consentement mutuel' },
     { id: 'tonight', type: 'bool', label: 'Disponible ce soir (actif 12 h)' },
+    { id: 'promptQ', type: 'select', label: 'Question de profil', options: ['Mon ambiance idéale','Mes limites claires','Ma soirée parfaite'] },
+    { id: 'promptA', type: 'longtext', label: 'Ma réponse' },
   ],
   mariage: [
     { id: 'religion', type: 'select', label: 'Religion', options: ['Chrétienne', 'Musulmane', 'Juive', 'Bouddhiste', 'Athée / agnostique', 'Autre', NO_ANSWER] },
@@ -25,6 +31,8 @@ export const SITE_FIELDS = {
     { id: 'childrenPlan', type: 'select', label: 'Projet d’enfants', options: ['Oui', 'Non', 'Ouvert'] },
     { id: 'relocate', type: 'select', label: 'Prêt(e) à déménager', options: ['Oui', 'Non', 'Selon le projet'] },
     { id: 'family', type: 'text', label: 'Ma famille en quelques mots' },
+    { id: 'promptQ', type: 'select', label: 'Question de profil', options: ['Ma vision du couple','Une valeur non négociable','Notre foyer idéal','Ce que j’attends d’un mariage'] },
+    { id: 'promptA', type: 'longtext', label: 'Ma réponse' },
   ],
   professionnel: [
     { id: 'job', type: 'text', label: 'Métier' },
@@ -33,6 +41,8 @@ export const SITE_FIELDS = {
     { id: 'skills', type: 'tags', label: 'Compétences' },
     { id: 'goal', type: 'select', label: 'Objectif', options: ['Recruter', 'Collaborer', 'Mentor', 'Réseauter'] },
     { id: 'linkedin', type: 'url', label: 'Lien LinkedIn' },
+    { id: 'promptQ', type: 'select', label: 'Question de profil', options: ['Ce que je recherche en collaboration','Mon plus beau projet','Comment je peux aider','Mon conseil carrière'] },
+    { id: 'promptA', type: 'longtext', label: 'Ma réponse' },
   ],
 };
 
@@ -52,6 +62,9 @@ export function sanitizeDetails(site, raw) {
     } else if (field.type === 'tags') {
       const tags = cleanTags(value);
       if (tags.length) details[field.id] = tags;
+    } else if (field.type === 'longtext') {
+      const text = `${value ?? ''}`.trim().slice(0, 240);
+      if (text) details[field.id] = text;
     } else if (field.type === 'text') {
       const text = `${value ?? ''}`.trim().slice(0, 120);
       if (text) details[field.id] = text;
@@ -64,6 +77,11 @@ export function sanitizeDetails(site, raw) {
       const url = `${value ?? ''}`.trim();
       if (/^https:\/\/([a-z0-9-]+\.)*linkedin\.com\/[^\s<>"]{0,200}$/i.test(url)) details[field.id] = url;
     }
+  }
+
+  if (!details.promptQ || !details.promptA) {
+    delete details.promptQ;
+    delete details.promptA;
   }
 
   return details;
