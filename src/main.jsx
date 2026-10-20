@@ -30,6 +30,10 @@ function Root() {
   return mode ? <App key={mode.id} site={mode.id} /> : <HubPage />;
 }
 
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <I18nProvider>
