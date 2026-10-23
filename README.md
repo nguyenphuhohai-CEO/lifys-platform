@@ -310,3 +310,14 @@ Chaque site a ses champs facultatifs (`src/data/siteFields.js`, validés côté 
 - **Accusés de lecture** (« Vu/Envoyé »), badges de messages non lus.
 - **Modération** : écran admin pour les administrateurs (ADMIN_EMAILS).
 - **Application mobile (PWA)** : manifeste, icônes, service worker (accueil hors connexion uniquement), barre d'onglets en bas sur mobile. L'installation exige HTTPS (déploiement Render).
+
+## Déployer sur Render (pas à pas)
+
+1. Fusionner la PR dans `main`, puis sur https://dashboard.render.com : **New → Blueprint** et choisir ce dépôt (`render.yaml`).
+2. Renseigner les variables `sync: false` : `APP_URL` (l'URL finale en https), `ADMIN_EMAILS` (votre e-mail), `SMTP_URL` (obligatoire pour la confirmation d'e-mail), puis `STRIPE_*` et `ADSENSE_*` si utilisés.
+3. Après le premier déploiement, vérifier `https://<service>.onrender.com/api/health` (doit répondre 200).
+4. Stripe : créer le webhook vers `https://<domaine>/api/billing/webhook` et copier son secret dans `STRIPE_WEBHOOK_SECRET`.
+5. Domaine : Settings → Custom Domains, puis mettre `APP_URL` à jour.
+6. Sur téléphone, ouvrir le site en https : « Installer l'app » (Android) ou Partager → « Sur l'écran d'accueil » (iPhone).
+
+Le plan `starter` est requis pour le disque persistant (base SQLite, photos, sauvegardes).
