@@ -1,5 +1,5 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
 
 import express from 'express';
 
@@ -13,11 +13,25 @@ import {
   verifyToken,
 } from './auth.js';
 import { createDatabase, sanitizeProfileInput } from './db.js';
+import { applyStripeEvent, createCheckoutSession, createPortalSession, getPlans, verifyStripeSignature } from './billing.js';
+import { buildVerificationEmail } from './email-templates.js';
+import { createMailer } from './mailer.js';
+import { createRateLimiter } from './rate-limit.js';
+import { createUploadStore, detectImageType, MAX_UPLOAD_BYTES, ownUploadPattern, UPLOAD_MIME_TYPES } from './uploads.js';
 
-function createHttpError(status, message) {
+export const TERMS_VERSION = '2026-10-18';
+const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+const REPORT_REASONS = new Set(['spam', 'harcelement', 'faux-profil', 'contenu-inapproprie', 'mineur', 'autre']);
+
+function createHttpError(status, message, code) {
   const error = new Error(message);
   error.status = status;
+  error.code = code;
   return error;
+}
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
 function sendSession(res, token, profile) {
@@ -25,23 +39,74 @@ function sendSession(res, token, profile) {
     token,
     user: {
       email: profile.email,
+      emailVerified: profile.emailVerified,
+      isAdmin: (res.app.locals.adminEmails ?? []).includes(profile.email),
       profile,
     },
   });
 }
 
 export function createApp(config) {
-  const database = createDatabase(config.databaseFile);
+  const database = createDatabase(config.databaseFile, {
+    seedDemoData: config.seedDemoData,
+    requireEmailVerification: config.requireEmailVerification,
+  });
+  const mailer = createMailer(config);
+  const uploads = createUploadStore(config.uploadDir);
   const app = express();
 
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '1mb' }));
+  app.locals.adminEmails = config.adminEmails;
+  app.set('trust proxy', config.trustProxy);
+  app.post('/api/billing/webhook', express.raw({ type: '*/*', limit: '100kb' }), (req, res, next) => {
+    try {
+      const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '';
+      if (!verifyStripeSignature(rawBody, req.headers['stripe-signature'], config.billing.webhookSecret)) {
+        throw createHttpError(400, 'Signature invalide.');
+      }
+
+      applyStripeEvent(database, JSON.parse(rawBody));
+      res.json({ received: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.use(express.json({ limit: '100kb' }));
+  const adsEnabled = Boolean(config.ads?.client);
+  const csp = adsEnabled
+    ? "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.adtrafficquality.google; connect-src 'self' https://*.googlesyndication.com https://*.google.com https://*.adtrafficquality.google; frame-src https://*.googlesyndication.com https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    : "default-src 'self'; img-src 'self' data: https://images.unsplash.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Content-Security-Policy', csp);
+    if (config.nodeEnv === 'production') {
+      res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+    }
     next();
   });
+
+  const authLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: config.nodeEnv === 'test' ? 1000 : 30,
+    message: 'Trop de tentatives. Réessayez dans quelques minutes.',
+  });
+  app.use('/api/auth', authLimiter);
+  const uploadLimiter = createRateLimiter({
+    windowMs: 60 * 60 * 1000,
+    max: config.nodeEnv === 'test' ? 1000 : 30,
+    message: 'Trop d’envois de photos. Réessayez plus tard.',
+  });
+  app.use('/uploads', express.static(uploads.directory, {
+    index: false,
+    dotfiles: 'ignore',
+    maxAge: '30d',
+    immutable: true,
+    setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff'),
+  }));
 
   function requireAuth(req, _res, next) {
     const authorization = req.headers.authorization ?? '';
@@ -61,6 +126,11 @@ export function createApp(config) {
         return;
       }
 
+      if (database.getUserById(payload.userId)?.status !== 'active') {
+        next(createHttpError(403, 'Ce compte est suspendu.', 'account_suspended'));
+        return;
+      }
+
       req.auth = { token, userId: payload.userId, email: payload.email, profile };
       next();
     } catch {
@@ -68,11 +138,37 @@ export function createApp(config) {
     }
   }
 
+  function requireVerified(req, _res, next) {
+    if (config.requireEmailVerification && !req.auth.profile.emailVerified) {
+      next(createHttpError(403, 'Vérifiez votre adresse e-mail pour utiliser cette fonctionnalité.', 'email_not_verified'));
+      return;
+    }
+
+    next();
+  }
+
+  function requireAdmin(req, _res, next) {
+    if (!config.adminEmails.includes(req.auth.profile.email)) {
+      next(createHttpError(403, 'Accès réservé aux administrateurs.'));
+      return;
+    }
+
+    next();
+  }
+
+  async function sendVerificationEmail(userId, email, lang) {
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    database.createEmailVerification(userId, hashToken(rawToken), new Date(Date.now() + VERIFICATION_TTL_MS).toISOString());
+
+    const message = buildVerificationEmail(lang, `${config.appUrl}/verify-email?token=${rawToken}`);
+    await mailer.send({ to: email, ...message });
+  }
+
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true });
   });
 
-  app.post('/api/auth/register', (req, res, next) => {
+  app.post('/api/auth/register', async (req, res, next) => {
     try {
       const email = normalizeEmail(req.body.email);
       const password = req.body.password;
@@ -89,8 +185,22 @@ export function createApp(config) {
         throw createHttpError(400, 'Le mot de passe doit contenir au moins 8 caractères.');
       }
 
-      if (database.getUserByEmail(email)) {
-        throw createHttpError(409, 'Un compte existe déjà avec cet e-mail.');
+      if (req.body.acceptTerms !== true) {
+        throw createHttpError(400, 'Vous devez accepter les CGU et confirmer avoir au moins 18 ans.');
+      }
+
+      const account = database.getAccountByEmail(email);
+      if (account) {
+        if (database.getUserByEmail(email, initialProfile.mode) || !comparePassword(password, account.password_hash)) {
+          throw createHttpError(409, 'Un compte existe déjà avec cet e-mail.');
+        }
+        if (account.status !== 'active') {
+          throw createHttpError(403, 'Ce compte est suspendu.', 'account_suspended');
+        }
+        const joined = database.joinSite(account, initialProfile.mode, initialProfile.name || 'Profil Lifys');
+        res.status(201);
+        sendSession(res, createToken({ userId: joined.id, email }, config), database.getProfileByUserId(joined.id));
+        return;
       }
 
       const created = database.createUser({
@@ -98,7 +208,17 @@ export function createApp(config) {
         passwordHash: hashPassword(password),
         name: initialProfile.name || 'Profil Lifys',
         mode: initialProfile.mode,
+        termsVersion: TERMS_VERSION,
       });
+
+      if (config.requireEmailVerification) {
+        try {
+          await sendVerificationEmail(created.userId, email, req.body.lang);
+        } catch (mailError) {
+          console.error('Verification e-mail failed:', mailError.message);
+        }
+      }
+
       const token = createToken({ userId: created.userId, email }, config);
       res.status(201);
       sendSession(res, token, created.profile);
@@ -111,10 +231,18 @@ export function createApp(config) {
     try {
       const email = normalizeEmail(req.body.email);
       const password = req.body.password;
-      const user = database.getUserByEmail(email);
+      const site = sanitizeProfileInput({ mode: req.body.site ?? req.body.mode }).mode;
+      const account = database.getAccountByEmail(email);
 
-      if (typeof password !== 'string' || !password || !user || !comparePassword(password, user.password_hash)) {
+      if (typeof password !== 'string' || !password || !account || !comparePassword(password, account.password_hash)) {
         throw createHttpError(401, 'Identifiants invalides.');
+      }
+
+      const user = database.getUserByEmail(email, site)
+        ?? (account.status === 'active' ? database.joinSite(account, site, account.email.split('@')[0] || 'Profil Lifys') : account);
+
+      if (user.status !== 'active') {
+        throw createHttpError(403, 'Ce compte est suspendu.', 'account_suspended');
       }
 
       const token = createToken({ userId: user.id, email }, config);
@@ -124,8 +252,92 @@ export function createApp(config) {
     }
   });
 
+  app.post('/api/auth/switch-site', requireAuth, (req, res, next) => {
+    try {
+      const site = sanitizeProfileInput({ mode: req.body.site }).mode;
+      const account = database.getUserById(req.auth.userId);
+      const user = database.getUserByEmail(account.email, site)
+        ?? database.joinSite(account, site, req.auth.profile.name || account.email.split('@')[0]);
+      sendSession(res, createToken({ userId: user.id, email: account.email }, config), database.getProfileByUserId(user.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/auth/verify-email', (req, res, next) => {
+    try {
+      const rawToken = `${req.body.token ?? ''}`;
+      const userId = rawToken ? database.verifyEmailToken(hashToken(rawToken)) : null;
+
+      if (!userId) {
+        throw createHttpError(400, 'Lien de confirmation invalide ou expiré.');
+      }
+
+      res.json({ verified: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/auth/resend-verification', requireAuth, async (req, res, next) => {
+    try {
+      if (req.auth.profile.emailVerified) {
+        res.json({ sent: false, alreadyVerified: true });
+        return;
+      }
+
+      await sendVerificationEmail(req.auth.userId, req.auth.profile.email, req.body?.lang);
+      res.json({ sent: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  const billingConfigured = () => Boolean(config.billing.secretKey && config.billing.premiumPriceId);
+
+  app.get('/api/billing/plans', (_req, res) => {
+    res.json({ plans: getPlans(config), checkoutAvailable: billingConfigured(),
+      ads: adsEnabled ? { client: config.ads.client, slot: config.ads.slot } : null,
+    });
+  });
+
+  app.post('/api/billing/checkout', requireAuth, requireVerified, async (req, res, next) => {
+    try {
+      if (!billingConfigured()) {
+        throw createHttpError(503, 'Le paiement n’est pas encore disponible.', 'billing_unavailable');
+      }
+
+      if (req.auth.profile.plan === 'premium') {
+        throw createHttpError(409, 'Vous êtes déjà abonné à Lifys Premium.');
+      }
+
+      const user = database.getUserById(req.auth.userId);
+      const url = await createCheckoutSession(config, { userId: req.auth.userId, email: req.auth.profile.email, customerId: user.stripe_customer_id });
+      res.json({ url });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/billing/portal', requireAuth, async (req, res, next) => {
+    try {
+      const user = database.getUserById(req.auth.userId);
+      if (!billingConfigured() || !user.stripe_customer_id) {
+        throw createHttpError(503, 'La gestion de l’abonnement n’est pas disponible.', 'billing_unavailable');
+      }
+
+      res.json({ url: await createPortalSession(config, user.stripe_customer_id) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get('/api/auth/session', requireAuth, (req, res) => {
     sendSession(res, req.auth.token, database.getProfileByUserId(req.auth.userId));
+  });
+
+  app.get('/api/hub', requireAuth, (req, res) => {
+    res.json({ sites: database.getAccountOverview(req.auth.userId) });
   });
 
   app.get('/api/bootstrap', requireAuth, (req, res) => {
@@ -142,41 +354,118 @@ export function createApp(config) {
 
   app.put('/api/profile', requireAuth, (req, res, next) => {
     try {
-      const profile = sanitizeProfileInput(req.body);
+      const current = database.getProfileByUserId(req.auth.userId);
+      const profile = sanitizeProfileInput({ ...req.body, mode: current?.mode ?? req.body.mode });
 
       if (!profile.name || !profile.city || !profile.bio || !profile.age) {
         throw createHttpError(400, 'Nom, âge, ville et bio sont requis.');
       }
 
-      res.json({ profile: database.updateUserProfile(req.auth.userId, profile) });
+      const previous = current?.avatar ?? '';
+      if (profile.avatar.startsWith('/uploads/') && !ownUploadPattern(req.auth.userId).test(profile.avatar)) {
+        throw createHttpError(400, 'Photo invalide.');
+      }
+
+      const updated = database.updateUserProfile(req.auth.userId, profile);
+      if (previous !== profile.avatar && !(current?.photos ?? []).includes(previous)) uploads.removeByUrl(previous);
+      res.json({ profile: updated });
     } catch (error) {
       next(error);
     }
   });
 
-  app.get('/api/discovery', requireAuth, (req, res) => {
+  app.post(
+    '/api/profile/photo',
+    requireAuth,
+    uploadLimiter,
+    express.raw({ type: UPLOAD_MIME_TYPES, limit: MAX_UPLOAD_BYTES }),
+    (req, res, next) => {
+      try {
+        if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+          throw createHttpError(415, 'Envoyez une image JPEG, PNG ou WebP.');
+        }
+        const current = database.getProfileByUserId(req.auth.userId)?.avatar ?? '';
+        if (!detectImageType(req.body)) throw createHttpError(415, 'Envoyez une image JPEG, PNG ou WebP.');
+        uploads.removeAllForUser(req.auth.userId, [current, ...(database.getProfileByUserId(req.auth.userId)?.photos ?? [])]);
+        const url = uploads.save(req.auth.userId, req.body);
+        res.status(201).json({ url });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/profile/photos',
+    requireAuth,
+    uploadLimiter,
+    express.raw({ type: UPLOAD_MIME_TYPES, limit: MAX_UPLOAD_BYTES }),
+    (req, res, next) => {
+      try {
+        if (!Buffer.isBuffer(req.body) || !detectImageType(req.body)) {
+          throw createHttpError(415, 'Envoyez une image JPEG, PNG ou WebP.');
+        }
+        if ((database.getProfileByUserId(req.auth.userId)?.photos ?? []).length >= 4) {
+          throw createHttpError(409, 'Vous pouvez ajouter 4 photos supplémentaires au maximum.');
+        }
+        const url = uploads.save(req.auth.userId, req.body);
+        res.status(201).json({ profile: database.addProfilePhoto(req.auth.userId, url) });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post('/api/profile/photos/remove', requireAuth, (req, res, next) => {
+    try {
+      const url = `${req.body.url ?? ''}`;
+      const profile = ownUploadPattern(req.auth.userId).test(url) ? database.removeProfilePhoto(req.auth.userId, url) : null;
+      if (!profile) {
+        throw createHttpError(404, 'Photo introuvable.');
+      }
+      uploads.removeByUrl(url);
+      res.json({ profile });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/discovery', requireAuth, requireVerified, (req, res) => {
     res.json({
       profiles: database.listDiscoveryProfiles(req.auth.userId, {
         activeMode: req.query.mode ?? 'all',
         query: req.query.query ?? '',
         city: req.query.city ?? '',
+        ageMin: req.query.ageMin,
+        ageMax: req.query.ageMax,
+        detail: req.query.detail ?? '',
+        tonight: req.query.tonight,
+        minScore: req.query.minScore,
       }),
     });
   });
 
-  app.post('/api/interactions/like', requireAuth, (req, res, next) => {
+  app.post('/api/interactions/like', requireAuth, requireVerified, (req, res, next) => {
     try {
       if (!req.body.profileId) {
         throw createHttpError(400, 'profileId est requis.');
       }
 
-      res.json(database.likeProfile(req.auth.userId, req.body.profileId));
+      const result = database.likeProfile(req.auth.userId, req.body.profileId, {
+        note: req.body.note,
+        superLike: req.body.superLike === true,
+      });
+      if (result.limited) {
+        throw createHttpError(429, 'Limite de Super likes atteinte aujourd’hui. Passez Premium pour en avoir plus.');
+      }
+
+      res.json(result);
     } catch (error) {
       next(error);
     }
   });
 
-  app.post('/api/interactions/pass', requireAuth, (req, res, next) => {
+  app.post('/api/interactions/pass', requireAuth, requireVerified, (req, res, next) => {
     try {
       if (!req.body.profileId) {
         throw createHttpError(400, 'profileId est requis.');
@@ -192,6 +481,47 @@ export function createApp(config) {
     }
   });
 
+  const community = (handler) => (req, res, next) => {
+    try {
+      handler(req, res);
+    } catch (error) {
+      next(error.status ? createHttpError(error.status, error.message) : error);
+    }
+  };
+
+  app.get('/api/events', requireAuth, requireVerified, community((req, res) => {
+    res.json({ events: database.listEvents(req.auth.userId, { city: req.query.city ?? '' }) });
+  }));
+  app.post('/api/events', requireAuth, requireVerified, community((req, res) => {
+    res.status(201).json({ event: database.createEvent(req.auth.userId, req.body) });
+  }));
+  app.post('/api/events/:eventId/join', requireAuth, requireVerified, community((req, res) => {
+    res.json({ event: database.joinEvent(req.auth.userId, req.params.eventId) });
+  }));
+  app.post('/api/events/:eventId/leave', requireAuth, requireVerified, community((req, res) => {
+    if (!database.leaveEvent(req.auth.userId, req.params.eventId)) throw Object.assign(new Error('Sortie introuvable.'), { status: 404 });
+    res.status(204).end();
+  }));
+
+  app.get('/api/posts', requireAuth, requireVerified, community((req, res) => {
+    res.json({ posts: database.listPosts(req.auth.userId) });
+  }));
+  app.post('/api/posts', requireAuth, requireVerified, community((req, res) => {
+    res.status(201).json({ post: database.createPost(req.auth.userId, req.body) });
+  }));
+  app.delete('/api/posts/:postId', requireAuth, community((req, res) => {
+    if (!database.deletePost(req.auth.userId, req.params.postId)) throw Object.assign(new Error('Publication introuvable.'), { status: 404 });
+    res.status(204).end();
+  }));
+
+  app.post('/api/tonight', requireAuth, requireVerified, community((req, res) => {
+    res.json({ profile: database.setTonight(req.auth.userId, req.body.active === true) });
+  }));
+
+  app.get('/api/likes/received', requireAuth, requireVerified, community((req, res) => {
+    res.json(database.listLikesReceived(req.auth.userId));
+  }));
+
   app.get('/api/matches', requireAuth, (req, res) => {
     res.json({ matches: database.listMatchesForUser(req.auth.userId) });
   });
@@ -200,7 +530,7 @@ export function createApp(config) {
     res.json({ conversations: database.listConversationsForUser(req.auth.userId) });
   });
 
-  app.post('/api/conversations/:conversationId/messages', requireAuth, (req, res, next) => {
+  app.post('/api/conversations/:conversationId/messages', requireAuth, requireVerified, (req, res, next) => {
     try {
       const text = `${req.body.text ?? ''}`.trim();
 
@@ -219,6 +549,93 @@ export function createApp(config) {
     }
   });
 
+  app.post('/api/conversations/:conversationId/read', requireAuth, (req, res, next) => {
+    try {
+      const conversation = database.markConversationRead(req.auth.userId, req.params.conversationId);
+      if (!conversation) {
+        throw createHttpError(404, 'Conversation introuvable.');
+      }
+
+      res.json({ conversation });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/reports', requireAuth, (req, res, next) => {
+    try {
+      const reason = `${req.body.reason ?? ''}`;
+      const kind = req.body.postId ? 'post' : req.body.eventId ? 'event' : 'profile';
+      const ref = req.body.postId ?? req.body.eventId ?? req.body.profileId;
+      if (!ref || !REPORT_REASONS.has(reason)) {
+        throw createHttpError(400, 'Cible et motif valides requis.');
+      }
+
+      const details = `${req.body.details ?? ''}`.trim().slice(0, 1000);
+      const reported = kind === 'profile'
+        ? database.reportProfile(req.auth.userId, ref, { reason, details })
+        : database.reportContent(req.auth.userId, kind, `${ref}`, { reason, details });
+      if (!reported) {
+        throw createHttpError(404, 'Contenu introuvable.');
+      }
+
+      res.status(201).json({ reported: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/blocks', requireAuth, (req, res, next) => {
+    try {
+      if (!req.body.profileId || !database.blockProfile(req.auth.userId, req.body.profileId)) {
+        throw createHttpError(404, 'Profil introuvable.');
+      }
+
+      res.status(201).json({ blocked: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/admin/reports', requireAuth, requireAdmin, (_req, res) => {
+    res.json({ reports: database.listOpenReports() });
+  });
+
+  app.post('/api/admin/reports/:reportId/resolve', requireAuth, requireAdmin, (req, res, next) => {
+    try {
+      const action = req.body.action;
+      if (!['dismiss', 'suspend', 'remove'].includes(action) || !database.resolveReportById(req.params.reportId, action)) {
+        throw createHttpError(400, 'Signalement introuvable ou action invalide.');
+      }
+
+      res.json({ resolved: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/account/export', requireAuth, (req, res) => {
+    res.setHeader('Content-Disposition', 'attachment; filename="lifys-donnees.json"');
+    res.json(database.exportUserData(req.auth.userId));
+  });
+
+  app.delete('/api/account', requireAuth, (req, res, next) => {
+    try {
+      const user = database.getUserById(req.auth.userId);
+      const password = req.body?.password;
+      if (typeof password !== 'string' || !comparePassword(password, user.password_hash)) {
+        throw createHttpError(401, 'Mot de passe incorrect.');
+      }
+
+      const userIds = database.listAccountUserIds(req.auth.userId);
+      database.deleteAccount(req.auth.userId);
+      userIds.forEach((userId) => uploads.removeAllForUser(userId));
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post('/api/prototype/reset', requireAuth, (req, res) => {
     database.resetUserData(req.auth.userId);
     res.json({
@@ -230,16 +647,18 @@ export function createApp(config) {
 
   if (fs.existsSync(config.staticDir)) {
     app.use(express.static(config.staticDir));
-    app.get(/^(?!\/api\/).*/, (req, res) => {
-      res.sendFile(path.join(config.staticDir, 'index.html'));
+    app.get(/^(?!\/(api|uploads)\/).*/, (req, res) => {
+      res.sendFile('index.html', { root: config.staticDir });
     });
   }
 
   app.use((error, _req, res, _next) => {
     res.status(error.status || 500).json({
       error: error.message || 'Une erreur inattendue est survenue.',
+      ...(error.code ? { code: error.code } : {}),
     });
   });
 
-  return { app, database };
+  return { app, database, mailer };
 }
+

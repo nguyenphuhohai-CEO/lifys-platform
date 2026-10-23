@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: lifys
+    runtime: docker
+    plan: starter # le disque persistant (SQLite) exige un plan payant
+    healthCheckPath: /api/health
+    disk:
+      name: lifys-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_FILE
+        value: /data/lifys.sqlite
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APP_URL
+        sync: false # ex. https://www.lifys.com
+      - key: SMTP_URL
+        sync: false # ex. smtps://user:password@smtp.example.com:465
+      - key: MAIL_FROM
+        value: Lifys <no-reply@lifys.com>
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PREMIUM_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: ADSENSE_CLIENT_ID
+        sync: false
+      - key: ADSENSE_SLOT_ID
+        sync: false

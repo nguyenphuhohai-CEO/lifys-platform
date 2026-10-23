@@ -44,8 +44,23 @@ export const api = {
   login(payload) {
     return apiRequest('/api/auth/login', { method: 'POST', body: payload });
   },
+  switchSite(token, site) {
+    return apiRequest('/api/auth/switch-site', { method: 'POST', token, body: { site } });
+  },
   getSession(token) {
     return apiRequest('/api/auth/session', { token });
+  },
+  getAdminReports(token) {
+    return apiRequest('/api/admin/reports', { token });
+  },
+  resolveAdminReport(token, reportId, action) {
+    return apiRequest(`/api/admin/reports/${reportId}/resolve`, { method: 'POST', token, body: { action } });
+  },
+  markConversationRead(token, conversationId) {
+    return apiRequest(`/api/conversations/${conversationId}/read`, { method: 'POST', token });
+  },
+  getHub(token) {
+    return apiRequest('/api/hub', { token });
   },
   getBootstrap(token) {
     return apiRequest('/api/bootstrap', { token });
@@ -56,16 +71,45 @@ export const api = {
   updateProfile(token, payload) {
     return apiRequest('/api/profile', { method: 'PUT', token, body: payload });
   },
+  async uploadPhoto(token, file) {
+    const response = await fetch(`${API_BASE_URL}/api/profile/photo`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type, Authorization: 'Bearer ' + token },
+      body: file,
+    });
+    return parseResponse(response);
+  },
+  async addPhoto(token, file) {
+    const response = await fetch(`${API_BASE_URL}/api/profile/photos`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type, Authorization: 'Bearer ' + token },
+      body: file,
+    });
+    return parseResponse(response);
+  },
+  removePhoto(token, url) {
+    return apiRequest('/api/profile/photos/remove', { method: 'POST', token, body: { url } });
+  },
+  setTonight(token, active) {
+    return apiRequest('/api/tonight', { method: 'POST', token, body: { active } });
+  },
+  reportContent(token, payload) {
+    return apiRequest('/api/reports', { method: 'POST', token, body: payload });
+  },
   getDiscovery(token, filters) {
     const search = new URLSearchParams({
       mode: filters.activeMode ?? 'all',
       query: filters.query ?? '',
       city: filters.city ?? '',
     });
+    for (const key of ['ageMin', 'ageMax', 'detail', 'minScore']) {
+      if (filters[key]) search.set(key, filters[key]);
+    }
+    if (filters.tonight) search.set('tonight', '1');
     return apiRequest(`/api/discovery?${search.toString()}`, { token });
   },
-  likeProfile(token, profileId) {
-    return apiRequest('/api/interactions/like', { method: 'POST', token, body: { profileId } });
+  likeProfile(token, profileId, options = {}) {
+    return apiRequest('/api/interactions/like', { method: 'POST', token, body: { profileId, ...options } });
   },
   passProfile(token, profileId) {
     return apiRequest('/api/interactions/pass', { method: 'POST', token, body: { profileId } });
@@ -86,4 +130,56 @@ export const api = {
   resetPrototype(token) {
     return apiRequest('/api/prototype/reset', { method: 'POST', token });
   },
+  verifyEmail(verificationToken) {
+    return apiRequest('/api/auth/verify-email', { method: 'POST', body: { token: verificationToken } });
+  },
+  resendVerification(token, lang) {
+    return apiRequest('/api/auth/resend-verification', { method: 'POST', token, body: { lang } });
+  },
+  getPlans() {
+    return apiRequest('/api/billing/plans');
+  },
+  startCheckout(token) {
+    return apiRequest('/api/billing/checkout', { method: 'POST', token });
+  },
+  openBillingPortal(token) {
+    return apiRequest('/api/billing/portal', { method: 'POST', token });
+  },
+  reportProfile(token, payload) {
+    return apiRequest('/api/reports', { method: 'POST', token, body: payload });
+  },
+  blockProfile(token, profileId) {
+    return apiRequest('/api/blocks', { method: 'POST', token, body: { profileId } });
+  },
+  getEvents(token) {
+    return apiRequest('/api/events', { token });
+  },
+  createEvent(token, body) {
+    return apiRequest('/api/events', { method: 'POST', token, body });
+  },
+  joinEvent(token, id) {
+    return apiRequest(`/api/events/${id}/join`, { method: 'POST', token });
+  },
+  leaveEvent(token, id) {
+    return apiRequest(`/api/events/${id}/leave`, { method: 'POST', token });
+  },
+  getPosts(token) {
+    return apiRequest('/api/posts', { token });
+  },
+  createPost(token, body) {
+    return apiRequest('/api/posts', { method: 'POST', token, body });
+  },
+  deletePost(token, id) {
+    return apiRequest(`/api/posts/${id}`, { method: 'DELETE', token });
+  },
+  getLikesReceived(token) {
+    return apiRequest('/api/likes/received', { token });
+  },
+  exportAccount(token) {
+    return apiRequest('/api/account/export', { token });
+  },
+  deleteAccount(token, password) {
+    return apiRequest('/api/account', { method: 'DELETE', token, body: { password } });
+  },
 };
+

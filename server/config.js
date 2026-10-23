@@ -1,6 +1,7 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const rootDir = path.resolve(new URL('..', import.meta.url).pathname);
+const rootDir = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 export function getConfig(overrides = {}) {
   const port = Number(overrides.PORT ?? process.env.PORT ?? 3001);
@@ -10,8 +11,25 @@ export function getConfig(overrides = {}) {
   const staticDir = overrides.STATIC_DIR ?? process.env.STATIC_DIR ?? path.join(rootDir, 'dist');
   const nodeEnv = overrides.NODE_ENV ?? process.env.NODE_ENV ?? 'development';
 
+  const trustProxy = overrides.TRUST_PROXY ?? process.env.TRUST_PROXY ?? (nodeEnv === 'production' ? '1' : '0');
+
   if (nodeEnv === 'production' && jwtSecret === 'lifys-dev-secret-change-me') {
     throw new Error('JWT_SECRET must be set in production.');
+  }
+
+  if (nodeEnv === 'production' && jwtSecret.length < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters in production.');
+  }
+
+  const isProduction = nodeEnv === 'production';
+  const smtpUrl = overrides.SMTP_URL ?? process.env.SMTP_URL ?? '';
+  const flag = (name, fallback) => {
+    const raw = overrides[name] ?? process.env[name];
+    return raw === undefined || raw === '' ? fallback : `${raw}`.toLowerCase() === 'true';
+  };
+  const requireEmailVerification = flag('REQUIRE_EMAIL_VERIFICATION', isProduction);
+  if (isProduction && requireEmailVerification && !smtpUrl) {
+    throw new Error('SMTP_URL is required in production when e-mail verification is enabled.');
   }
 
   return {
@@ -21,5 +39,32 @@ export function getConfig(overrides = {}) {
     jwtExpiresIn,
     staticDir,
     nodeEnv,
+    trustProxy: Number.isNaN(Number(trustProxy)) ? trustProxy : Number(trustProxy),
+    appUrl: `${overrides.APP_URL ?? process.env.APP_URL ?? `http://localhost:${port}`}`.replace(/\/+$/, ''),
+    smtpUrl,
+    mailFrom: overrides.MAIL_FROM ?? process.env.MAIL_FROM ?? 'Lifys <no-reply@lifys.local>',
+    billing: {
+      secretKey: overrides.STRIPE_SECRET_KEY ?? process.env.STRIPE_SECRET_KEY ?? '',
+      webhookSecret: overrides.STRIPE_WEBHOOK_SECRET ?? process.env.STRIPE_WEBHOOK_SECRET ?? '',
+      premiumPriceId: overrides.STRIPE_PREMIUM_PRICE_ID ?? process.env.STRIPE_PREMIUM_PRICE_ID ?? '',
+      premiumPriceCents: Number(overrides.PREMIUM_PRICE_CENTS ?? process.env.PREMIUM_PRICE_CENTS ?? 499),
+      currency: `${overrides.PREMIUM_CURRENCY ?? process.env.PREMIUM_CURRENCY ?? 'eur'}`.toLowerCase(),
+    },
+    uploadDir: overrides.UPLOAD_DIR ?? process.env.UPLOAD_DIR ?? path.join(path.dirname(databaseFile), 'uploads'),
+    backup: {
+      dir: overrides.BACKUP_DIR ?? process.env.BACKUP_DIR ?? path.join(path.dirname(databaseFile), 'backups'),
+      intervalHours: Number(overrides.BACKUP_INTERVAL_HOURS ?? process.env.BACKUP_INTERVAL_HOURS ?? (isProduction ? 24 : 0)) || 0,
+      keep: Math.max(1, Number(overrides.BACKUP_KEEP ?? process.env.BACKUP_KEEP ?? 14) || 14),
+    },
+    ads: {
+      client: `${overrides.ADSENSE_CLIENT_ID ?? process.env.ADSENSE_CLIENT_ID ?? ''}`.trim(),
+      slot: `${overrides.ADSENSE_SLOT_ID ?? process.env.ADSENSE_SLOT_ID ?? ''}`.trim(),
+    },
+    seedDemoData: flag('SEED_DEMO_DATA', !isProduction),
+    requireEmailVerification,
+    adminEmails: `${overrides.ADMIN_EMAILS ?? process.env.ADMIN_EMAILS ?? ''}`
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean),
   };
 }
