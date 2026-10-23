@@ -302,3 +302,11 @@ Chaque site a ses champs facultatifs (`src/data/siteFields.js`, validés côté 
 - **Galerie** : jusqu'à 4 photos supplémentaires par profil (`POST /api/profile/photos`, `POST /api/profile/photos/remove`, colonne `profiles.photos`), en plus de la photo principale.
 - **Amis** : onglet « Sorties » (créer/rejoindre/quitter, capacité limitée). **Pro** : « Fil d'actualité » (publications, offres, recherches de mission). **Amoureux** : « Likes reçus » (profils visibles en Premium, compteur en gratuit). **Éphémère** : onglet « Ce soir » (`POST /api/tonight`, 12 h, conseils de sécurité). **Mariage** : onglet « Sélection » (`minScore` sur `/api/discovery`).
 - **Signalement des contenus** : `POST /api/reports` accepte `postId` ou `eventId` en plus de `profileId`. Un contenu signalé par 3 membres distincts est masqué automatiquement ; l'admin (`ADMIN_EMAILS`) peut `dismiss`, `suspend` ou `remove` (supprime le contenu) via `POST /api/admin/reports/:id/resolve`. L'onglet « Modération » de l'application liste les signalements ouverts avec ces trois actions.
+
+## Expérience : cartes, expiration, application mobile
+
+- **Paquet de cartes** (Découvrir) : glisser à droite = like, à gauche = passer ; flèches du clavier ; bascule Cartes/Grille. « Top du jour » : 3 meilleurs profils (compatibilité ≥ 50 %).
+- **Matchs expirant en 24 h** (Amis, Love, Éphémère) : sans message, le match disparaît ; le premier message le conserve. Pro et Mariage n'expirent pas.
+- **Accusés de lecture** (« Vu/Envoyé »), badges de messages non lus.
+- **Modération** : écran admin pour les administrateurs (ADMIN_EMAILS).
+- **Application mobile (PWA)** : manifeste, icônes, service worker (accueil hors connexion uniquement), barre d'onglets en bas sur mobile. L'installation exige HTTPS (déploiement Render).
