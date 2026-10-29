@@ -48,6 +48,7 @@ export function getConfig(overrides = {}) {
       webhookSecret: overrides.STRIPE_WEBHOOK_SECRET ?? process.env.STRIPE_WEBHOOK_SECRET ?? '',
       premiumPriceId: overrides.STRIPE_PREMIUM_PRICE_ID ?? process.env.STRIPE_PREMIUM_PRICE_ID ?? '',
       premiumPriceCents: Number(overrides.PREMIUM_PRICE_CENTS ?? process.env.PREMIUM_PRICE_CENTS ?? 499),
+      automaticTax: ['1', 'true'].includes(``.toLowerCase()),
       currency: `${overrides.PREMIUM_CURRENCY ?? process.env.PREMIUM_CURRENCY ?? 'eur'}`.toLowerCase(),
     },
     oauth: {

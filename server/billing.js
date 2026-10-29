@@ -51,9 +51,20 @@ export async function createCheckoutSession(config, { userId, email, customerId 
     client_reference_id: `${userId}`,
     success_url: `${config.appUrl}/?billing=success`,
     cancel_url: `${config.appUrl}/?billing=cancel`,
+    allow_promotion_codes: 'true',
+    billing_address_collection: 'required',
+    locale: 'auto',
   };
+  if (config.billing.automaticTax) {
+    params['automatic_tax[enabled]'] = 'true';
+    params['tax_id_collection[enabled]'] = 'true';
+  }
   if (customerId) {
     params.customer = customerId;
+    if (config.billing.automaticTax) {
+      params['customer_update[address]'] = 'auto';
+      params['customer_update[name]'] = 'auto';
+    }
   } else {
     params.customer_email = email;
   }
