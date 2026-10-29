@@ -663,3 +663,46 @@ test('matches expire after 24h without a message on expiring sites', async () =>
     await server.close();
   }
 });
+test('selfie verification, boost and distance filter', async () => {
+  const server = await startTestServer({ ADMIN_EMAILS: 'admin@example.com', SEED_DEMO_DATA: 'false' });
+  try {
+    const admin = await registerUser(server.baseUrl, 'admin@example.com');
+    const a = await registerUser(server.baseUrl, 'a@example.com');
+    const b = await registerUser(server.baseUrl, 'b@example.com');
+    const c = await registerUser(server.baseUrl, 'c@example.com');
+    const put = (u, city) => request(server.baseUrl, '/api/profile', { method: 'PUT', headers: u.auth, body: JSON.stringify({ name: u.name, age: 30, city, bio: 'Profil complet pour tester la distance.', interests: ['design'], mode: 'amoureux', avatar: '' }) });
+    a.name = 'a'; b.name = 'b'; c.name = 'c'; admin.name = 'admin';
+    await put(a, 'Paris'); await put(b, 'Lyon'); await put(c, 'Marseille');
+    await put(admin, 'Paris');
+
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32)]);
+    const upload = (u) => fetch(`${server.baseUrl}/api/profile/selfie`, { method: 'POST', headers: { 'content-type': 'image/png', ...u.auth }, body: png });
+    assert.equal((await upload(b)).status, 201);
+    assert.equal((await upload(b)).status, 409);
+    assert.equal((await request(server.baseUrl, '/api/admin/selfies', { headers: b.auth })).status, 403);
+
+    const pending = await request(server.baseUrl, '/api/admin/selfies', { headers: admin.auth });
+    assert.equal(pending.body.selfies.length, 1);
+    const image = await fetch(`${server.baseUrl}/api/admin/selfies/${pending.body.selfies[0].id}/image`, { headers: admin.auth });
+    assert.equal(image.status, 200);
+    const resolved = await request(server.baseUrl, `/api/admin/selfies/${pending.body.selfies[0].id}/resolve`, { method: 'POST', headers: admin.auth, body: JSON.stringify({ approve: true }) });
+    assert.equal(resolved.status, 200);
+
+    const near = await request(server.baseUrl, '/api/discovery?maxKm=500', { headers: a.auth });
+    const names = near.body.profiles.map((p) => p.name);
+    assert.ok(names.includes('b') && !names.includes('c'), JSON.stringify(near.body.profiles.map((p) => [p.name, p.city, p.distanceKm])));
+    assert.ok(near.body.profiles.find((p) => p.name === 'b').selfieVerified);
+    assert.equal(near.body.profiles.find((p) => p.name === 'b').distanceKm > 300, true);
+    const far = await request(server.baseUrl, '/api/discovery?maxKm=100', { headers: a.auth });
+    assert.deepEqual(far.body.profiles.map((p) => p.name), ['admin']);
+
+    const boost = await request(server.baseUrl, '/api/profile/boost', { method: 'POST', headers: c.auth });
+    assert.equal(boost.status, 200);
+    assert.ok(boost.body.profile.boostUntil);
+    assert.equal((await request(server.baseUrl, '/api/profile/boost', { method: 'POST', headers: c.auth })).status, 429);
+    const ranked = await request(server.baseUrl, '/api/discovery', { headers: a.auth });
+    assert.equal(ranked.body.profiles[0].name, 'c');
+  } finally {
+    await server.close();
+  }
+});

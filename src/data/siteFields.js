@@ -95,6 +95,8 @@ function same(a, b) {
   return a !== undefined && a === b && a !== NO_ANSWER;
 }
 
+const PRO_COMPLEMENTS = { Recruter: ['Collaborer', 'Réseauter'], Collaborer: ['Recruter', 'Collaborer'], Mentor: ['Réseauter'], Réseauter: ['Mentor', 'Recruter'] };
+
 export function computeCompatibility(current, target) {
   const a = current.details ?? {};
   const b = target.details ?? {};
@@ -118,6 +120,7 @@ export function computeCompatibility(current, target) {
       if (shared(a.skills, b.skills).length) add(Math.min(20, shared(a.skills, b.skills).length * 10), 'Compétences communes');
       if (same(a.sector, b.sector)) add(10, 'Même secteur');
       if (same(a.goal, b.goal)) add(10, 'Même objectif');
+      if (PRO_COMPLEMENTS[a.goal]?.includes(b.goal)) add(15, 'Objectifs complémentaires');
       break;
     case 'amical':
       if (shared(a.activities, b.activities).length) add(Math.min(20, shared(a.activities, b.activities).length * 10), 'Activités communes');

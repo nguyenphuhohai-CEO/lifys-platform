@@ -46,3 +46,27 @@ export function createUploadStore(directory) {
     },
   };
 }
+
+// Les selfies de vérification ne sont jamais servis publiquement : seuls les administrateurs y accèdent.
+export function createSelfieStore(directory) {
+  fs.mkdirSync(directory, { recursive: true });
+  const find = (userId) => fs.readdirSync(directory).find((name) => name.startsWith(`${Number(userId)}.`));
+
+  return {
+    save(userId, buffer) {
+      const type = detectImageType(buffer);
+      if (!type) return false;
+      this.remove(userId);
+      fs.writeFileSync(path.join(directory, `${Number(userId)}.${type}`), buffer);
+      return true;
+    },
+    pathFor(userId) {
+      const name = find(userId);
+      return name ? path.join(directory, name) : null;
+    },
+    remove(userId) {
+      const name = find(userId);
+      if (name) fs.rmSync(path.join(directory, name), { force: true });
+    },
+  };
+}

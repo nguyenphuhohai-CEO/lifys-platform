@@ -17,7 +17,7 @@ import { applyStripeEvent, createCheckoutSession, createPortalSession, getPlans,
 import { buildVerificationEmail } from './email-templates.js';
 import { createMailer } from './mailer.js';
 import { createRateLimiter } from './rate-limit.js';
-import { createUploadStore, detectImageType, MAX_UPLOAD_BYTES, ownUploadPattern, UPLOAD_MIME_TYPES } from './uploads.js';
+import { createSelfieStore, createUploadStore, detectImageType, MAX_UPLOAD_BYTES, ownUploadPattern, UPLOAD_MIME_TYPES } from './uploads.js';
 
 export const TERMS_VERSION = '2026-10-18';
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -53,6 +53,7 @@ export function createApp(config) {
   });
   const mailer = createMailer(config);
   const uploads = createUploadStore(config.uploadDir);
+  const selfies = createSelfieStore(`${config.uploadDir.replace(/[\\/]+$/, '')}-selfies`);
   const app = express();
 
   app.disable('x-powered-by');
@@ -430,6 +431,40 @@ export function createApp(config) {
     }
   });
 
+  app.post(
+    '/api/profile/selfie',
+    requireAuth,
+    uploadLimiter,
+    express.raw({ type: UPLOAD_MIME_TYPES, limit: MAX_UPLOAD_BYTES }),
+    (req, res, next) => {
+      try {
+        if (!Buffer.isBuffer(req.body) || !detectImageType(req.body)) {
+          throw createHttpError(415, 'Envoyez une image JPEG, PNG ou WebP.');
+        }
+        const status = database.getProfileByUserId(req.auth.userId)?.selfieStatus;
+        if (status === 'approved' || status === 'pending') {
+          throw createHttpError(409, 'Vérification déjà en cours ou validée.');
+        }
+        selfies.save(req.auth.userId, req.body);
+        res.status(201).json({ profile: database.submitSelfie(req.auth.userId) });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post('/api/profile/boost', requireAuth, requireVerified, (req, res, next) => {
+    try {
+      res.json({ profile: database.boostProfile(req.auth.userId) });
+    } catch (error) {
+      if (error.nextBoostAt) {
+        res.status(429).json({ error: 'Boost déjà utilisé récemment.', nextBoostAt: error.nextBoostAt });
+        return;
+      }
+      next(error);
+    }
+  });
+
   app.get('/api/discovery', requireAuth, requireVerified, (req, res) => {
     res.json({
       profiles: database.listDiscoveryProfiles(req.auth.userId, {
@@ -441,6 +476,7 @@ export function createApp(config) {
         detail: req.query.detail ?? '',
         tonight: req.query.tonight,
         minScore: req.query.minScore,
+        maxKm: req.query.maxKm,
       }),
     });
   });
@@ -597,6 +633,32 @@ export function createApp(config) {
     }
   });
 
+  app.get('/api/admin/selfies', requireAuth, requireAdmin, (_req, res) => {
+    res.json({ selfies: database.listPendingSelfies().map(({ userId, ...selfie }) => selfie) });
+  });
+
+  app.get('/api/admin/selfies/:id/image', requireAuth, requireAdmin, (req, res, next) => {
+    const userId = database.getSelfieOwnerId(req.params.id);
+    const file = userId ? selfies.pathFor(userId) : null;
+    if (!file) {
+      next(createHttpError(404, 'Selfie introuvable.'));
+      return;
+    }
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.sendFile(file);
+  });
+
+  app.post('/api/admin/selfies/:id/resolve', requireAuth, requireAdmin, (req, res, next) => {
+    try {
+      const userId = database.resolveSelfie(req.params.id, req.body?.approve === true);
+      if (!userId) throw createHttpError(404, 'Selfie introuvable.');
+      selfies.remove(userId);
+      res.json({ resolved: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get('/api/admin/reports', requireAuth, requireAdmin, (_req, res) => {
     res.json({ reports: database.listOpenReports() });
   });
@@ -629,7 +691,7 @@ export function createApp(config) {
 
       const userIds = database.listAccountUserIds(req.auth.userId);
       database.deleteAccount(req.auth.userId);
-      userIds.forEach((userId) => uploads.removeAllForUser(userId));
+      userIds.forEach((userId) => { uploads.removeAllForUser(userId); selfies.remove(userId); });
       res.status(204).end();
     } catch (error) {
       next(error);

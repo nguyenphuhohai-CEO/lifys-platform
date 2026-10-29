@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 
 import { DEMO_PROFILES, MODES } from '../src/data/demoData.js';
 import { computeCompatibility, sanitizeDetails } from '../src/data/siteFields.js';
+import { distanceKm } from '../src/data/cities.js';
 import { normalizeEmail } from './auth.js';
 
 const TONIGHT_DURATION_MS = 12 * 60 * 60 * 1000;
@@ -104,6 +105,14 @@ function isPremium(row) {
   return row.plan === 'premium' && (!row.plan_until || new Date(row.plan_until).getTime() > Date.now());
 }
 
+const BOOST_DURATION_MS = 30 * 60 * 1000;
+const BOOST_COOLDOWN_FREE_MS = 7 * 24 * 60 * 60 * 1000;
+const BOOST_COOLDOWN_PREMIUM_MS = 24 * 60 * 60 * 1000;
+
+function isBoosted(row) {
+  return Boolean(row.boost_until) && new Date(row.boost_until).getTime() > Date.now();
+}
+
 function serializeProfile(row) {
   return {
     id: row.public_id,
@@ -112,6 +121,9 @@ function serializeProfile(row) {
     email: row.email,
     emailVerified: Boolean(row.email_verified_at),
     plan: isPremium(row) ? 'premium' : 'free',
+    selfieStatus: row.selfie_status ?? 'none',
+    boostUntil: isBoosted(row) ? row.boost_until : null,
+    nextBoostAt: row.last_boost_at ? new Date(new Date(row.last_boost_at).getTime() + (isPremium(row) ? BOOST_COOLDOWN_PREMIUM_MS : BOOST_COOLDOWN_FREE_MS)).toISOString() : null,
     name: row.name,
     age: row.age,
     city: row.city,
@@ -121,6 +133,8 @@ function serializeProfile(row) {
     tonightUntil: parseTonightUntil(row.details),
     photos: parsePhotos(row.photos),
     verified: isVerifiedProfile(row),
+    selfieVerified: row.selfie_status === 'approved',
+    boosted: isBoosted(row),
     mode: row.mode,
     avatar: row.avatar,
     isDemo: Boolean(row.is_demo),
@@ -140,6 +154,8 @@ function serializePublicProfile(row) {
     details: parseDetails(row.details),
     photos: parsePhotos(row.photos),
     verified: isVerifiedProfile(row),
+    selfieVerified: row.selfie_status === 'approved',
+    boosted: isBoosted(row),
     mode: row.mode,
     avatar: row.avatar,
     isDemo: Boolean(row.is_demo),
@@ -414,6 +430,14 @@ export function createDatabase(databaseFile, options = {}) {
     }
   }
   db.exec('UPDATE users SET email_verified_at = created_at WHERE is_demo = 1 AND email_verified_at IS NULL');
+  const lateUserColumns = new Set(db.prepare('PRAGMA table_info(users)').all().map((column) => column.name));
+  for (const [column, definition] of [['selfie_status', "TEXT NOT NULL DEFAULT 'none'"], ['selfie_file', 'TEXT']]) {
+    if (!lateUserColumns.has(column)) db.exec(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
+  }
+  const lateProfileColumns = new Set(db.prepare('PRAGMA table_info(profiles)').all().map((column) => column.name));
+  for (const column of ['boost_until', 'last_boost_at']) {
+    if (!lateProfileColumns.has(column)) db.exec(`ALTER TABLE profiles ADD COLUMN ${column} TEXT`);
+  }
 
   const statements = {
     insertUser: db.prepare(`
@@ -427,19 +451,19 @@ export function createDatabase(databaseFile, options = {}) {
     findUserByEmail: db.prepare(`SELECT * FROM users WHERE email = ? AND site = ?`),
     findUserById: db.prepare(`SELECT * FROM users WHERE id = ?`),
     findProfileByUserId: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status, users.plan, users.plan_until
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status, users.plan, users.plan_until, users.selfie_status
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.user_id = ?
     `),
     findProfileByPublicId: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status, users.plan, users.plan_until
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status, users.plan, users.plan_until, users.selfie_status
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.public_id = ?
     `),
     listProfilesExcludingUser: db.prepare(`
-      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status, users.plan, users.plan_until
+      SELECT profiles.*, users.public_id AS user_public_id, users.email, users.is_demo, users.email_verified_at, users.status, users.plan, users.plan_until, users.selfie_status
       FROM profiles
       JOIN users ON users.id = profiles.user_id
       WHERE profiles.user_id != @user_id
@@ -779,6 +803,7 @@ export function createDatabase(databaseFile, options = {}) {
     const ageMax = Number(filters.ageMax) || 0;
     const detail = `${filters.detail ?? ''}`.trim().toLowerCase();
     const minScore = Number(filters.minScore) || 0;
+    const maxKm = Number(filters.maxKm) || 0;
     const tonightOnly = filters.tonight === true || filters.tonight === 'true' || filters.tonight === '1';
     const currentProfile = getProfileByUserId(userId);
 
@@ -803,8 +828,10 @@ export function createDatabase(databaseFile, options = {}) {
           .includes(query);
       })
       .map((profile) => (currentProfile ? { ...profile, compatibility: computeCompatibility(currentProfile, profile) } : profile))
+      .map((profile) => ({ ...profile, distanceKm: currentProfile ? distanceKm(currentProfile.city, profile.city) : null }))
       .filter((profile) => !minScore || (profile.compatibility?.score ?? 0) >= minScore)
-      .sort((left, right) => (right.compatibility?.score ?? 0) - (left.compatibility?.score ?? 0));
+      .filter((profile) => !maxKm || (profile.distanceKm !== null && profile.distanceKm <= maxKm))
+      .sort((left, right) => Number(right.boosted) - Number(left.boosted) || (right.compatibility?.score ?? 0) - (left.compatibility?.score ?? 0));
   }
 
   function getOrCreateMatch(userId, targetUserId, currentProfile, targetProfile) {
@@ -1131,6 +1158,51 @@ export function createDatabase(databaseFile, options = {}) {
     return Boolean(customerId) && statements.setPlanByCustomer.run(params).changes > 0;
   }
 
+  function boostProfile(userId) {
+    const row = statements.findProfileByUserId.get(userId);
+    const cooldown = isPremium(row) ? BOOST_COOLDOWN_PREMIUM_MS : BOOST_COOLDOWN_FREE_MS;
+    const nextAt = row.last_boost_at ? new Date(row.last_boost_at).getTime() + cooldown : 0;
+    if (nextAt > Date.now()) {
+      throw Object.assign(new Error('Boost déjà utilisé récemment.'), { status: 429, nextBoostAt: new Date(nextAt).toISOString() });
+    }
+    const start = now();
+    db.prepare('UPDATE profiles SET boost_until = ?, last_boost_at = ? WHERE user_id = ?')
+      .run(new Date(Date.now() + BOOST_DURATION_MS).toISOString(), start, userId);
+    return getProfileByUserId(userId);
+  }
+
+  function submitSelfie(userId) {
+    const user = statements.findUserById.get(userId);
+    if (user.selfie_status === 'approved' || user.selfie_status === 'pending') {
+      throw Object.assign(new Error('Vérification déjà en cours ou validée.'), { status: 409 });
+    }
+    db.prepare('UPDATE users SET selfie_status = ?, selfie_file = ? WHERE id = ?').run('pending', 'stored', userId);
+    db.prepare("UPDATE users SET selfie_status = 'pending' WHERE email = ? AND selfie_status != 'approved'").run(user.email);
+    return getProfileByUserId(userId);
+  }
+
+  function listPendingSelfies() {
+    return db.prepare(`
+      SELECT users.id AS user_id, users.public_id, users.email, users.site, profiles.name
+      FROM users LEFT JOIN profiles ON profiles.user_id = users.id
+      WHERE users.selfie_status = 'pending' AND users.selfie_file IS NOT NULL
+      ORDER BY users.id
+    `).all().map((row) => ({ id: row.public_id, userId: row.user_id, email: row.email, site: row.site, name: row.name ?? '' }));
+  }
+
+  function resolveSelfie(publicId, approve) {
+    const user = db.prepare('SELECT * FROM users WHERE public_id = ? AND selfie_status = ?').get(publicId, 'pending');
+    if (!user) return null;
+    const status = approve ? 'approved' : 'rejected';
+    db.prepare('UPDATE users SET selfie_status = ? WHERE email = ?').run(status, user.email);
+    db.prepare('UPDATE users SET selfie_file = NULL WHERE id = ?').run(user.id);
+    return user.id;
+  }
+
+  function getSelfieOwnerId(publicId) {
+    return db.prepare("SELECT id FROM users WHERE public_id = ? AND selfie_status = 'pending'").get(publicId)?.id ?? null;
+  }
+
   const COMMUNITY_ERROR = (message) => Object.assign(new Error(message), { status: 400 });
 
   function requireMode(userId, mode) {
@@ -1361,6 +1433,11 @@ export function createDatabase(databaseFile, options = {}) {
     getProfileByPublicId,
     updateUserProfile,
     listDiscoveryProfiles,
+    boostProfile,
+    submitSelfie,
+    listPendingSelfies,
+    resolveSelfie,
+    getSelfieOwnerId,
     likeProfile,
     passProfile,
     listMatchesForUser,
