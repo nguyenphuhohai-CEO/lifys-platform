@@ -7,6 +7,7 @@ import Onboarding from './components/Onboarding';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
 import SwipeDeck from './components/SwipeDeck';
 import { ICEBREAKERS } from './data/icebreakers';
+import { OAUTH_BASE_URL } from './lib/api';
 import ProfileTrust from './components/ProfileTrust';
 
 const JITSI_LINK = /^https:\/\/meet\.jit\.si\/Lifys-[0-9a-f]{16}$/;
@@ -96,7 +97,8 @@ function App({ site }) {
   const siteInfo = getSite(site);
   const authKey = getAuthKey(site);
   const content = CATEGORY_CONTENT[site];
-  const [token, setToken] = useState(() => readStoredToken(site));
+  const [token, setToken] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('oauth_token') || readStoredToken(site));
+  const [providers, setProviders] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState('home');
   const activeMode = site;
@@ -128,6 +130,15 @@ function App({ site }) {
   const [resetting, setResetting] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [pageError, setPageError] = useState('');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    if (params.has('oauth_token') || params.has('oauth_error')) {
+      if (params.get('oauth_error')) setPageError(t('Connexion sociale impossible. Réessayez ou utilisez votre e-mail.'));
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+    api.getAuthProviders().then((data) => setProviders(data.providers ?? {})).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [authMode, setAuthMode] = useState('register');
   const [authForm, setAuthForm] = useState({
     name: '',
@@ -776,6 +787,14 @@ function App({ site }) {
               />
 
               {pageError ? <div className="form-alert" role="alert">{pageError}</div> : null}
+
+              {providers.google || providers.facebook ? (
+                <div className="social-login">
+                  {providers.google ? <a className="secondary-button social-button" href={`${OAUTH_BASE_URL}/api/auth/oauth/google?site=${site}`}>{t('Continuer avec Google')}</a> : null}
+                  {providers.facebook ? <a className="secondary-button social-button" href={`${OAUTH_BASE_URL}/api/auth/oauth/facebook?site=${site}`}>{t('Continuer avec Facebook')}</a> : null}
+                  <small>{t('En continuant, vous confirmez avoir 18 ans et acceptez les CGU.')}</small>
+                </div>
+              ) : null}
 
               <form className="profile-form" onSubmit={handleAuthSubmit}>
                 {authMode === 'register' ? (

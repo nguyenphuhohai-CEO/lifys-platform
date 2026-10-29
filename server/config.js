@@ -50,6 +50,16 @@ export function getConfig(overrides = {}) {
       premiumPriceCents: Number(overrides.PREMIUM_PRICE_CENTS ?? process.env.PREMIUM_PRICE_CENTS ?? 499),
       currency: `${overrides.PREMIUM_CURRENCY ?? process.env.PREMIUM_CURRENCY ?? 'eur'}`.toLowerCase(),
     },
+    oauth: {
+      google: {
+        clientId: `${overrides.GOOGLE_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID ?? ''}`.trim(),
+        clientSecret: `${overrides.GOOGLE_CLIENT_SECRET ?? process.env.GOOGLE_CLIENT_SECRET ?? ''}`.trim(),
+      },
+      facebook: {
+        clientId: `${overrides.FACEBOOK_APP_ID ?? process.env.FACEBOOK_APP_ID ?? ''}`.trim(),
+        clientSecret: `${overrides.FACEBOOK_APP_SECRET ?? process.env.FACEBOOK_APP_SECRET ?? ''}`.trim(),
+      },
+    },
     uploadDir: overrides.UPLOAD_DIR ?? process.env.UPLOAD_DIR ?? path.join(path.dirname(databaseFile), 'uploads'),
     backup: {
       dir: overrides.BACKUP_DIR ?? process.env.BACKUP_DIR ?? path.join(path.dirname(databaseFile), 'backups'),

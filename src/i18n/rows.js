@@ -670,5 +670,9 @@ export const ROWS = [
   ['Rejoindre l’appel vidéo', 'Join the video call', 'Unirse a la videollamada', 'Tham gia cuộc gọi video'],
   ['Lancer un appel vidéo', 'Start a video call', 'Iniciar videollamada', 'Bắt đầu cuộc gọi video'],
   ['Objectifs complémentaires', 'Complementary goals', 'Objetivos complementarios', 'Mục tiêu bổ trợ'],
+  ['Continuer avec Google', 'Continue with Google', 'Continuar con Google', 'Tiếp tục với Google'],
+  ['Continuer avec Facebook', 'Continue with Facebook', 'Continuar con Facebook', 'Tiếp tục với Facebook'],
+  ['En continuant, vous confirmez avoir 18 ans et acceptez les CGU.', 'By continuing, you confirm you are 18+ and accept the Terms.', 'Al continuar, confirmas tener 18 años y aceptas los Términos.', 'Khi tiếp tục, bạn xác nhận đủ 18 tuổi và đồng ý Điều khoản.'],
+  ['Connexion sociale impossible. Réessayez ou utilisez votre e-mail.', 'Social sign-in failed. Try again or use your e-mail.', 'No se pudo iniciar sesión. Inténtalo de nuevo o usa tu correo.', 'Đăng nhập mạng xã hội thất bại. Hãy thử lại hoặc dùng e-mail.'],
 ];
 

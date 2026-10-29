@@ -34,7 +34,12 @@ export async function apiRequest(path, options = {}) {
   return parseResponse(response);
 }
 
+export const OAUTH_BASE_URL = API_BASE_URL;
+
 export const api = {
+  getAuthProviders() {
+    return apiRequest('/api/auth/providers');
+  },
   healthcheck() {
     return apiRequest('/api/health');
   },

@@ -1021,6 +1021,10 @@ export function createDatabase(databaseFile, options = {}) {
     statements.insertVerification.run(tokenHash, userId, expiresAt);
   }
 
+  function markEmailVerified(userId) {
+    statements.markEmailVerified.run(now(), userId);
+  }
+
   function verifyEmailToken(tokenHash) {
     const row = statements.findVerification.get(tokenHash);
     if (!row || row.expires_at < now()) {
@@ -1410,6 +1414,7 @@ export function createDatabase(databaseFile, options = {}) {
     joinSite,
     createEmailVerification,
     verifyEmailToken,
+    markEmailVerified,
     blockProfile,
     reportProfile,
     listOpenReports,

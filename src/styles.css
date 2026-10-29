@@ -1376,3 +1376,6 @@ textarea:focus-visible {
 .selfie-review { display: block; max-width: 260px; width: 100%; border-radius: 12px; margin: 0.5rem 0; }
 .composer > button:first-child { flex: 0 0 auto; }
 .bubble a { color: inherit; font-weight: 600; text-decoration: underline; }
+
+.social-login { display: grid; gap: 0.5rem; margin-bottom: 1rem; }
+.social-button { text-align: center; text-decoration: none; display: block; }

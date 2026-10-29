@@ -16,6 +16,7 @@ import { createDatabase, sanitizeProfileInput } from './db.js';
 import { applyStripeEvent, createCheckoutSession, createPortalSession, getPlans, verifyStripeSignature } from './billing.js';
 import { buildVerificationEmail } from './email-templates.js';
 import { createMailer } from './mailer.js';
+import { createOAuth, OAUTH_COOKIE, readCookie } from './oauth.js';
 import { createRateLimiter } from './rate-limit.js';
 import { createSelfieStore, createUploadStore, detectImageType, MAX_UPLOAD_BYTES, ownUploadPattern, UPLOAD_MIME_TYPES } from './uploads.js';
 
@@ -250,6 +251,82 @@ export function createApp(config) {
       sendSession(res, token, database.getProfileByUserId(user.id));
     } catch (error) {
       next(error);
+    }
+  });
+
+  const oauth = createOAuth(config);
+  const oauthFetch = (...args) => (config.fetchImpl ?? fetch)(...args);
+  const oauthFailure = (res, site, code) => {
+    res.setHeader('Set-Cookie', `${OAUTH_COOKIE}=; Path=/api/auth/oauth; Max-Age=0; HttpOnly; SameSite=Lax`);
+    res.redirect(`${config.appUrl}/${site}#oauth_error=${code}`);
+  };
+
+  app.get('/api/auth/providers', (_req, res) => {
+    res.json({ providers: oauth.providers() });
+  });
+
+  app.get('/api/auth/oauth/:provider', (req, res, next) => {
+    const { provider } = req.params;
+    if (!oauth.isEnabled(provider)) {
+      next(createHttpError(404, 'Connexion indisponible.'));
+      return;
+    }
+    const site = sanitizeProfileInput({ mode: req.query.site }).mode;
+    const { state, nonce } = oauth.createState(provider, site);
+    const secure = config.appUrl.startsWith('https://') ? '; Secure' : '';
+    res.setHeader('Set-Cookie', `${OAUTH_COOKIE}=${nonce}; Path=/api/auth/oauth; Max-Age=600; HttpOnly; SameSite=Lax${secure}`);
+    res.redirect(oauth.authorizeUrl(provider, state));
+  });
+
+  app.get('/api/auth/oauth/:provider/callback', async (req, res, next) => {
+    const { provider } = req.params;
+    if (!oauth.isEnabled(provider)) {
+      next(createHttpError(404, 'Connexion indisponible.'));
+      return;
+    }
+    const state = oauth.readState(req.query.state, provider, readCookie(req, OAUTH_COOKIE));
+    if (!state) {
+      oauthFailure(res, 'amoureux', 'state');
+      return;
+    }
+    const { site } = state;
+    if (req.query.error || typeof req.query.code !== 'string' || !req.query.code) {
+      oauthFailure(res, site, 'denied');
+      return;
+    }
+
+    try {
+      const identity = await oauth.fetchIdentity(provider, req.query.code, oauthFetch);
+      if (!validateEmail(identity.email)) {
+        oauthFailure(res, site, 'email');
+        return;
+      }
+
+      const name = sanitizeProfileInput({ name: identity.name || identity.email.split('@')[0] }).name || 'Profil Lifys';
+      const account = database.getAccountByEmail(identity.email);
+      let userId;
+      if (account) {
+        if (account.status !== 'active') {
+          oauthFailure(res, site, 'suspended');
+          return;
+        }
+        userId = (database.getUserByEmail(identity.email, site) ?? database.joinSite(account, site, name)).id;
+      } else {
+        userId = database.createUser({
+          email: identity.email,
+          passwordHash: hashPassword(crypto.randomBytes(32).toString('hex')),
+          name,
+          mode: site,
+          termsVersion: TERMS_VERSION,
+        }).userId;
+      }
+      database.markEmailVerified(userId);
+
+      res.setHeader('Set-Cookie', `${OAUTH_COOKIE}=; Path=/api/auth/oauth; Max-Age=0; HttpOnly; SameSite=Lax`);
+      res.redirect(`${config.appUrl}/${site}#oauth_token=${createToken({ userId, email: identity.email }, config)}`);
+    } catch (error) {
+      console.error('OAuth login failed:', error.message);
+      oauthFailure(res, site, 'failed');
     }
   });
 

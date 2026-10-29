@@ -18,6 +18,7 @@ async function startTestServer(extraConfig = {}) {
     STATIC_DIR: path.join(tempDir, 'dist'),
     ...extraConfig,
   });
+  if (extraConfig.fetchImpl) config.fetchImpl = extraConfig.fetchImpl;
   const { app, database, mailer } = createApp(config);
   const server = createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -702,6 +703,41 @@ test('selfie verification, boost and distance filter', async () => {
     assert.equal((await request(server.baseUrl, '/api/profile/boost', { method: 'POST', headers: c.auth })).status, 429);
     const ranked = await request(server.baseUrl, '/api/discovery', { headers: a.auth });
     assert.equal(ranked.body.profiles[0].name, 'c');
+  } finally {
+    await server.close();
+  }
+});
+test('Google and Facebook sign-in create or join an account', async () => {
+  const fakeFetch = async (url) => {
+    const json = (body) => ({ ok: true, json: async () => body });
+    if (String(url).includes('token')) return json({ access_token: 'at' });
+    if (String(url).includes('openidconnect')) return json({ email: 'Social@Example.com', email_verified: true, name: 'Sam' });
+    return json({ email: 'social@example.com', name: 'Sam' });
+  };
+  const server = await startTestServer({
+    SEED_DEMO_DATA: 'false', REQUIRE_EMAIL_VERIFICATION: 'true', GOOGLE_CLIENT_ID: 'gid', GOOGLE_CLIENT_SECRET: 'gs', fetchImpl: fakeFetch,
+  });
+  try {
+    const providers = await request(server.baseUrl, '/api/auth/providers');
+    assert.deepEqual(providers.body.providers, { google: true, facebook: false });
+    assert.equal((await fetch(`${server.baseUrl}/api/auth/oauth/facebook?site=amical`, { redirect: 'manual' })).status, 404);
+
+    const start = await fetch(`${server.baseUrl}/api/auth/oauth/google?site=amical`, { redirect: 'manual' });
+    assert.equal(start.status, 302);
+    const location = new URL(start.headers.get('location'));
+    assert.equal(location.hostname, 'accounts.google.com');
+    const cookie = start.headers.get('set-cookie').split(';')[0];
+
+    const bad = await fetch(`${server.baseUrl}/api/auth/oauth/google/callback?code=x&state=${location.searchParams.get('state')}`, { redirect: 'manual' });
+    assert.match(bad.headers.get('location'), /oauth_error=state/);
+
+    const done = await fetch(`${server.baseUrl}/api/auth/oauth/google/callback?code=x&state=${location.searchParams.get('state')}`, { redirect: 'manual', headers: { cookie } });
+    const target = done.headers.get('location');
+    assert.match(target, /\/amical#oauth_token=/);
+    const token = target.split('oauth_token=')[1];
+    const session = await request(server.baseUrl, '/api/auth/session', { headers: { authorization: `Bearer ${token}` } });
+    assert.equal(session.body.user.email, 'social@example.com');
+    assert.equal(session.body.user.emailVerified, true);
   } finally {
     await server.close();
   }

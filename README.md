@@ -328,3 +328,7 @@ Le plan `starter` est requis pour le disque persistant (base SQLite, photos, sau
 - **Filtre distance** : calculé à partir du nom de ville (table approximative de grandes villes ; villes inconnues exclues quand le filtre est actif).
 - **Appels vidéo** : bouton 📹 dans la discussion qui envoie un lien Jitsi Meet à salle aléatoire (pas de serveur de signalisation propre).
 - **Pro** : section « Recommandés pour vous » (6 profils, raison principale) avec bonus « objectifs complémentaires ».
+
+## Connexion Google / Facebook
+
+Renseignez GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET et/ou FACEBOOK_APP_ID/FACEBOOK_APP_SECRET (voir .env.example) ; les boutons apparaissent alors sur l'écran de connexion. URI de redirection à déclarer chez le fournisseur : `APP_URL/api/auth/oauth/google/callback` et `APP_URL/api/auth/oauth/facebook/callback`. L'e-mail du fournisseur doit être vérifié (Google) ou fourni (Facebook) ; il rattache le compte Lifys existant ou en crée un.
