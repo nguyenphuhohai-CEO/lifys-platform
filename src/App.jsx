@@ -7,6 +7,14 @@ import Onboarding from './components/Onboarding';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
 import SwipeDeck from './components/SwipeDeck';
 import { ICEBREAKERS } from './data/icebreakers';
+import ProfileTrust from './components/ProfileTrust';
+
+const JITSI_LINK = /^https:\/\/meet\.jit\.si\/Lifys-[0-9a-f]{16}$/;
+
+function createVideoRoomLink() {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return `https://meet.jit.si/Lifys-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
 import SiteFooter from './components/SiteFooter';
 import SiteRail from './components/SiteRail';
 import ExpiryNotice from './components/ExpiryNotice';
@@ -104,6 +112,7 @@ function App({ site }) {
   const [cityQuery, setCityQuery] = useState('');
   const [ageRange, setAgeRange] = useState({ min: '', max: '' });
   const [detailQuery, setDetailQuery] = useState('');
+  const [maxKm, setMaxKm] = useState('');
   const [tonightOnly, setTonightOnly] = useState(false);
   const [hookFor, setHookFor] = useState(null);
   const [deckMode, setDeckMode] = useState(() => localStorage.getItem('lifys-deck') !== 'grid');
@@ -213,6 +222,7 @@ function App({ site }) {
         ageMin: ageRange.min,
         ageMax: ageRange.max,
         detail: detailQuery,
+        maxKm,
         tonight: tonightOnly,
       });
       setProfiles(response.profiles);
@@ -222,7 +232,7 @@ function App({ site }) {
     } finally {
       setDiscoveryLoading(false);
     }
-  }, [activeMode, cityQuery, handleApiError, searchQuery, ageRange, detailQuery, tonightOnly]);
+  }, [activeMode, cityQuery, handleApiError, searchQuery, ageRange, detailQuery, maxKm, tonightOnly]);
 
   const loadDashboard = useCallback(async (authToken) => {
     setDashboardLoading(true);
@@ -238,6 +248,7 @@ function App({ site }) {
           ageMin: ageRange.min,
           ageMax: ageRange.max,
           detail: detailQuery,
+        maxKm,
           tonight: tonightOnly,
         }).catch((error) => {
           if (error instanceof ApiError && error.details?.code === 'email_not_verified') {
@@ -278,7 +289,7 @@ function App({ site }) {
       setDashboardLoading(false);
       setSessionLoading(false);
     }
-  }, [activeMode, cityQuery, handleApiError, searchQuery, ageRange, detailQuery, tonightOnly]);
+  }, [activeMode, cityQuery, handleApiError, searchQuery, ageRange, detailQuery, maxKm, tonightOnly]);
 
   useEffect(() => {
     if (!token) {
@@ -294,7 +305,7 @@ function App({ site }) {
     if (currentUser && token) {
       loadDiscovery(token);
     }
-  }, [activeMode, cityQuery, currentUser, loadDiscovery, searchQuery, token, ageRange, detailQuery, tonightOnly]);
+  }, [activeMode, cityQuery, currentUser, loadDiscovery, searchQuery, token, ageRange, detailQuery, maxKm, tonightOnly]);
 
   useEffect(() => {
     setProfileDraft((current) => ({
@@ -375,7 +386,7 @@ function App({ site }) {
   const selectedConversationData = conversations.find((conversation) => conversation.id === selectedConversation) ?? null;
   const topPicks = useMemo(() => profiles
     .filter((item) => (item.compatibility?.score ?? 0) >= 50)
-    .slice(0, 3), [profiles]);
+    .slice(0, site === 'professionnel' ? 6 : 3), [profiles, site]);
   const availableCities = useMemo(() => [...new Set(profiles.map((item) => item.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [profiles]);
   const completedProfile = Boolean(profile.name && profile.age && profile.city && profile.bio);
   const checklist = [
@@ -540,6 +551,7 @@ function App({ site }) {
     setCityQuery('');
     setAgeRange({ min: '', max: '' });
     setDetailQuery('');
+    setMaxKm('');
     setTonightOnly(false);
   };
 
@@ -578,8 +590,8 @@ function App({ site }) {
     }
   };
 
-  const handleSendMessage = async () => {
-    const text = draftMessage.trim();
+  const handleSendMessage = async (override) => {
+    const text = (typeof override === 'string' ? override : draftMessage).trim();
     if (!text || !selectedConversationData) {
       return;
     }
@@ -1006,7 +1018,7 @@ function App({ site }) {
                     💼 {t('Mon secteur : {sector}', { sector: profile.details.sector })}
                   </button>
                 ) : null}
-                {searchQuery || cityQuery || ageRange.min || ageRange.max || detailQuery || tonightOnly ? (
+                {searchQuery || cityQuery || ageRange.min || ageRange.max || detailQuery || maxKm || tonightOnly ? (
                   <button type="button" className="link-button" onClick={resetFilters}>{t('Effacer les filtres')}</button>
                 ) : null}
               </div>
@@ -1035,6 +1047,10 @@ function App({ site }) {
                   <span>{site === 'professionnel' ? t('Métier, secteur ou compétence') : t('Détails (valeurs, activités…)')}</span>
                   <input type="search" value={detailQuery} onChange={(event) => setDetailQuery(event.target.value)} />
                 </label>
+                <label>
+                  <span>{t('Distance max (km)')}</span>
+                  <input type="number" min="1" max="2000" value={maxKm} onChange={(event) => setMaxKm(event.target.value)} />
+                </label>
                 {site === 'sans-lendemain' ? (
                   <label className="checkbox-row">
                     <input type="checkbox" checked={tonightOnly} onChange={(event) => setTonightOnly(event.target.checked)} />
@@ -1046,14 +1062,14 @@ function App({ site }) {
 
             {!discoveryLoading && topPicks.length ? (
               <section className="top-picks" aria-label={t('Top du jour')}>
-                <h3>⭐ {t('Top du jour')}</h3>
+                <h3>⭐ {site === 'professionnel' ? t('Recommandés pour vous') : t('Top du jour')}</h3>
                 <div className="top-picks-row">
                   {topPicks.map((person) => (
                     <article key={person.id} className="top-pick">
                       <Avatar className="conversation-avatar" src={person.avatar} alt={person.name} fallback={person.name} />
                       <div>
                         <strong>{person.name}, {person.age ?? '18+'}</strong>
-                        <small>💞 {t('{score} % compatible', { score: person.compatibility.score })}</small>
+                        <small>💞 {t('{score} % compatible', { score: person.compatibility.score })}{person.compatibility.reasons[0] ? ` — ${t(person.compatibility.reasons[0])}` : ''}</small>
                       </div>
                       <button type="button" className="like-button" onClick={() => handleLike(person.id)}>{t('Like')}</button>
                     </article>
@@ -1089,7 +1105,7 @@ function App({ site }) {
                       <div className="identity-row">
                         <div>
                           <h3>{person.name}, {person.age ?? '18+'}</h3>
-                          <p className="city-line">📍 {person.city || t('Ville non précisée')}</p>
+                          <p className="city-line">📍 {person.city || t('Ville non précisée')}{person.distanceKm ? ` · ${t('à {km} km', { km: person.distanceKm })}` : ''}</p>
                         </div>
                         <span className="tag">{t(getModeById(person.mode).label)}</span>
                       </div>
@@ -1236,7 +1252,9 @@ function App({ site }) {
                   <div className="chat-body" aria-live="polite">
                     {selectedConversationData.messages.map((message, index, list) => (
                       <div key={message.id} className={message.sender === 'me' ? 'bubble me' : 'bubble them'}>
-                        {message.text}
+                        {JITSI_LINK.test(message.text) ? (
+                          <a href={message.text} target="_blank" rel="noopener noreferrer">📹 {t('Rejoindre l’appel vidéo')}</a>
+                        ) : message.text}
                         {message.sender === 'me' && index === list.map((item) => item.sender).lastIndexOf('me') ? (
                           <small className="read-receipt">{message.readAt ? t('Vu') : t('Envoyé')}</small>
                         ) : null}
@@ -1253,6 +1271,7 @@ function App({ site }) {
                   ) : null}
 
                   <div className="composer">
+                    <button type="button" className="secondary-button" title={t('Lancer un appel vidéo')} aria-label={t('Lancer un appel vidéo')} disabled={messageSending} onClick={() => handleSendMessage(createVideoRoomLink())}>📹</button>
                     <input
                       type="text"
                       placeholder={t('Écrire un message…')}
@@ -1334,6 +1353,8 @@ function App({ site }) {
                 </label>
 
                 <GalleryManager token={token} photos={profile.photos} t={t} onChange={handlePhotosChanged} onError={handleApiError} />
+
+                <ProfileTrust token={token} profile={profile} t={t} onChange={setProfile} onError={handleApiError} />
 
                 <label>
                   <span>{t('Photo (URL)')}</span>

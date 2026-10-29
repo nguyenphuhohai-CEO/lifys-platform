@@ -79,6 +79,30 @@ export const api = {
     });
     return parseResponse(response);
   },
+  async uploadSelfie(token, file) {
+    const response = await fetch(`${API_BASE_URL}/api/profile/selfie`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type, Authorization: 'Bearer ' + token },
+      body: file,
+    });
+    return parseResponse(response);
+  },
+  boostProfile(token) {
+    return apiRequest('/api/profile/boost', { method: 'POST', token });
+  },
+  getAdminSelfies(token) {
+    return apiRequest('/api/admin/selfies', { token });
+  },
+  async getAdminSelfieImage(token, id) {
+    const response = await fetch(`${API_BASE_URL}/api/admin/selfies/${encodeURIComponent(id)}/image`, {
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    if (!response.ok) throw new Error('Image indisponible.');
+    return response.blob();
+  },
+  resolveAdminSelfie(token, id, approve) {
+    return apiRequest(`/api/admin/selfies/${encodeURIComponent(id)}/resolve`, { method: 'POST', token, body: { approve } });
+  },
   async addPhoto(token, file) {
     const response = await fetch(`${API_BASE_URL}/api/profile/photos`, {
       method: 'POST',
@@ -102,7 +126,7 @@ export const api = {
       query: filters.query ?? '',
       city: filters.city ?? '',
     });
-    for (const key of ['ageMin', 'ageMax', 'detail', 'minScore']) {
+    for (const key of ['ageMin', 'ageMax', 'detail', 'minScore', 'maxKm']) {
       if (filters[key]) search.set(key, filters[key]);
     }
     if (filters.tonight) search.set('tonight', '1');

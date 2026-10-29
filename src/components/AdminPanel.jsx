@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useI18n } from '../i18n';
+import AdminSelfies from './AdminSelfies';
 
 const KIND_LABEL = { profile: 'Profil', post: 'Publication', event: 'Sortie' };
 
@@ -45,6 +46,8 @@ export default function AdminPanel({ token, onError }) {
   const visible = (reports ?? []).filter((report) => filter === 'all' || (report.content.kind ?? 'profile') === filter);
 
   return (
+    <>
+    <AdminSelfies token={token} onError={onError} />
     <section className="content-panel admin-panel">
       <div className="checklist-head">
         <div>
@@ -91,5 +94,6 @@ export default function AdminPanel({ token, onError }) {
         })}
       </ul>
     </section>
+    </>
   );
 }

@@ -66,6 +66,8 @@ export function DetailChips({ person, t }) {
     <>
       <div className="badge-row">
         {person.verified ? <span className="badge badge-ok">✔ {t('Profil vérifié')}</span> : null}
+        {person.selfieVerified ? <span className="badge badge-ok">🤳 {t('Selfie vérifié')}</span> : null}
+        {person.boosted ? <span className="badge">🚀 {t('Boosté')}</span> : null}
         {details.tonight ? <span className="badge badge-tonight">🌙 {t('Ce soir')}</span> : null}
         {details.consent ? <span className="badge">🤝 {t('Consentement affiché')}</span> : null}
         {details.linkedin ? <a className="badge" href={details.linkedin} target="_blank" rel="noopener noreferrer nofollow">in LinkedIn</a> : null}

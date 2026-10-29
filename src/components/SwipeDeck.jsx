@@ -63,7 +63,7 @@ export default function SwipeDeck({ profiles, t, canSuperLike, onLike, onPass, o
         <PhotoStrip photos={person.photos} />
         <div className="profile-card-body">
           <h3>{person.name}, {person.age ?? '18+'}</h3>
-          <p className="city-line">📍 {person.city || t('Ville non précisée')} · {t(getModeById(person.mode).label)}</p>
+          <p className="city-line">📍 {person.city || t('Ville non précisée')}{person.distanceKm ? ` · ${t('à {km} km', { km: person.distanceKm })}` : ''} · {t(getModeById(person.mode).label)}</p>
           {person.compatibility ? <p className="compat-line">💞 {t('{score} % compatible', { score: person.compatibility.score })}</p> : null}
           <DetailChips person={person} t={t} />
           <p>{person.bio || t('Profil en cours de complétion.')}</p>

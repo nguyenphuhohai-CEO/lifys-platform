@@ -321,3 +321,10 @@ Chaque site a ses champs facultatifs (`src/data/siteFields.js`, validés côté 
 6. Sur téléphone, ouvrir le site en https : « Installer l'app » (Android) ou Partager → « Sur l'écran d'accueil » (iPhone).
 
 Le plan `starter` est requis pour le disque persistant (base SQLite, photos, sauvegardes).
+## Confiance, visibilité et appels
+
+- **Selfie vérifié** : l'utilisateur envoie un selfie (stocké hors du dossier public), un admin l'approuve ou le refuse depuis l'écran Administration. Pas de reconnaissance faciale automatique.
+- **Boost** : 30 minutes en tête des résultats (1 fois / 7 jours en gratuit, 1 fois / 24 h en Premium).
+- **Filtre distance** : calculé à partir du nom de ville (table approximative de grandes villes ; villes inconnues exclues quand le filtre est actif).
+- **Appels vidéo** : bouton 📹 dans la discussion qui envoie un lien Jitsi Meet à salle aléatoire (pas de serveur de signalisation propre).
+- **Pro** : section « Recommandés pour vous » (6 profils, raison principale) avec bonus « objectifs complémentaires ».
