@@ -6,6 +6,7 @@ import { GalleryManager, PhotoStrip } from './components/Gallery';
 import Onboarding from './components/Onboarding';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
 import SwipeDeck from './components/SwipeDeck';
+import { ICEBREAKERS } from './data/icebreakers';
 import SiteFooter from './components/SiteFooter';
 import SiteRail from './components/SiteRail';
 import ExpiryNotice from './components/ExpiryNotice';
@@ -1242,6 +1243,14 @@ function App({ site }) {
                       </div>
                     ))}
                   </div>
+
+                  {!draftMessage && selectedConversationData.messages.length <= 3 ? (
+                    <div className="icebreakers" aria-label={t('Idées pour démarrer')}>
+                      {(ICEBREAKERS[site] ?? []).map((text) => (
+                        <button key={text} type="button" className="icebreaker" onClick={() => setDraftMessage(t(text))}>{t(text)}</button>
+                      ))}
+                    </div>
+                  ) : null}
 
                   <div className="composer">
                     <input

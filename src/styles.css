@@ -1367,3 +1367,5 @@ textarea:focus-visible {
   .app-shell { padding-top: env(safe-area-inset-top); }
   body { overscroll-behavior-y: contain; }
 }
+.icebreakers{display:flex;gap:8px;overflow-x:auto;padding:8px 0}
+.icebreaker{flex:0 0 auto;max-width:260px;padding:8px 12px;border-radius:999px;border:1px dashed var(--accent,#d6336c);background:transparent;cursor:pointer;font-size:.85rem;text-align:left}
