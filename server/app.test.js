@@ -742,3 +742,15 @@ test('Google and Facebook sign-in create or join an account', async () => {
     await server.close();
   }
 });
+test('a dedicated site deployment forces its own site', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false', SITE_ONLY: 'professionnel' });
+  try {
+    assert.equal((await request(server.baseUrl, '/api/site')).body.siteOnly, 'professionnel');
+    const user = await registerUser(server.baseUrl, 'solo@example.com', { mode: 'amoureux' });
+    assert.equal(user.body.user.profile.mode, 'professionnel');
+    const other = await request(server.baseUrl, '/api/auth/switch-site', { method: 'POST', headers: user.auth, body: JSON.stringify({ site: 'amical' }) });
+    assert.equal(other.status, 403);
+  } finally {
+    await server.close();
+  }
+});

@@ -92,7 +92,7 @@ function SectionHeader({ eyebrow, title, description, aside }) {
   );
 }
 
-function App({ site }) {
+function App({ site, dedicated = false }) {
   const { lang, t } = useI18n();
   const siteInfo = getSite(site);
   const authKey = getAuthKey(site);
@@ -775,7 +775,7 @@ function App({ site }) {
                 {content.highlights.map((item) => <li key={item}>{t(item)}</li>)}
               </ul>
               <p>
-                <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>{t('Découvrir les autres sites Lifys')}</a>
+                {dedicated ? null : <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>{t('Découvrir les autres sites Lifys')}</a>}
               </p>
             </div>
 
@@ -890,7 +890,7 @@ function App({ site }) {
         </div>
       </header>
 
-      <SiteRail token={token} site={site} refreshKey={`${view}:${matches.length}:${conversations.length}:${profile?.age ?? ''}${profile?.city ?? ''}`} onSwitch={handleSiteChange} />
+      {dedicated ? null : <SiteRail token={token} site={site} refreshKey={`${view}:${matches.length}:${conversations.length}:${profile?.age ?? ''}${profile?.city ?? ''}`} onSwitch={handleSiteChange} />}
 
       <main className="page-shell">
         <section className="local-notice" aria-label={t('Information')}>
@@ -956,7 +956,7 @@ function App({ site }) {
                 <div className="mini-card">
                   <span className="mini-label">{siteInfo.brand}</span>
                   <strong>{t(siteInfo.tagline)}</strong>
-                  <p><a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>{t('Découvrir les autres sites Lifys')}</a></p>
+                  <p>{dedicated ? null : <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>{t('Découvrir les autres sites Lifys')}</a>}</p>
                 </div>
               </div>
             </section>

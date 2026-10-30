@@ -5,11 +5,17 @@ import HubPage from './pages/HubPage';
 import LegalPage from './pages/LegalPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import { getLegalPage, getModeFromPathname } from './utils/routing';
+import { fetchSiteOnly, getSiteFromHostname } from './utils/siteLock';
 import { I18nProvider } from './i18n';
 import './styles.css';
 
 function Root() {
   const [pathname, setPathname] = useState(window.location.pathname);
+  const [lockedSite, setLockedSite] = useState(() => getSiteFromHostname() ?? undefined);
+
+  useEffect(() => {
+    if (lockedSite === undefined) fetchSiteOnly().then((site) => setLockedSite(site));
+  }, [lockedSite]);
 
   useEffect(() => {
     const sync = () => setPathname(window.location.pathname);
@@ -24,6 +30,13 @@ function Root() {
 
   if (pathname.replace(/\/+$/, '').toLowerCase() === '/verify-email') {
     return <VerifyEmailPage />;
+  }
+
+  if (lockedSite === undefined) {
+    return null;
+  }
+  if (lockedSite) {
+    return <App key={lockedSite} site={lockedSite} dedicated />;
   }
 
   const mode = getModeFromPathname(pathname);

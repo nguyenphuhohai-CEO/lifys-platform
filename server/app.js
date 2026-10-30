@@ -75,6 +75,28 @@ export function createApp(config) {
   });
 
   app.use(express.json({ limit: '100kb' }));
+
+  // Déploiement dédié à un seul site : le site est imposé côté serveur.
+  app.get('/api/site', (_req, res) => {
+    res.json({ siteOnly: config.siteOnly || null });
+  });
+  app.use('/api', (req, res, next) => {
+    if (!config.siteOnly) {
+      next();
+      return;
+    }
+    if (req.path === '/auth/switch-site' && req.body?.site !== config.siteOnly) {
+      next(createHttpError(403, 'Ce site est indépendant des autres sites Lifys.'));
+      return;
+    }
+    if (req.body && typeof req.body === 'object') {
+      if ('mode' in req.body || req.path === '/auth/register' || req.path === '/profile') req.body.mode = config.siteOnly;
+      if (req.path === '/auth/login' || req.path === '/auth/switch-site') req.body.site = config.siteOnly;
+    }
+    if (req.query.site) req.query.site = config.siteOnly;
+    if (req.query.mode && req.query.mode !== 'all') req.query.mode = config.siteOnly;
+    next();
+  });
   const adsEnabled = Boolean(config.ads?.client);
   const csp = adsEnabled
     ? "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.adtrafficquality.google; connect-src 'self' https://*.googlesyndication.com https://*.google.com https://*.adtrafficquality.google; frame-src https://*.googlesyndication.com https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"

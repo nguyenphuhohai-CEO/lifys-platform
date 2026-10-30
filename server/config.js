@@ -51,6 +51,7 @@ export function getConfig(overrides = {}) {
       automaticTax: ['1', 'true'].includes(``.toLowerCase()),
       currency: `${overrides.PREMIUM_CURRENCY ?? process.env.PREMIUM_CURRENCY ?? 'eur'}`.toLowerCase(),
     },
+    siteOnly: ['amical', 'amoureux', 'sans-lendemain', 'mariage', 'professionnel'].includes(`${overrides.SITE_ONLY ?? process.env.SITE_ONLY ?? ''}`.trim()) ? `${overrides.SITE_ONLY ?? process.env.SITE_ONLY}`.trim() : '',
     oauth: {
       google: {
         clientId: `${overrides.GOOGLE_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID ?? ''}`.trim(),

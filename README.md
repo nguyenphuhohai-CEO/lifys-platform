@@ -332,3 +332,8 @@ Le plan `starter` est requis pour le disque persistant (base SQLite, photos, sau
 ## Connexion Google / Facebook
 
 Renseignez GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET et/ou FACEBOOK_APP_ID/FACEBOOK_APP_SECRET (voir .env.example) ; les boutons apparaissent alors sur l'écran de connexion. URI de redirection à déclarer chez le fournisseur : `APP_URL/api/auth/oauth/google/callback` et `APP_URL/api/auth/oauth/facebook/callback`. L'e-mail du fournisseur doit être vérifié (Google) ou fourni (Facebook) ; il rattache le compte Lifys existant ou en crée un.
+
+## Sites séparés
+
+- **Sous-domaines** (même serveur) : ouvrir `amis.`, `love.`, `ephemere.`, `mariage.` ou `pro.` + votre domaine affiche uniquement ce site, sans hub ni lien vers les autres.
+- **Déploiements indépendants** : `SITE_ONLY=<amical|amoureux|sans-lendemain|mariage|professionnel>` verrouille un serveur sur un seul site ; `render.sites.yaml` déclare 5 services Render avec bases, disques et secrets séparés. Les comptes ne sont alors pas partagés entre sites.
