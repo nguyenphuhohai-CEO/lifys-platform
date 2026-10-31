@@ -679,5 +679,8 @@ export const ROWS = [
   ['Se souvenir de mon e-mail sur cet appareil', 'Remember my email on this device', 'Recordar mi correo en este dispositivo', 'Ghi nh? email tr?n thi?t b? n?y'],
   ['Cookies et mesure d’audience', 'Cookies and audience measurement', 'Cookies y medición de audiencia', 'Cookie và đo lường lượng truy cập'],
   ['Avec votre accord, nous mesurons aussi l’audience du site (pages vues, anonymisées) pour l’améliorer.', 'With your consent, we also measure site audience (anonymized page views) to improve it.', 'Con tu consentimiento, también medimos la audiencia del sitio (páginas vistas anonimizadas) para mejorarlo.', 'Khi bạn đồng ý, chúng tôi cũng đo lường lượng truy cập (lượt xem ẩn danh) để cải thiện trang.'],
+  ['À propos', 'About', 'Acerca de', 'Giới thiệu'],
+  ['Aide', 'Help', 'Ayuda', 'Trợ giúp'],
+  ['Sécurité', 'Safety', 'Seguridad', 'An toàn'],
 ];
 

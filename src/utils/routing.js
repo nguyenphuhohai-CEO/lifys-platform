@@ -21,6 +21,11 @@ export function getLegalPage(pathname) {
   return ['cgu', 'confidentialite', 'mentions-legales'].includes(segment) ? segment : null;
 }
 
+export function getInfoPage(pathname) {
+  const segment = String(pathname || '').split('/').filter(Boolean)[0]?.toLowerCase() ?? '';
+  return ['a-propos', 'aide', 'securite', 'contact'].includes(segment) ? segment : null;
+}
+
 export function getModeFromSearch(search) {
   const value = new URLSearchParams(search || '').get('mode');
   return MODES.find((mode) => mode.id === value)?.id ?? null;

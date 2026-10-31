@@ -857,7 +857,7 @@ export function createApp(config) {
   });
 
   app.get('/sitemap.xml', (_req, res) => {
-    const paths = ['/', ...Object.values(SITE_BRANDS).map((brand) => brand.path), '/cgu', '/confidentialite'];
+    const paths = ['/', ...Object.values(SITE_BRANDS).map((brand) => brand.path), '/a-propos', '/aide', '/securite', '/contact', '/cgu', '/confidentialite'];
     res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${paths.map((p) => `  <url><loc>${config.appUrl}${p}</loc></url>`).join('\n')}\n</urlset>\n`);
   });
 

@@ -10,6 +10,10 @@ export default function SiteFooter({ ads, analytics }) {
     <footer className="site-footer">
       <span>© {new Date().getFullYear()} Lifys</span>
       <nav aria-label={t('Informations légales')}>
+        <a href="/a-propos">{t('À propos')}</a>
+        <a href="/aide">{t('Aide')}</a>
+        <a href="/securite">{t('Sécurité')}</a>
+        <a href="/contact">{t('Contact')}</a>
         <a href="/cgu">{t('CGU')}</a>
         <a href="/confidentialite">{t('Confidentialité')}</a>
         <a href="/mentions-legales">{t('Mentions légales')}</a>

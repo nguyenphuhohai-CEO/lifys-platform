@@ -11,16 +11,16 @@ export function createMailer(config) {
       await transport.verify();
       return true;
     },
-    async send({ to, subject, text }) {
+    async send({ to, subject, text, html }) {
       if (!transport) {
-        sent.push({ to, subject, text });
+        sent.push({ to, subject, text, html });
         if (config.nodeEnv !== 'test') {
           console.log(`[mail:dev] To: ${to}\nSubject: ${subject}\n${text}\n`);
         }
         return;
       }
 
-      await transport.sendMail({ from: config.mailFrom, to, subject, text });
+      await transport.sendMail({ from: config.mailFrom, to, subject, text, ...(html ? { html } : {}) });
     },
   };
 }

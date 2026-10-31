@@ -4,7 +4,8 @@ import App from './App';
 import HubPage from './pages/HubPage';
 import LegalPage from './pages/LegalPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
-import { getLegalPage, getModeFromPathname } from './utils/routing';
+import InfoPage from './pages/InfoPage';
+import { getInfoPage, getLegalPage, getModeFromPathname } from './utils/routing';
 import { fetchSiteOnly, getSiteFromHostname } from './utils/siteLock';
 import { I18nProvider } from './i18n';
 import './styles.css';
@@ -34,6 +35,11 @@ function Root() {
   const legalPage = getLegalPage(pathname);
   if (legalPage) {
     return <LegalPage page={legalPage} />;
+  }
+
+  const infoPage = getInfoPage(pathname);
+  if (infoPage) {
+    return <InfoPage page={infoPage} />;
   }
 
   if (pathname.replace(/\/+$/, '').toLowerCase() === '/verify-email') {

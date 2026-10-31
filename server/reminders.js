@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 
+import { wrapHtml } from './email-templates.js';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function unsubscribeToken(config, userId) {
@@ -23,7 +25,15 @@ function buildReminderEmail({ unread, expiring }, link, unsubscribeLink) {
     parts.push(`${expiring} match(s) qui expire(nt) dans moins de 12 h`);
     partsEn.push(`${expiring} match(es) expiring within 12 hours`);
   }
+  const html = wrapHtml({
+    title: 'On vous attend sur Lifys / Someone is waiting for you',
+    paragraphs: [`Vous avez : ${parts.join(' et ')}.`, `You have: ${partsEn.join(' and ')}.`],
+    button: 'Répondre / Reply',
+    link,
+    footer: `<a href="${unsubscribeLink}" style="color:#637081">Se désinscrire / Unsubscribe</a>`,
+  });
   return {
+    html,
     subject: 'Lifys · on vous attend / someone is waiting for you',
     text: `Bonjour,\n\nVous avez : ${parts.join(' et ')}.\nRépondez maintenant : ${link}\n\n---\n\nHello,\n\nYou have: ${partsEn.join(' and ')}.\nReply now: ${link}\n\nSe désinscrire / Unsubscribe : ${unsubscribeLink}`,
   };
