@@ -346,3 +346,8 @@ Avec REMINDERS_ENABLED=true (et SMTP_URL), un job envoie au plus un e-mail par 2
 
 - Push : générez des clés avec `npx web-push generate-vapid-keys`, renseignez `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` et `VAPID_SUBJECT`. Les membres activent les notifications de messages depuis leur profil.
 - Parrainage : lien `/?ref=<code>` (page Offres). Parrain et filleul reçoivent 7 jours de Premium, dans la limite de 10 filleuls par parrain.
+
+## Avant la mise en ligne
+
+Lancez `npm run check:prod` (avec vos variables d'environnement de production chargées) : le script liste les points bloquants (secret JWT, HTTPS, SMTP, mentions légales `[À COMPLÉTER]`) et les avertissements (Stripe, admin, push, OAuth).
+

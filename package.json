@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "check:prod": "node scripts/check-prod.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
