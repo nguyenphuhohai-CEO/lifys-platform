@@ -199,6 +199,15 @@ export const api = {
   getReferral(token) {
     return apiRequest('/api/referral', { token });
   },
+  getPushKey() {
+    return apiRequest('/api/push/key');
+  },
+  pushSubscribe(token, subscription) {
+    return apiRequest('/api/push/subscribe', { method: 'POST', token, body: subscription });
+  },
+  pushUnsubscribe(token, endpoint) {
+    return apiRequest('/api/push/unsubscribe', { method: 'POST', token, body: { endpoint } });
+  },
   getEvents(token) {
     return apiRequest('/api/events', { token });
   },

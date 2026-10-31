@@ -33,3 +33,21 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(request.mode === 'navigate' ? '/' : request))
   );
 });
+
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { /* charge utile invalide */ }
+  event.waitUntil(self.registration.showNotification(data.title || 'Lifys', {
+    body: data.body || '',
+    icon: '/icon-192.png',
+    data: { url: data.url || '/' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(self.clients.matchAll({ type: 'window' }).then((clients) => {
+    const open = clients.find((client) => 'focus' in client);
+    return open ? open.focus() : self.clients.openWindow(event.notification.data?.url || '/');
+  }));
+});

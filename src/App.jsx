@@ -22,6 +22,7 @@ import ExpiryNotice from './components/ExpiryNotice';
 import AdminPanel from './components/AdminPanel';
 import PricingPanel, { AdSlot } from './components/Pricing';
 import Referral from './components/Referral';
+import PushToggle from './components/PushToggle';
 import ConsentBanner from './components/ConsentBanner';
 import { loadAnalytics, useConsent } from './lib/consent';
 import ToastRegion from './components/ToastRegion';
@@ -1374,6 +1375,7 @@ function App({ site, dedicated = false }) {
         {view === 'profile' && (
           <section className="content-panel profile-panel">
             <SectionHeader eyebrow={t('Profil')} title={t('Complétez votre profil')} description={t('Vos informations sont visibles par les autres membres, sauf votre e-mail.')} />
+            <PushToggle token={token} />
 
             <div className="profile-layout">
               <form className="profile-form" onSubmit={handleProfileSave} noValidate>

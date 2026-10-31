@@ -437,6 +437,14 @@ export function createDatabase(databaseFile, options = {}) {
   for (const [column, definition] of [['selfie_status', "TEXT NOT NULL DEFAULT 'none'"], ['selfie_file', 'TEXT'], ['reminders_off', 'INTEGER NOT NULL DEFAULT 0'], ['last_reminder_at', 'TEXT'], ['referred_by', 'TEXT']]) {
     if (!lateUserColumns.has(column)) db.exec(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
   }
+  db.exec(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`);
   const lateProfileColumns = new Set(db.prepare('PRAGMA table_info(profiles)').all().map((column) => column.name));
   for (const column of ['boost_until', 'last_boost_at']) {
     if (!lateProfileColumns.has(column)) db.exec(`ALTER TABLE profiles ADD COLUMN ${column} TEXT`);
@@ -716,6 +724,25 @@ export function createDatabase(databaseFile, options = {}) {
       userId: userResult.lastInsertRowid,
       profile: getProfileByUserId(userResult.lastInsertRowid),
     };
+  }
+
+  function savePushSubscription(userId, { endpoint, keys }) {
+    db.prepare('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth')
+      .run(userId, endpoint, keys.p256dh, keys.auth, now());
+  }
+
+  function removePushSubscription(endpoint) {
+    db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
+  }
+
+  function listPushSubscriptions(userId) {
+    return db.prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId);
+  }
+
+  function getConversationRecipientId(conversationPublicId, senderId) {
+    const conversation = statements.findConversationContext.get(conversationPublicId);
+    if (!conversation) return null;
+    return conversation.user_one_id === senderId ? conversation.user_two_id : conversation.user_one_id;
   }
 
   function grantPremiumDays(email, days) {
@@ -1484,6 +1511,10 @@ export function createDatabase(databaseFile, options = {}) {
     updateUserProfile,
     listDiscoveryProfiles,
     applyReferral,
+    savePushSubscription,
+    removePushSubscription,
+    listPushSubscriptions,
+    getConversationRecipientId,
     referralStats,
     boostProfile,
     submitSelfie,

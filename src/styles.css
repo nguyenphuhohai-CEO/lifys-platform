@@ -1398,3 +1398,7 @@ textarea:focus-visible {
 .referral-card h3 { margin: 0; }
 .referral-row { display: flex; gap: 8px; }
 .referral-row input { flex: 1; min-width: 0; }
+
+.push-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--radius-md); }
+.push-toggle h3 { margin: 0; font-size: 1rem; }
+.push-toggle p { margin: 2px 0 0; }

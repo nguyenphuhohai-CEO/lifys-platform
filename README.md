@@ -341,3 +341,8 @@ Renseignez GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET et/ou FACEBOOK_APP_ID/FACEBOOK_
 ## Rappels e-mail
 
 Avec REMINDERS_ENABLED=true (et SMTP_URL), un job envoie au plus un e-mail par 24 h aux membres verifies ayant des messages non lus ou un match qui expire sous 12 h. Chaque e-mail contient un lien de desinscription signe.
+
+## Notifications push et parrainage
+
+- Push : générez des clés avec `npx web-push generate-vapid-keys`, renseignez `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` et `VAPID_SUBJECT`. Les membres activent les notifications de messages depuis leur profil.
+- Parrainage : lien `/?ref=<code>` (page Offres). Parrain et filleul reçoivent 7 jours de Premium, dans la limite de 10 filleuls par parrain.

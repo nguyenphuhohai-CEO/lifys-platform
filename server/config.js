@@ -69,6 +69,11 @@ export function getConfig(overrides = {}) {
       keep: Math.max(1, Number(overrides.BACKUP_KEEP ?? process.env.BACKUP_KEEP ?? 14) || 14),
     },
     analyticsId: (/^G-[A-Z0-9]{4,20}$/.test(`${overrides.GA_MEASUREMENT_ID ?? process.env.GA_MEASUREMENT_ID ?? ''}`.trim()) ? `${overrides.GA_MEASUREMENT_ID ?? process.env.GA_MEASUREMENT_ID}`.trim() : ''),
+    vapid: {
+      publicKey: `${overrides.VAPID_PUBLIC_KEY ?? process.env.VAPID_PUBLIC_KEY ?? ''}`.trim(),
+      privateKey: `${overrides.VAPID_PRIVATE_KEY ?? process.env.VAPID_PRIVATE_KEY ?? ''}`.trim(),
+      subject: `${overrides.VAPID_SUBJECT ?? process.env.VAPID_SUBJECT ?? 'mailto:contact@lifys.app'}`.trim(),
+    },
     reminders: {
       intervalHours: flag('REMINDERS_ENABLED', false) ? Number(overrides.REMINDERS_INTERVAL_HOURS ?? process.env.REMINDERS_INTERVAL_HOURS ?? 6) || 6 : 0,
     },

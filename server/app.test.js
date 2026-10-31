@@ -919,3 +919,29 @@ test('referral grants premium days to both accounts, once per newcomer', async (
     await server.close();
   }
 });
+
+test('push subscription requires configured VAPID keys', async () => {
+  const off = await startTestServer({ SEED_DEMO_DATA: 'false' });
+  try {
+    const key = await request(off.baseUrl, '/api/push/key');
+    assert.equal(key.body.publicKey, null);
+  } finally {
+    await off.close();
+  }
+  const webpush = (await import('web-push')).default;
+  const vapid = webpush.generateVAPIDKeys();
+  const on = await startTestServer({ SEED_DEMO_DATA: 'false', VAPID_PUBLIC_KEY: vapid.publicKey, VAPID_PRIVATE_KEY: vapid.privateKey });
+  try {
+    const user = await registerUser(on.baseUrl, 'pu@example.com', { mode: 'amical' });
+    const key = await request(on.baseUrl, '/api/push/key');
+    assert.equal(key.body.publicKey, vapid.publicKey);
+    const sub = await request(on.baseUrl, '/api/push/subscribe', {
+      method: 'POST', headers: user.auth,
+      body: JSON.stringify({ endpoint: 'https://push.example.com/abc', keys: { p256dh: 'x', auth: 'y' } }),
+    });
+    assert.equal(sub.status, 204);
+    assert.equal(on.database.listPushSubscriptions(on.database.db.prepare('SELECT id FROM users WHERE email = ?').get('pu@example.com').id).length, 1);
+  } finally {
+    await on.close();
+  }
+});

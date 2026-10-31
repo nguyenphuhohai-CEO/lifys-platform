@@ -20,6 +20,7 @@ import { createMailer } from './mailer.js';
 import { isValidUnsubscribeToken } from './reminders.js';
 import { createOAuth, OAUTH_COOKIE, readCookie } from './oauth.js';
 import { createRateLimiter } from './rate-limit.js';
+import { createPush } from './push.js';
 import { createSelfieStore, createUploadStore, detectImageType, MAX_UPLOAD_BYTES, ownUploadPattern, UPLOAD_MIME_TYPES } from './uploads.js';
 
 export const TERMS_VERSION = '2026-10-18';
@@ -55,6 +56,7 @@ export function createApp(config) {
     requireEmailVerification: config.requireEmailVerification,
   });
   const mailer = createMailer(config);
+  const push = createPush(config);
   const uploads = createUploadStore(config.uploadDir);
   const selfies = createSelfieStore(`${config.uploadDir.replace(/[\\/]+$/, '')}-selfies`);
   const app = express();
@@ -304,6 +306,31 @@ export function createApp(config) {
 
   const familyToken = (profileId) => crypto.createHmac('sha256', config.jwtSecret).update(`family:${profileId}`).digest('hex').slice(0, 32);
   const escapeHtml = (value) => `${value ?? ''}`.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+  app.get('/api/push/key', (_req, res) => {
+    res.json({ publicKey: push.enabled ? config.vapid.publicKey : null });
+  });
+
+  app.post('/api/push/subscribe', requireAuth, (req, res, next) => {
+    try {
+      const { endpoint, keys } = req.body ?? {};
+      if (!push.enabled || typeof endpoint !== 'string' || !/^https:\/\//.test(endpoint) || endpoint.length > 600
+        || typeof keys?.p256dh !== 'string' || typeof keys?.auth !== 'string') {
+        throw createHttpError(400, 'Abonnement invalide.');
+      }
+      database.savePushSubscription(req.auth.userId, { endpoint, keys });
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/push/unsubscribe', requireAuth, (req, res) => {
+    if (typeof req.body?.endpoint === 'string') {
+      database.removePushSubscription(req.body.endpoint);
+    }
+    res.status(204).end();
+  });
 
   app.get('/api/referral', requireAuth, (req, res) => {
     res.json(database.referralStats(req.auth.userId));
@@ -751,6 +778,12 @@ export function createApp(config) {
       const conversation = database.addMessage(req.auth.userId, req.params.conversationId, text);
       if (!conversation) {
         throw createHttpError(404, 'Conversation introuvable.');
+      }
+
+      const recipientId = database.getConversationRecipientId(req.params.conversationId, req.auth.userId);
+      if (recipientId) {
+        const senderName = database.getProfileByUserId(req.auth.userId)?.name || 'Lifys';
+        push.notify(database, recipientId, { title: senderName, body: text.slice(0, 120), url: '/' });
       }
 
       res.status(201).json({ conversation });

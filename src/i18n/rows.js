@@ -783,5 +783,9 @@ export const ROWS = [
   ['Vous et votre filleul recevez {days} jours de Premium offerts à son inscription ({count}/{max} parrainages).', 'You and your invitee each get {days} free days of Premium when they sign up ({count}/{max} referrals).', 'Tú y tu invitado recibís {days} días de Premium gratis cuando se registre ({count}/{max} invitaciones).', 'Bạn và người được mời đều nhận {days} ngày Premium miễn phí khi họ đăng ký ({count}/{max} lượt giới thiệu).'],
   ['Lien d’invitation', 'Invitation link', 'Enlace de invitación', 'Liên kết mời'],
   ['Copier', 'Copy', 'Copiar', 'Sao chép'],
+  ['Notifications de messages', 'Message notifications', 'Notificaciones de mensajes', 'Thông báo tin nhắn'],
+  ['Recevez une notification quand on vous écrit, même site fermé.', 'Get a notification when someone writes to you, even when the site is closed.', 'Recibe una notificación cuando te escriban, incluso con el sitio cerrado.', 'Nhận thông báo khi có người nhắn tin, kể cả khi đã đóng trang.'],
+  ['Activer', 'Enable', 'Activar', 'Bật'],
+  ['Désactiver', 'Disable', 'Desactivar', 'Tắt'],
 ];
 
