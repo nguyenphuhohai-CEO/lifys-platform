@@ -42,6 +42,7 @@ export function sanitizeProfile(value) {
     city: sanitizeString(value.city),
     bio: sanitizeString(value.bio),
     interests: serializeInterests(value.interests),
+    details: value.details && typeof value.details === 'object' && !Array.isArray(value.details) ? value.details : {},
     mode: modeExists ? value.mode : defaultProfile.mode,
     avatar: sanitizeString(value.avatar),
   };

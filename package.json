@@ -9,15 +9,19 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "check:prod": "node scripts/check-prod.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3": "^12.9.0",
+    "compression": "^1.8.2",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^10.1.7",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
