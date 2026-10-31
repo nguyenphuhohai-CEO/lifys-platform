@@ -46,8 +46,8 @@ export default function InfoPage({ page }) {
   const content = PAGES[page];
 
   useEffect(() => {
-    document.title = `${content.title} · Lifys`;
-  }, [content.title]);
+    document.title = `${t(content.title)} · Lifys`;
+  }, [content.title, t]);
 
   return (
     <div className="app-shell">
