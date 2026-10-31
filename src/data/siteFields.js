@@ -46,6 +46,36 @@ export const SITE_FIELDS = {
   ],
 };
 
+export const SOCIAL_NETWORKS = [
+  { id: 'instagram', label: 'Instagram', icon: '??', hosts: ['instagram.com'] },
+  { id: 'facebook', label: 'Facebook', icon: '??', hosts: ['facebook.com', 'fb.com'] },
+  { id: 'tiktok', label: 'TikTok', icon: '??', hosts: ['tiktok.com'] },
+  { id: 'snapchat', label: 'Snapchat', icon: '??', hosts: ['snapchat.com'] },
+  { id: 'x', label: 'X (Twitter)', icon: '??', hosts: ['x.com', 'twitter.com'] },
+  { id: 'youtube', label: 'YouTube', icon: '??', hosts: ['youtube.com', 'youtu.be'] },
+  { id: 'threads', label: 'Threads', icon: '??', hosts: ['threads.net'] },
+  { id: 'telegram', label: 'Telegram', icon: '??', hosts: ['t.me'] },
+  { id: 'linkedin', label: 'LinkedIn', icon: 'in', hosts: ['linkedin.com'] },
+  { id: 'github', label: 'GitHub', icon: '??', hosts: ['github.com'] },
+];
+
+export const socialKey = (id) => `social_${id}`;
+
+export function socialNetworksFor(site) {
+  return SOCIAL_NETWORKS.filter((network) => !(site === 'professionnel' && network.id === 'linkedin'));
+}
+
+function cleanSocialUrl(network, value) {
+  const url = `${value ?? ''}`.trim();
+  if (!/^https:\/\/[^\s<>"]{1,200}$/i.test(url)) return '';
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^(www|m)\./, '');
+    return network.hosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`)) ? url : '';
+  } catch {
+    return '';
+  }
+}
+
 function cleanTags(value) {
   const items = Array.isArray(value) ? value : `${value ?? ''}`.split(',');
   return [...new Set(items.map((item) => `${item ?? ''}`.trim().toLowerCase().slice(0, 40)).filter(Boolean))].slice(0, 12);
@@ -77,6 +107,11 @@ export function sanitizeDetails(site, raw) {
       const url = `${value ?? ''}`.trim();
       if (/^https:\/\/([a-z0-9-]+\.)*linkedin\.com\/[^\s<>"]{0,200}$/i.test(url)) details[field.id] = url;
     }
+  }
+
+  for (const network of socialNetworksFor(site)) {
+    const url = cleanSocialUrl(network, source[socialKey(network.id)]);
+    if (url) details[socialKey(network.id)] = url;
   }
 
   if (!details.promptQ || !details.promptA) {

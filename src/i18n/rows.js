@@ -674,5 +674,7 @@ export const ROWS = [
   ['Continuer avec Facebook', 'Continue with Facebook', 'Continuar con Facebook', 'Tiếp tục với Facebook'],
   ['En continuant, vous confirmez avoir 18 ans et acceptez les CGU.', 'By continuing, you confirm you are 18+ and accept the Terms.', 'Al continuar, confirmas tener 18 años y aceptas los Términos.', 'Khi tiếp tục, bạn xác nhận đủ 18 tuổi và đồng ý Điều khoản.'],
   ['Connexion sociale impossible. Réessayez ou utilisez votre e-mail.', 'Social sign-in failed. Try again or use your e-mail.', 'No se pudo iniciar sesión. Inténtalo de nuevo o usa tu correo.', 'Đăng nhập mạng xã hội thất bại. Hãy thử lại hoặc dùng e-mail.'],
+  ['R?seaux sociaux', 'Social networks', 'Redes sociales', 'M?ng x? h?i'],
+  ['Liens publics visibles sur votre profil. Collez l?adresse compl?te (https://?) de votre page.', 'Public links shown on your profile. Paste the full address (https://?) of your page.', 'Enlaces p?blicos visibles en tu perfil. Pega la direcci?n completa (https://?) de tu p?gina.', 'Li?n k?t c?ng khai hi?n th? tr?n h? s?. D?n ??a ch? ??y ?? (https://?) c?a trang b?n.'],
 ];
 

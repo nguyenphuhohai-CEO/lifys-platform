@@ -1,7 +1,8 @@
-import { SITE_FIELDS } from '../data/siteFields';
+import { SITE_FIELDS, socialKey, socialNetworksFor } from '../data/siteFields';
 
 export function SiteFieldsForm({ site, details, onChange, t }) {
   const fields = SITE_FIELDS[site] ?? [];
+  const networks = socialNetworksFor(site);
   if (!fields.length) return null;
 
   const set = (id, value) => onChange({ ...details, [id]: value });
@@ -42,6 +43,16 @@ export function SiteFieldsForm({ site, details, onChange, t }) {
           );
         })}
       </div>
+      <h4>{t('R?seaux sociaux')}</h4>
+      <p className="muted small">{t('Liens publics visibles sur votre profil. Collez l?adresse compl?te (https://?) de votre page.')}</p>
+      <div className="site-fields-grid">
+        {networks.map((network) => (
+          <label key={network.id}>
+            <span>{network.icon} {network.label}</span>
+            <input type="url" maxLength="200" value={details?.[socialKey(network.id)] ?? ''} onChange={(event) => set(socialKey(network.id), event.target.value)} placeholder={`https://${network.hosts[0]}/?`} />
+          </label>
+        ))}
+      </div>
     </fieldset>
   );
 }
@@ -70,6 +81,9 @@ export function DetailChips({ person, t }) {
         {person.boosted ? <span className="badge">🚀 {t('Boosté')}</span> : null}
         {details.tonight ? <span className="badge badge-tonight">🌙 {t('Ce soir')}</span> : null}
         {details.consent ? <span className="badge">🤝 {t('Consentement affiché')}</span> : null}
+        {socialNetworksFor(person.mode).filter((network) => details[socialKey(network.id)]).map((network) => (
+          <a key={network.id} className="badge" href={details[socialKey(network.id)]} target="_blank" rel="noopener noreferrer nofollow">{network.icon} {network.label}</a>
+        ))}
         {details.linkedin ? <a className="badge" href={details.linkedin} target="_blank" rel="noopener noreferrer nofollow">in LinkedIn</a> : null}
       </div>
       {details.promptQ && details.promptA ? (

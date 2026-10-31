@@ -754,3 +754,20 @@ test('a dedicated site deployment forces its own site', async () => {
     await server.close();
   }
 });
+test('social links are validated per network', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false' });
+  try {
+    const u = await registerUser(server.baseUrl, 'soc@example.com', { mode: 'amical' });
+    const saved = await request(server.baseUrl, '/api/profile', {
+      method: 'PUT', headers: u.auth,
+      body: JSON.stringify({ name: 'Soc', age: 30, city: 'Paris', bio: 'Bio', interests: ['x'], mode: 'amical', avatar: '', details: {
+        social_instagram: 'https://www.instagram.com/soc', social_x: 'https://evil.com/x', social_tiktok: 'javascript:alert(1)',
+      } }),
+    });
+    assert.equal(saved.body.profile.details.social_instagram, 'https://www.instagram.com/soc');
+    assert.equal(saved.body.profile.details.social_x, undefined);
+    assert.equal(saved.body.profile.details.social_tiktok, undefined);
+  } finally {
+    await server.close();
+  }
+});
