@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
 
 import express from 'express';
 
@@ -809,6 +810,45 @@ export function createApp(config) {
       matches: database.listMatchesForUser(req.auth.userId),
       conversations: database.listConversationsForUser(req.auth.userId),
     });
+  });
+
+  const SITE_BRANDS = {
+    amical: { name: 'Lifys Amis', path: '/Amical', theme: '#2f9e8f' },
+    amoureux: { name: 'Lifys Love', path: '/Amoureux', theme: '#d6336c' },
+    'sans-lendemain': { name: 'Lifys Éphémère', path: '/Sans-lendemain', theme: '#e8590c' },
+    mariage: { name: 'Lifys Mariage', path: '/Mariage', theme: '#b8860b' },
+    professionnel: { name: 'Lifys Pro', path: '/Professionnel', theme: '#1c7ed6' },
+  };
+  const HOST_SITES = { amis: 'amical', love: 'amoureux', ephemere: 'sans-lendemain', mariage: 'mariage', pro: 'professionnel' };
+
+  app.get('/manifest.webmanifest', (req, res, next) => {
+    const parts = String(req.hostname || '').toLowerCase().split('.');
+    const site = config.siteOnly || (parts.length >= 3 ? HOST_SITES[parts[0]] : null);
+    const brand = SITE_BRANDS[site];
+    if (!brand) return next();
+    let manifest;
+    try {
+      manifest = JSON.parse(fs.readFileSync(path.join(config.staticDir, 'manifest.webmanifest'), 'utf8'));
+    } catch {
+      return next();
+    }
+    res.type('application/manifest+json').json({
+      ...manifest,
+      name: brand.name,
+      short_name: brand.name.replace('Lifys ', ''),
+      theme_color: brand.theme,
+      start_url: config.siteOnly || parts.length >= 3 ? '/' : brand.path,
+      shortcuts: [],
+    });
+  });
+
+  app.get('/robots.txt', (_req, res) => {
+    res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: ${config.appUrl}/sitemap.xml\n`);
+  });
+
+  app.get('/sitemap.xml', (_req, res) => {
+    const paths = ['/', ...Object.values(SITE_BRANDS).map((brand) => brand.path), '/cgu', '/confidentialite'];
+    res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${paths.map((p) => `  <url><loc>${config.appUrl}${p}</loc></url>`).join('\n')}\n</urlset>\n`);
   });
 
   if (fs.existsSync(config.staticDir)) {

@@ -9,6 +9,14 @@ import { fetchSiteOnly, getSiteFromHostname } from './utils/siteLock';
 import { I18nProvider } from './i18n';
 import './styles.css';
 
+const DEDICATED_TITLES = {
+  amical: 'Lifys Amis · Rencontres amicales',
+  amoureux: 'Lifys Love · Rencontres amoureuses',
+  'sans-lendemain': 'Lifys Éphémère · Rencontres sans lendemain',
+  mariage: 'Lifys Mariage · Rencontres pour se marier',
+  professionnel: 'Lifys Pro · Réseau professionnel',
+};
+
 function Root() {
   const [pathname, setPathname] = useState(window.location.pathname);
   const [lockedSite, setLockedSite] = useState(() => getSiteFromHostname() ?? undefined);
@@ -36,6 +44,8 @@ function Root() {
     return null;
   }
   if (lockedSite) {
+    const brand = DEDICATED_TITLES[lockedSite];
+    if (brand) document.title = brand;
     return <App key={lockedSite} site={lockedSite} dedicated />;
   }
 

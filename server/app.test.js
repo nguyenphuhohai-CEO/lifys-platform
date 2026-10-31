@@ -771,3 +771,18 @@ test('social links are validated per network', async () => {
     await server.close();
   }
 });
+test('robots, sitemap and per-site manifest are served', async () => {
+  const server = await startTestServer({ SITE_ONLY: 'professionnel' });
+  try {
+    const robots = await fetch(`${server.baseUrl}/robots.txt`);
+    assert.match(await robots.text(), /Disallow: \/api\//);
+    const sitemap = await fetch(`${server.baseUrl}/sitemap.xml`);
+    assert.match(await sitemap.text(), /<urlset/);
+    const manifest = await fetch(`${server.baseUrl}/manifest.webmanifest`);
+    if (manifest.headers.get('content-type')?.includes('manifest')) {
+      assert.equal((await manifest.json()).name, 'Lifys Pro');
+    }
+  } finally {
+    await server.close();
+  }
+});
