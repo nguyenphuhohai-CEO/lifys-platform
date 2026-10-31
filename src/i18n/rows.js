@@ -727,5 +727,12 @@ export const ROWS = [
   ['Même calendrier de projet', 'Same project timeline', 'Mismo calendario de proyecto', 'Cùng lộ trình dự định'],
   ['Même vision de la famille', 'Same view of family', 'Misma visión de la familia', 'Cùng quan điểm về gia đình'],
   ['Offre et besoin complémentaires', 'Complementary offer and need', 'Oferta y necesidad complementarias', 'Cung và cầu bổ trợ'],
+  ['Proche prévenu', 'Contact notified', 'Allegado avisado', 'Đã báo người thân'],
+  ['Votre proche a reçu un e-mail avec les détails.', 'Your contact received an e-mail with the details.', 'Tu allegado recibió un correo con los detalles.', 'Người thân của bạn đã nhận e-mail chi tiết.'],
+  ['Prévenir un proche', 'Alert a trusted contact', 'Avisar a un allegado', 'Báo cho người thân'],
+  ['Avant un rendez-vous, envoyez à un proche l’heure et le lieu. Nous ne conservons ni son adresse ni le message.', 'Before a meeting, send a trusted contact the time and place. We keep neither their address nor the message.', 'Antes de una cita, envía a un allegado la hora y el lugar. No guardamos ni su dirección ni el mensaje.', 'Trước buổi hẹn, hãy gửi giờ và địa điểm cho người thân. Chúng tôi không lưu địa chỉ hay nội dung.'],
+  ['E-mail de votre proche', 'Your contact’s e-mail', 'Correo de tu allegado', 'E-mail người thân'],
+  ['Lieu, heure, prénom de la personne rencontrée…', 'Place, time, first name of the person you meet…', 'Lugar, hora, nombre de la persona…', 'Địa điểm, giờ, tên người bạn gặp…'],
+  ['Envoyer l’alerte', 'Send the alert', 'Enviar la alerta', 'Gửi cảnh báo'],
 ];
 

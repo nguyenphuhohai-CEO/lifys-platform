@@ -835,3 +835,18 @@ test('new per-site fields are sanitized and scored', async () => {
   const b = { mode: 'professionnel', interests: [], city: '', details: { skills: ['design'], offering: ['react'], proFormat: 'Visio' } };
   assert.ok(computeCompatibility(a, b).reasons.includes('Offre et besoin complémentaires'));
 });
+
+test('safety alert emails a trusted contact', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false' });
+  try {
+    const u = await registerUser(server.baseUrl, 'sf@example.com', { mode: 'sans-lendemain' });
+    const bad = await request(server.baseUrl, '/api/safety/alert', { method: 'POST', headers: u.auth, body: JSON.stringify({ contactEmail: 'nope' }) });
+    assert.equal(bad.status, 400);
+    const ok = await request(server.baseUrl, '/api/safety/alert', { method: 'POST', headers: u.auth, body: JSON.stringify({ contactEmail: 'ami@example.com', details: 'Bar du centre 21h' }) });
+    assert.equal(ok.status, 204);
+    assert.equal(server.mailer.sent.at(-1).to, 'ami@example.com');
+    assert.match(server.mailer.sent.at(-1).text, /Bar du centre/);
+  } finally {
+    await server.close();
+  }
+});

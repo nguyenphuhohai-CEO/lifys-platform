@@ -640,6 +640,31 @@ export function createApp(config) {
     }
   };
 
+  const safetyLimiter = createRateLimiter({
+    windowMs: 60 * 60 * 1000,
+    max: config.nodeEnv === 'test' ? 1000 : 5,
+    message: 'Trop d’alertes envoyées. Réessayez plus tard.',
+  });
+  app.post('/api/safety/alert', requireAuth, requireVerified, safetyLimiter, async (req, res, next) => {
+    try {
+      const contact = `${req.body?.contactEmail ?? ''}`.trim().toLowerCase();
+      if (!/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/.test(contact) || contact.length > 254) {
+        throw createHttpError(400, 'Adresse e-mail du proche invalide.');
+      }
+      const details = `${req.body?.details ?? ''}`.replace(/[\r\n]+/g, ' ').trim().slice(0, 300);
+      const name = req.auth.profile?.name || 'Un membre';
+      const time = new Date().toISOString();
+      await mailer.send({
+        to: contact,
+        subject: `Lifys · ${name} vous prévient d’un rendez-vous / has shared a meeting with you`,
+        text: `${name} utilise Lifys et souhaite que vous soyez informé(e) d’un rendez-vous.\nDétails : ${details || 'non précisés'}\nEnvoyé le ${time}.\n\nSi vous êtes inquiet(ète), contactez cette personne directement ou les secours (112 / 17).\n\n---\n\n${name} uses Lifys and wants you to know about a meeting.\nDetails: ${details || 'not specified'}\nSent ${time}.\n\nIf you are worried, contact them directly or emergency services (112).`,
+      });
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get('/api/events', requireAuth, requireVerified, community((req, res) => {
     res.json({ events: database.listEvents(req.auth.userId, { city: req.query.city ?? '' }) });
   }));

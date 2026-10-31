@@ -180,6 +180,9 @@ export const api = {
   blockProfile(token, profileId) {
     return apiRequest('/api/blocks', { method: 'POST', token, body: { profileId } });
   },
+  sendSafetyAlert(token, body) {
+    return apiRequest('/api/safety/alert', { method: 'POST', token, body });
+  },
   getEvents(token) {
     return apiRequest('/api/events', { token });
   },

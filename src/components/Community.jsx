@@ -292,6 +292,36 @@ const TONIGHT_TIPS = [
   'Signalez immédiatement tout comportement inapproprié.',
 ];
 
+function SafetyAlert({ token, t, onError, showToast }) {
+  const [contactEmail, setContactEmail] = useState('');
+  const [details, setDetails] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setSending(true);
+    try {
+      await api.sendSafetyAlert(token, { contactEmail, details });
+      showToast({ type: 'success', title: t('Proche prévenu'), message: t('Votre proche a reçu un e-mail avec les détails.') });
+      setDetails('');
+    } catch (error) {
+      onError(error, t('Action impossible.'));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <form className="safety-alert" onSubmit={submit}>
+      <h3>🛡️ {t('Prévenir un proche')}</h3>
+      <p className="muted small">{t('Avant un rendez-vous, envoyez à un proche l’heure et le lieu. Nous ne conservons ni son adresse ni le message.')}</p>
+      <input type="email" required maxLength="254" value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} placeholder={t('E-mail de votre proche')} />
+      <textarea maxLength="300" value={details} onChange={(event) => setDetails(event.target.value)} placeholder={t('Lieu, heure, prénom de la personne rencontrée…')} />
+      <button type="submit" className="primary-button" disabled={sending}>{sending ? t('Chargement…') : t('Envoyer l’alerte')}</button>
+    </form>
+  );
+}
+
 export function TonightPanel({ token, t, locale, profile, onProfile, onError, showToast }) {
   const load = useCallback(() => api.getDiscovery(token, { activeMode: 'all', tonight: true }), [token]);
   const [data, refresh] = useLoader(load, onError, t('Impossible de charger les profils.'));
@@ -319,6 +349,7 @@ export function TonightPanel({ token, t, locale, profile, onProfile, onError, sh
       <ul className="safety-tips">
         {TONIGHT_TIPS.map((tip) => <li key={tip}>{t(tip)}</li>)}
       </ul>
+      <SafetyAlert token={token} t={t} onError={onError} showToast={showToast} />
       {!data ? null : data.profiles.length === 0 ? (
         <div className="empty-state"><h3>{t('Personne pour l’instant')}</h3><p>{t('Revenez plus tard : les profils « Ce soir » apparaissent ici.')}</p></div>
       ) : (
