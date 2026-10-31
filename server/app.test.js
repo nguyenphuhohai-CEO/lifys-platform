@@ -825,3 +825,13 @@ test('pro CV fields are whitelisted', async () => {
   assert.equal(out.openTo, undefined);
   assert.equal(out.experience, 'Dirigé 3 équipes');
 });
+
+test('new per-site fields are sanitized and scored', async () => {
+  const { sanitizeDetails, computeCompatibility } = await import('../src/data/siteFields.js');
+  const out = sanitizeDetails('mariage', { timeline: 'Dans l’année', familyInvolved: 'hack' });
+  assert.equal(out.timeline, 'Dans l’année');
+  assert.equal(out.familyInvolved, undefined);
+  const a = { mode: 'professionnel', interests: [], city: '', details: { skills: ['react'], offering: ['design'], proFormat: 'Visio' } };
+  const b = { mode: 'professionnel', interests: [], city: '', details: { skills: ['design'], offering: ['react'], proFormat: 'Visio' } };
+  assert.ok(computeCompatibility(a, b).reasons.includes('Offre et besoin complémentaires'));
+});

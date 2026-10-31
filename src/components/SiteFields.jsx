@@ -58,11 +58,11 @@ export function SiteFieldsForm({ site, details, onChange, t }) {
 }
 
 const CARD_FIELDS = {
-  amoureux: ['situation', 'children', 'smoker', 'looking'],
-  amical: ['availability', 'activities'],
-  'sans-lendemain': ['expectations', 'discretion'],
-  mariage: ['religion', 'childrenPlan', 'relocate', 'values'],
-  professionnel: ['job', 'company', 'seniority', 'openTo', 'sector', 'goal', 'skills'],
+  amoureux: ['situation', 'children', 'smoker', 'looking', 'lifestyle', 'values'],
+  amical: ['availability', 'meetFormat', 'activities'],
+  'sans-lendemain': ['expectations', 'discretion', 'meetPlace'],
+  mariage: ['religion', 'childrenPlan', 'relocate', 'timeline', 'familyInvolved', 'values'],
+  professionnel: ['job', 'company', 'seniority', 'openTo', 'sector', 'goal', 'lookingFor', 'proFormat', 'skills', 'offering'],
 };
 
 export function DetailChips({ person, t }) {
@@ -79,6 +79,7 @@ export function DetailChips({ person, t }) {
         {person.verified ? <span className="badge badge-ok">✔ {t('Profil vérifié')}</span> : null}
         {person.selfieVerified ? <span className="badge badge-ok">🤳 {t('Selfie vérifié')}</span> : null}
         {person.boosted ? <span className="badge">🚀 {t('Boosté')}</span> : null}
+        {details.newInTown ? <span className="badge">📍 {t('Nouveau / nouvelle dans la ville')}</span> : null}
         {details.tonight ? <span className="badge badge-tonight">🌙 {t('Ce soir')}</span> : null}
         {details.consent ? <span className="badge">🤝 {t('Consentement affiché')}</span> : null}
         {socialNetworksFor(person.mode).filter((network) => details[socialKey(network.id)]).map((network) => (

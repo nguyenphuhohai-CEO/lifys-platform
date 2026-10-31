@@ -6,12 +6,17 @@ export const SITE_FIELDS = {
     { id: 'children', type: 'select', label: 'Enfants', options: ['Sans enfant', 'Avec enfant(s)', 'Souhaite des enfants'] },
     { id: 'smoker', type: 'select', label: 'Fumeur', options: ['Non', 'Occasionnellement', 'Oui'] },
     { id: 'looking', type: 'select', label: 'Je recherche', options: ['Relation durable', 'À découvrir', 'Peu importe'] },
+    { id: 'lifestyle', type: 'select', label: 'Style de vie', options: ['Casanier', 'Sportif', 'Sorties et culture', 'Voyageur'] },
+    { id: 'values', type: 'tags', label: 'Valeurs' },
+    { id: 'firstDate', type: 'select', label: 'Premier rendez-vous idéal', options: ['Un café', 'Un dîner', 'Une balade', 'Une activité'] },
     { id: 'promptQ', type: 'select', label: 'Question de profil', options: ['Mon dimanche idéal','Ce qui me fait craquer','Un voyage inoubliable','Ma plus grande passion'] },
     { id: 'promptA', type: 'longtext', label: 'Ma réponse' },
   ],
   amical: [
     { id: 'activities', type: 'tags', label: 'Activités favorites' },
     { id: 'availability', type: 'select', label: 'Disponibilités', options: ['En semaine', 'Le week-end', 'En soirée', 'Flexible'] },
+    { id: 'meetFormat', type: 'select', label: 'Format préféré', options: ['En duo', 'En petit groupe', 'Les deux'] },
+    { id: 'newInTown', type: 'bool', label: 'Nouveau / nouvelle dans la ville' },
     { id: 'wantedAgeMin', type: 'number', label: 'Âge recherché (min)' },
     { id: 'wantedAgeMax', type: 'number', label: 'Âge recherché (max)' },
     { id: 'promptQ', type: 'select', label: 'Question de profil', options: ['Mon activité préférée entre amis','Un lieu à me faire découvrir','Ce que j’aimerais apprendre','Mon meilleur souvenir entre amis'] },
@@ -20,6 +25,7 @@ export const SITE_FIELDS = {
   'sans-lendemain': [
     { id: 'expectations', type: 'select', label: 'Attentes', options: ['Une soirée', 'Discuter puis voir', 'Récurrent sans attache'] },
     { id: 'discretion', type: 'select', label: 'Discrétion', options: ['Très discret(e)', 'Normale', 'Aucune'] },
+    { id: 'meetPlace', type: 'select', label: 'Première rencontre', options: ['Lieu public d’abord', 'Peu importe'] },
     { id: 'consent', type: 'bool', label: 'Je m’engage au respect et au consentement mutuel' },
     { id: 'tonight', type: 'bool', label: 'Disponible ce soir (actif 12 h)' },
     { id: 'promptQ', type: 'select', label: 'Question de profil', options: ['Mon ambiance idéale','Mes limites claires','Ma soirée parfaite'] },
@@ -30,6 +36,8 @@ export const SITE_FIELDS = {
     { id: 'values', type: 'tags', label: 'Valeurs' },
     { id: 'childrenPlan', type: 'select', label: 'Projet d’enfants', options: ['Oui', 'Non', 'Ouvert'] },
     { id: 'relocate', type: 'select', label: 'Prêt(e) à déménager', options: ['Oui', 'Non', 'Selon le projet'] },
+    { id: 'timeline', type: 'select', label: 'Calendrier du projet', options: ['Dans l’année', 'Dans 1 à 2 ans', 'Plus tard'] },
+    { id: 'familyInvolved', type: 'select', label: 'Implication de la famille', options: ['Souhaitée', 'Modérée', 'Non'] },
     { id: 'family', type: 'text', label: 'Ma famille en quelques mots' },
     { id: 'promptQ', type: 'select', label: 'Question de profil', options: ['Ma vision du couple','Une valeur non négociable','Notre foyer idéal','Ce que j’attends d’un mariage'] },
     { id: 'promptA', type: 'longtext', label: 'Ma réponse' },
@@ -43,6 +51,9 @@ export const SITE_FIELDS = {
     { id: 'education', type: 'text', label: 'Formation' },
     { id: 'experience', type: 'longtext', label: 'Parcours et réalisations' },
     { id: 'skills', type: 'tags', label: 'Compétences' },
+    { id: 'lookingFor', type: 'text', label: 'Je cherche (associé, mentor, client…)' },
+    { id: 'offering', type: 'tags', label: 'Je propose' },
+    { id: 'proFormat', type: 'select', label: 'Format de rencontre', options: ['Visio', 'En personne', 'Les deux'] },
     { id: 'goal', type: 'select', label: 'Objectif', options: ['Recruter', 'Collaborer', 'Mentor', 'Réseauter'] },
     { id: 'linkedin', type: 'url', label: 'Lien LinkedIn' },
     { id: 'promptQ', type: 'select', label: 'Question de profil', options: ['Ce que je recherche en collaboration','Mon plus beau projet','Comment je peux aider','Mon conseil carrière'] },
@@ -154,24 +165,32 @@ export function computeCompatibility(current, target) {
       if (shared(a.values, b.values).length) add(Math.min(20, shared(a.values, b.values).length * 10), 'Valeurs communes');
       if (same(a.childrenPlan, b.childrenPlan)) add(10, 'Même projet d’enfants');
       if (same(a.religion, b.religion)) add(10, 'Même religion');
+      if (same(a.timeline, b.timeline)) add(10, 'Même calendrier de projet');
+      if (same(a.familyInvolved, b.familyInvolved)) add(5, 'Même vision de la famille');
       break;
     case 'professionnel':
       if (shared(a.skills, b.skills).length) add(Math.min(20, shared(a.skills, b.skills).length * 10), 'Compétences communes');
       if (same(a.sector, b.sector)) add(10, 'Même secteur');
       if (same(a.goal, b.goal)) add(10, 'Même objectif');
+      if (shared(a.offering, b.skills).length || shared(b.offering, a.skills).length) add(10, 'Offre et besoin complémentaires');
+      if (same(a.proFormat, b.proFormat)) add(5, 'Même format de rencontre');
       if (PRO_COMPLEMENTS[a.goal]?.includes(b.goal)) add(15, 'Objectifs complémentaires');
       break;
     case 'amical':
       if (shared(a.activities, b.activities).length) add(Math.min(20, shared(a.activities, b.activities).length * 10), 'Activités communes');
       if (same(a.availability, b.availability)) add(10, 'Mêmes disponibilités');
+      if (same(a.meetFormat, b.meetFormat)) add(5, 'Même format de rencontre');
       break;
     case 'amoureux':
       if (same(a.looking, b.looking)) add(15, 'Même recherche');
       if (same(a.smoker, b.smoker)) add(5, 'Même rapport au tabac');
+      if (same(a.lifestyle, b.lifestyle)) add(10, 'Même style de vie');
+      if (shared(a.values, b.values).length) add(Math.min(15, shared(a.values, b.values).length * 8), 'Valeurs communes');
       break;
     case 'sans-lendemain':
       if (same(a.expectations, b.expectations)) add(15, 'Mêmes attentes');
       if (same(a.discretion, b.discretion)) add(10, 'Même niveau de discrétion');
+      if (same(a.meetPlace, b.meetPlace)) add(5, 'Même préférence de lieu');
       if (a.tonight && b.tonight) add(10, 'Tous deux disponibles ce soir');
       break;
     default:
