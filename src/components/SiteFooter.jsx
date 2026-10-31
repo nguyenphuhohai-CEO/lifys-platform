@@ -3,7 +3,7 @@ import LanguageSwitcher from './LanguageSwitcher';
 import { setConsent } from '../lib/consent';
 import { useI18n } from '../i18n';
 
-export default function SiteFooter({ ads }) {
+export default function SiteFooter({ ads, analytics }) {
   const { t } = useI18n();
 
   return (
@@ -13,7 +13,7 @@ export default function SiteFooter({ ads }) {
         <a href="/cgu">{t('CGU')}</a>
         <a href="/confidentialite">{t('Confidentialité')}</a>
         <a href="/mentions-legales">{t('Mentions légales')}</a>
-        {ads ? <button type="button" className="link-button" onClick={() => setConsent(null)}>{t('Gérer les cookies')}</button> : null}
+        {ads || analytics ? <button type="button" className="link-button" onClick={() => setConsent(null)}>{t('Gérer les cookies')}</button> : null}
         <LanguageSwitcher />
       </nav>
     </footer>

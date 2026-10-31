@@ -22,6 +22,7 @@ import ExpiryNotice from './components/ExpiryNotice';
 import AdminPanel from './components/AdminPanel';
 import PricingPanel, { AdSlot } from './components/Pricing';
 import ConsentBanner from './components/ConsentBanner';
+import { loadAnalytics, useConsent } from './lib/consent';
 import ToastRegion from './components/ToastRegion';
 import { defaultProfile } from './data/demoData';
 import LanguageSwitcher from './components/LanguageSwitcher';
@@ -151,6 +152,8 @@ function App({ site, dedicated = false }) {
   const [plans, setPlans] = useState([]);
   const [checkoutAvailable, setCheckoutAvailable] = useState(false);
   const [ads, setAds] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+  const consent = useConsent();
   const [photoUploading, setPhotoUploading] = useState(false);
   const [billingBusy, setBillingBusy] = useState(false);
   const [reportTarget, setReportTarget] = useState(null);
@@ -364,10 +367,15 @@ function App({ site, dedicated = false }) {
   const isPremium = currentUser?.profile?.plan === 'premium';
 
   useEffect(() => {
+    if (analytics?.id && consent === 'granted') loadAnalytics(analytics.id);
+  }, [analytics, consent]);
+
+  useEffect(() => {
     api.getPlans().then((data) => {
       setPlans(data.plans);
       setCheckoutAvailable(data.checkoutAvailable);
       setAds(data.ads || null);
+      setAnalytics(data.analytics || null);
     }).catch(() => {});
   }, []);
 
@@ -845,7 +853,7 @@ function App({ site, dedicated = false }) {
             </div>
           </section>
         </main>
-        <><ConsentBanner ads={ads} hidden={isPremium} /><SiteFooter ads={ads} /></>
+        <><ConsentBanner ads={ads} analytics={analytics} hidden={isPremium} /><SiteFooter ads={ads} analytics={analytics} /></>
       </div>
     );
   }
@@ -1470,7 +1478,7 @@ function App({ site, dedicated = false }) {
         </div>
       ) : null}
 
-      <><ConsentBanner ads={ads} hidden={isPremium} /><SiteFooter ads={ads} /></>
+      <><ConsentBanner ads={ads} analytics={analytics} hidden={isPremium} /><SiteFooter ads={ads} analytics={analytics} /></>
     </div>
   );
 }

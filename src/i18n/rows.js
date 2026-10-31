@@ -677,5 +677,7 @@ export const ROWS = [
   ['R?seaux sociaux', 'Social networks', 'Redes sociales', 'M?ng x? h?i'],
   ['Liens publics visibles sur votre profil. Collez l?adresse compl?te (https://?) de votre page.', 'Public links shown on your profile. Paste the full address (https://?) of your page.', 'Enlaces p?blicos visibles en tu perfil. Pega la direcci?n completa (https://?) de tu p?gina.', 'Li?n k?t c?ng khai hi?n th? tr?n h? s?. D?n ??a ch? ??y ?? (https://?) c?a trang b?n.'],
   ['Se souvenir de mon e-mail sur cet appareil', 'Remember my email on this device', 'Recordar mi correo en este dispositivo', 'Ghi nh? email tr?n thi?t b? n?y'],
+  ['Cookies et mesure d’audience', 'Cookies and audience measurement', 'Cookies y medición de audiencia', 'Cookie và đo lường lượng truy cập'],
+  ['Avec votre accord, nous mesurons aussi l’audience du site (pages vues, anonymisées) pour l’améliorer.', 'With your consent, we also measure site audience (anonymized page views) to improve it.', 'Con tu consentimiento, también medimos la audiencia del sitio (páginas vistas anonimizadas) para mejorarlo.', 'Khi bạn đồng ý, chúng tôi cũng đo lường lượng truy cập (lượt xem ẩn danh) để cải thiện trang.'],
 ];
 

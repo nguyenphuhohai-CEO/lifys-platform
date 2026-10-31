@@ -68,6 +68,7 @@ export function getConfig(overrides = {}) {
       intervalHours: Number(overrides.BACKUP_INTERVAL_HOURS ?? process.env.BACKUP_INTERVAL_HOURS ?? (isProduction ? 24 : 0)) || 0,
       keep: Math.max(1, Number(overrides.BACKUP_KEEP ?? process.env.BACKUP_KEEP ?? 14) || 14),
     },
+    analyticsId: (/^G-[A-Z0-9]{4,20}$/.test(`${overrides.GA_MEASUREMENT_ID ?? process.env.GA_MEASUREMENT_ID ?? ''}`.trim()) ? `${overrides.GA_MEASUREMENT_ID ?? process.env.GA_MEASUREMENT_ID}`.trim() : ''),
     ads: {
       client: `${overrides.ADSENSE_CLIENT_ID ?? process.env.ADSENSE_CLIENT_ID ?? ''}`.trim(),
       slot: `${overrides.ADSENSE_SLOT_ID ?? process.env.ADSENSE_SLOT_ID ?? ''}`.trim(),

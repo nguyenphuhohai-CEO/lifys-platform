@@ -32,6 +32,21 @@ export function useConsent() {
   return consent;
 }
 
+let analyticsLoaded = false;
+
+export function loadAnalytics(id) {
+  if (analyticsLoaded || !/^G-[A-Z0-9]{4,20}$/.test(id)) return;
+  analyticsLoaded = true;
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function gtag() { window.dataLayer.push(arguments); };
+  window.gtag('js', new Date());
+  window.gtag('config', id, { anonymize_ip: true, allow_google_signals: false, allow_ad_personalization_signals: false });
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`;
+  document.head.appendChild(script);
+}
+
 let scriptPromise = null;
 
 export function loadAdsScript(client) {

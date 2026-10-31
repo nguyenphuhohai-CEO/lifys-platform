@@ -1,4 +1,4 @@
-﻿import React, { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import SiteFooter from '../components/SiteFooter';
 import { useI18n } from '../i18n';
 
@@ -34,7 +34,7 @@ const PAGES = {
       ['5. Destinataires', 'Les autres membres voient votre profil public (prénom, âge, ville, bio, centres d’intérêt, photo, catégorie), jamais votre e-mail. Nos prestataires techniques (hébergement, envoi d’e-mails, paiement par Stripe) traitent les données uniquement pour notre compte. Aucune donnée n’est vendue.'],
       ['6. Durée de conservation', 'Les données sont conservées tant que le compte est actif et supprimées à sa suppression. Les comptes inactifs pendant plus de 3 ans peuvent être supprimés.'],
       ['7. Vos droits', 'Accès, rectification, effacement, portabilité, limitation et opposition. Depuis la page Profil, vous pouvez télécharger vos données et supprimer votre compte. Pour toute autre demande : {contact}. Vous pouvez saisir la CNIL (www.cnil.fr).'],
-      ['8. Cookies et stockage local', 'Les publicités de l’offre Gratuite sont actuellement des encarts internes à Lifys, sans cookie publicitaire ni traceur ; tout réseau publicitaire tiers ne sera activé qu’avec votre consentement préalable. Un jeton de session et votre choix de langue sont conservés dans le stockage local de votre navigateur pour vous maintenir connecté.'],
+      ['8. Cookies et stockage local', 'Les publicités de l’offre Gratuite sont actuellement des encarts internes à Lifys, sans cookie publicitaire ni traceur ; tout réseau publicitaire tiers et tout outil de mesure d’audience (Google Analytics, IP anonymisée) ne sont activés qu’avec votre consentement préalable, que vous pouvez retirer à tout moment via « Gérer les cookies ». Un jeton de session et votre choix de langue sont conservés dans le stockage local de votre navigateur pour vous maintenir connecté.'],
       ['9. Sécurité', 'Connexion chiffrée (HTTPS), mots de passe hachés, limitation des tentatives de connexion et accès restreint aux données.'],
       ['10. Informations facultatives par site', 'Selon le site, vous pouvez renseigner des champs facultatifs (situation, enfants, tabac, religion, valeurs, métier, compétences, lien LinkedIn…). Certains peuvent révéler des données sensibles (religion, vie intime) : ils ne sont traités qu’avec votre consentement explicite, donné en les renseignant, visibles par les autres membres du même site, et modifiables ou supprimables à tout moment depuis la page Profil. Un score de compatibilité est calculé automatiquement à partir de ces champs ; il n’a aucun effet juridique.'],
       ['11. Compte unique', 'Un même compte (e-mail et mot de passe) donne accès aux 5 sites Lifys ; chaque site conserve son propre profil et ses propres interactions. La suppression du compte efface les données de tous les sites.'],

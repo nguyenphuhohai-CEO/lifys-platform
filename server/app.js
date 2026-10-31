@@ -98,9 +98,13 @@ export function createApp(config) {
     next();
   });
   const adsEnabled = Boolean(config.ads?.client);
+  const analyticsId = config.analyticsId || '';
+  const gaScript = analyticsId ? ' https://www.googletagmanager.com' : '';
+  const gaConnect = analyticsId ? ' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com' : '';
+  const gaImg = analyticsId ? ' https://*.google-analytics.com https://*.googletagmanager.com' : '';
   const csp = adsEnabled
-    ? "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.adtrafficquality.google; connect-src 'self' https://*.googlesyndication.com https://*.google.com https://*.adtrafficquality.google; frame-src https://*.googlesyndication.com https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-    : "default-src 'self'; img-src 'self' data: https://images.unsplash.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+    ? `default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.adtrafficquality.google${gaScript}; connect-src 'self' https://*.googlesyndication.com https://*.google.com https://*.adtrafficquality.google${gaConnect}; frame-src https://*.googlesyndication.com https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
+    : `default-src 'self'; img-src 'self' data: https://images.unsplash.com${gaImg}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'${gaScript}; connect-src 'self'${gaConnect}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`;
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -398,6 +402,7 @@ export function createApp(config) {
   app.get('/api/billing/plans', (_req, res) => {
     res.json({ plans: getPlans(config), checkoutAvailable: billingConfigured(),
       ads: adsEnabled ? { client: config.ads.client, slot: config.ads.slot } : null,
+      analytics: analyticsId ? { id: analyticsId } : null,
     });
   });
 
