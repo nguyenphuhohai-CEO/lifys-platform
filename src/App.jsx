@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Avatar from './components/Avatar';
 import { EventsPanel, FeedPanel, LikesPanel, SelectionPanel, TonightPanel } from './components/Community';
 import { GalleryManager, PhotoStrip } from './components/Gallery';
-import Onboarding from './components/Onboarding';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
 import SwipeDeck from './components/SwipeDeck';
 import { ICEBREAKERS } from './data/icebreakers';
@@ -19,7 +18,8 @@ function createVideoRoomLink() {
 import SiteFooter from './components/SiteFooter';
 import SiteRail from './components/SiteRail';
 import ExpiryNotice from './components/ExpiryNotice';
-import AdminPanel from './components/AdminPanel';
+const AdminPanel = lazy(() => import('./components/AdminPanel'));
+const Onboarding = lazy(() => import('./components/Onboarding'));
 import PricingPanel, { AdSlot } from './components/Pricing';
 import Referral from './components/Referral';
 import PushToggle from './components/PushToggle';
@@ -1351,7 +1351,7 @@ function App({ site, dedicated = false }) {
           </section>
         )}
 
-        {view === 'admin' && currentUser.isAdmin ? <AdminPanel token={token} onError={handleApiError} /> : null}
+        {view === 'admin' && currentUser.isAdmin ? <Suspense fallback={null}><AdminPanel token={token} onError={handleApiError} /></Suspense> : null}
 
         {view === 'pricing' && (
           <section className="content-panel">
@@ -1472,7 +1472,7 @@ function App({ site, dedicated = false }) {
       </main>
 
       {onboardingOpen ? (
-        <Onboarding token={token} site={site} brand={siteInfo.brand} profile={profile} t={t} onDone={handleOnboardingDone} onSkip={closeOnboarding} onError={handleApiError} />
+        <Suspense fallback={null}><Onboarding token={token} site={site} brand={siteInfo.brand} profile={profile} t={t} onDone={handleOnboardingDone} onSkip={closeOnboarding} onError={handleApiError} /></Suspense>
       ) : null}
 
       {reportTarget ? (

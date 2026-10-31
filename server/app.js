@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import compression from 'compression';
 import express from 'express';
 
 import {
@@ -78,6 +79,7 @@ export function createApp(config) {
     }
   });
 
+  app.use(compression());
   app.use(express.json({ limit: '100kb' }));
 
   // Déploiement dédié à un seul site : le site est imposé côté serveur.
