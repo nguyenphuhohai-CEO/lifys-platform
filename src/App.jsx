@@ -139,10 +139,12 @@ function App({ site, dedicated = false }) {
     }
     api.getAuthProviders().then((data) => setProviders(data.providers ?? {})).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [authMode, setAuthMode] = useState('register');
+  const rememberedEmail = (() => { try { return localStorage.getItem('lifys-remembered-email') ?? ''; } catch { return ''; } })();
+  const [rememberEmail, setRememberEmail] = useState(Boolean(rememberedEmail));
+  const [authMode, setAuthMode] = useState(rememberedEmail ? 'login' : 'register');
   const [authForm, setAuthForm] = useState({
     name: '',
-    email: '',
+    email: rememberedEmail,
     password: '',
     acceptTerms: false,
   });
@@ -440,6 +442,10 @@ function App({ site, dedicated = false }) {
         ? await api.register({ ...authForm, mode: site, lang })
         : await api.login({ email: authForm.email, password: authForm.password, site });
 
+      try {
+        if (rememberEmail) localStorage.setItem('lifys-remembered-email', authForm.email.trim());
+        else localStorage.removeItem('lifys-remembered-email');
+      } catch { /* stockage indisponible */ }
       setToken(response.token);
       setCurrentUser(response.user);
       setView('profile');
@@ -805,11 +811,15 @@ function App({ site, dedicated = false }) {
                 ) : null}
                 <label>
                   <span>{t('E-mail')}</span>
-                  <input type="email" value={authForm.email} onChange={(event) => setAuthForm((current) => ({ ...current, email: event.target.value }))} />
+                  <input type="email" name="email" autoComplete={authMode === 'login' ? 'username' : 'email'} value={authForm.email} onChange={(event) => setAuthForm((current) => ({ ...current, email: event.target.value }))} />
                 </label>
                 <label>
                   <span>{t('Mot de passe')}</span>
-                  <input type="password" value={authForm.password} onChange={(event) => setAuthForm((current) => ({ ...current, password: event.target.value }))} />
+                  <input type="password" name="password" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} value={authForm.password} onChange={(event) => setAuthForm((current) => ({ ...current, password: event.target.value }))} />
+                </label>
+                <label className="consent-row">
+                  <input type="checkbox" checked={rememberEmail} onChange={(event) => setRememberEmail(event.target.checked)} />
+                  <span>{t('Se souvenir de mon e-mail sur cet appareil')}</span>
                 </label>
                 {authMode === 'register' ? (
                   <label className="consent-row">
