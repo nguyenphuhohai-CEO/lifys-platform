@@ -337,3 +337,7 @@ Renseignez GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET et/ou FACEBOOK_APP_ID/FACEBOOK_
 
 - **Sous-domaines** (même serveur) : ouvrir `amis.`, `love.`, `ephemere.`, `mariage.` ou `pro.` + votre domaine affiche uniquement ce site, sans hub ni lien vers les autres.
 - **Déploiements indépendants** : `SITE_ONLY=<amical|amoureux|sans-lendemain|mariage|professionnel>` verrouille un serveur sur un seul site ; `render.sites.yaml` déclare 5 services Render avec bases, disques et secrets séparés. Les comptes ne sont alors pas partagés entre sites.
+
+## Rappels e-mail
+
+Avec REMINDERS_ENABLED=true (et SMTP_URL), un job envoie au plus un e-mail par 24 h aux membres verifies ayant des messages non lus ou un match qui expire sous 12 h. Chaque e-mail contient un lien de desinscription signe.

@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { createApp } from './app.js';
 import { startBackupSchedule } from './backup.js';
 import { getConfig } from './config.js';
+import { startReminderSchedule } from './reminders.js';
 
 const config = getConfig();
 const { app, database, mailer } = createApp(config);
@@ -18,12 +19,15 @@ const backups = startBackupSchedule(database.db, {
   intervalHours: config.backup.intervalHours,
 });
 
+const reminders = startReminderSchedule({ db: database.db, mailer, config }, config.reminders.intervalHours);
+
 const server = createServer(app).listen(config.port, () => {
   console.log(`Lifys server listening on http://0.0.0.0:${config.port}`);
 });
 
 function shutdown() {
   backups.stop();
+  reminders.stop();
   server.close(() => {
     database.db.close();
     process.exit(0);

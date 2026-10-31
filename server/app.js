@@ -17,6 +17,7 @@ import { createDatabase, sanitizeProfileInput } from './db.js';
 import { applyStripeEvent, createCheckoutSession, createPortalSession, getPlans, verifyStripeSignature } from './billing.js';
 import { buildVerificationEmail } from './email-templates.js';
 import { createMailer } from './mailer.js';
+import { isValidUnsubscribeToken } from './reminders.js';
 import { createOAuth, OAUTH_COOKIE, readCookie } from './oauth.js';
 import { createRateLimiter } from './rate-limit.js';
 import { createSelfieStore, createUploadStore, detectImageType, MAX_UPLOAD_BYTES, ownUploadPattern, UPLOAD_MIME_TYPES } from './uploads.js';
@@ -287,6 +288,15 @@ export function createApp(config) {
     res.setHeader('Set-Cookie', `${OAUTH_COOKIE}=; Path=/api/auth/oauth; Max-Age=0; HttpOnly; SameSite=Lax`);
     res.redirect(`${config.appUrl}/${site}#oauth_error=${code}`);
   };
+
+  app.get('/api/reminders/unsubscribe', (req, res) => {
+    const userId = Number(req.query.u);
+    if (!Number.isInteger(userId) || !isValidUnsubscribeToken(config, userId, req.query.t)) {
+      return res.status(400).type('text/plain').send('Lien invalide.');
+    }
+    database.db.prepare('UPDATE users SET reminders_off = 1 WHERE email = (SELECT email FROM users WHERE id = ?)').run(userId);
+    return res.type('text/html').send('<!doctype html><meta charset="utf-8"><title>Lifys</title><p style="font-family:sans-serif;margin:3rem auto;max-width:30rem">Vous ne recevrez plus de rappels par e-mail. / You will no longer receive reminder e-mails.</p>');
+  });
 
   app.get('/api/auth/providers', (_req, res) => {
     res.json({ providers: oauth.providers() });

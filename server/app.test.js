@@ -27,6 +27,7 @@ async function startTestServer(extraConfig = {}) {
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     mailer,
+    config,
     database,
     async close() {
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -782,6 +783,36 @@ test('robots, sitemap and per-site manifest are served', async () => {
     if (manifest.headers.get('content-type')?.includes('manifest')) {
       assert.equal((await manifest.json()).name, 'Lifys Pro');
     }
+  } finally {
+    await server.close();
+  }
+});
+test('reminder e-mails are sent for unread messages and unsubscribe works', async () => {
+  const { runReminders, unsubscribeToken } = await import('./reminders.js');
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false' });
+  try {
+    const a = await registerUser(server.baseUrl, 'ra@example.com', { mode: 'amical' });
+    const sentBefore = server.mailer.sent.length;
+    const deps = { db: server.database.db, mailer: server.mailer, config: server.config };
+    assert.equal(await runReminders(deps), 0);
+    assert.equal(server.mailer.sent.length, sentBefore);
+    await registerUser(server.baseUrl, 'rb@example.com', { mode: 'amical' });
+    const db = server.database.db;
+    const id = db.prepare('SELECT id FROM users WHERE email = ?').get('ra@example.com').id;
+    const other = db.prepare('SELECT id FROM users WHERE email = ?').get('rb@example.com').id;
+    const stamp = new Date().toISOString();
+    const matchId = db.prepare('INSERT INTO matches (public_id, pair_key, user_one_id, user_two_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)').run('m1', `${id}:${other}`, id, other, 'test', stamp).lastInsertRowid;
+    const convId = db.prepare('INSERT INTO conversations (public_id, match_id, created_at) VALUES (?, ?, ?)').run('c1', matchId, stamp).lastInsertRowid;
+    db.prepare('INSERT INTO messages (public_id, conversation_id, sender_user_id, content, created_at) VALUES (?, ?, ?, ?, ?)').run('msg1', convId, other, 'salut', stamp);
+    assert.ok(await runReminders(deps) >= 1);
+    assert.equal(server.mailer.sent.at(-1).to, 'ra@example.com');
+    assert.equal(await runReminders(deps), 0);
+    const bad = await fetch(`${server.baseUrl}/api/reminders/unsubscribe?u=${id}&t=bad`);
+    assert.equal(bad.status, 400);
+    const ok = await fetch(`${server.baseUrl}/api/reminders/unsubscribe?u=${id}&t=${unsubscribeToken(server.config, id)}`);
+    assert.equal(ok.status, 200);
+    assert.equal(server.database.db.prepare('SELECT reminders_off FROM users WHERE id = ?').get(id).reminders_off, 1);
+    assert.ok(a);
   } finally {
     await server.close();
   }

@@ -431,7 +431,7 @@ export function createDatabase(databaseFile, options = {}) {
   }
   db.exec('UPDATE users SET email_verified_at = created_at WHERE is_demo = 1 AND email_verified_at IS NULL');
   const lateUserColumns = new Set(db.prepare('PRAGMA table_info(users)').all().map((column) => column.name));
-  for (const [column, definition] of [['selfie_status', "TEXT NOT NULL DEFAULT 'none'"], ['selfie_file', 'TEXT']]) {
+  for (const [column, definition] of [['selfie_status', "TEXT NOT NULL DEFAULT 'none'"], ['selfie_file', 'TEXT'], ['reminders_off', 'INTEGER NOT NULL DEFAULT 0'], ['last_reminder_at', 'TEXT']]) {
     if (!lateUserColumns.has(column)) db.exec(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
   }
   const lateProfileColumns = new Set(db.prepare('PRAGMA table_info(profiles)').all().map((column) => column.name));
