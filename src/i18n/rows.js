@@ -682,5 +682,16 @@ export const ROWS = [
   ['À propos', 'About', 'Acerca de', 'Giới thiệu'],
   ['Aide', 'Help', 'Ayuda', 'Trợ giúp'],
   ['Sécurité', 'Safety', 'Seguridad', 'An toàn'],
+  ['Niveau d’expérience', 'Experience level', 'Nivel de experiencia', 'Cấp độ kinh nghiệm'],
+  ['Junior (0-2 ans)', 'Junior (0-2 years)', 'Junior (0-2 años)', 'Mới vào nghề (0-2 năm)'],
+  ['Confirmé (3-7 ans)', 'Mid-level (3-7 years)', 'Intermedio (3-7 años)', 'Trung cấp (3-7 năm)'],
+  ['Senior (8 ans et +)', 'Senior (8+ years)', 'Senior (8 años o más)', 'Cao cấp (từ 8 năm)'],
+  ['Dirigeant / Fondateur', 'Executive / Founder', 'Directivo / Fundador', 'Lãnh đạo / Nhà sáng lập'],
+  ['Disponibilité', 'Availability', 'Disponibilidad', 'Khả năng sẵn sàng'],
+  ['Ouvert aux opportunités', 'Open to opportunities', 'Abierto a oportunidades', 'Sẵn sàng đón cơ hội'],
+  ['En poste, à l’écoute', 'Employed, listening', 'Empleado, atento', 'Đang đi làm, sẵn sàng lắng nghe'],
+  ['Non disponible', 'Not available', 'No disponible', 'Không sẵn sàng'],
+  ['Formation', 'Education', 'Formación', 'Học vấn'],
+  ['Parcours et réalisations', 'Background and achievements', 'Trayectoria y logros', 'Quá trình và thành tựu'],
 ];
 

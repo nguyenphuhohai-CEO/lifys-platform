@@ -62,7 +62,7 @@ const CARD_FIELDS = {
   amical: ['availability', 'activities'],
   'sans-lendemain': ['expectations', 'discretion'],
   mariage: ['religion', 'childrenPlan', 'relocate', 'values'],
-  professionnel: ['job', 'company', 'sector', 'goal', 'skills'],
+  professionnel: ['job', 'company', 'seniority', 'openTo', 'sector', 'goal', 'skills'],
 };
 
 export function DetailChips({ person, t }) {
@@ -91,6 +91,12 @@ export function DetailChips({ person, t }) {
           <strong>{t(details.promptQ)}</strong>
           <span>{details.promptA}</span>
         </blockquote>
+      ) : null}
+      {details.education || details.experience ? (
+        <p className="profile-cv">
+          {details.education ? <strong>🎓 {details.education}</strong> : null}
+          {details.experience ? <span>{details.experience}</span> : null}
+        </p>
       ) : null}
       {chips.length ? (
         <div className="interest-row detail-row">

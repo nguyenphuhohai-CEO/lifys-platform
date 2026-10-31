@@ -817,3 +817,11 @@ test('reminder e-mails are sent for unread messages and unsubscribe works', asyn
     await server.close();
   }
 });
+
+test('pro CV fields are whitelisted', async () => {
+  const { sanitizeDetails } = await import('../src/data/siteFields.js');
+  const out = sanitizeDetails('professionnel', { seniority: 'Senior (8 ans et +)', openTo: 'hack', experience: 'Dirigé 3 équipes', education: 'MSc' });
+  assert.equal(out.seniority, 'Senior (8 ans et +)');
+  assert.equal(out.openTo, undefined);
+  assert.equal(out.experience, 'Dirigé 3 équipes');
+});

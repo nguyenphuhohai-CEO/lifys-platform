@@ -1379,3 +1379,6 @@ textarea:focus-visible {
 
 .social-login { display: grid; gap: 0.5rem; margin-bottom: 1rem; }
 .social-button { text-align: center; text-decoration: none; display: block; }
+
+.profile-cv { display: grid; gap: 4px; margin: 8px 0; font-size: 0.92rem; }
+.profile-cv span { color: var(--muted); }
