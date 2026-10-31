@@ -779,5 +779,9 @@ export const ROWS = [
   ['Pour toute question, un signalement ou une demande relative à vos données (accès, rectification, suppression), écrivez-nous : {contact}', 'For any question, report or data request (access, correction, deletion), write to us: {contact}', 'Para cualquier duda, denuncia o solicitud sobre tus datos (acceso, rectificación, supresión), escríbenos: {contact}', 'Mọi câu hỏi, báo cáo hoặc yêu cầu về dữ liệu (truy cập, chỉnh sửa, xóa), hãy viết cho chúng tôi: {contact}'],
   ['Délai de réponse', 'Response time', 'Plazo de respuesta', 'Thời gian phản hồi'],
   ['Nous répondons sous 48 heures ouvrées.', 'We reply within 48 business hours.', 'Respondemos en 48 horas laborables.', 'Chúng tôi phản hồi trong 48 giờ làm việc.'],
+  ['Parrainez vos amis', 'Invite your friends', 'Invita a tus amigos', 'Mời bạn bè'],
+  ['Vous et votre filleul recevez {days} jours de Premium offerts à son inscription ({count}/{max} parrainages).', 'You and your invitee each get {days} free days of Premium when they sign up ({count}/{max} referrals).', 'Tú y tu invitado recibís {days} días de Premium gratis cuando se registre ({count}/{max} invitaciones).', 'Bạn và người được mời đều nhận {days} ngày Premium miễn phí khi họ đăng ký ({count}/{max} lượt giới thiệu).'],
+  ['Lien d’invitation', 'Invitation link', 'Enlace de invitación', 'Liên kết mời'],
+  ['Copier', 'Copy', 'Copiar', 'Sao chép'],
 ];
 

@@ -21,6 +21,7 @@ import SiteRail from './components/SiteRail';
 import ExpiryNotice from './components/ExpiryNotice';
 import AdminPanel from './components/AdminPanel';
 import PricingPanel, { AdSlot } from './components/Pricing';
+import Referral from './components/Referral';
 import ConsentBanner from './components/ConsentBanner';
 import { loadAnalytics, useConsent } from './lib/consent';
 import ToastRegion from './components/ToastRegion';
@@ -1358,6 +1359,7 @@ function App({ site, dedicated = false }) {
               title={t('Choisissez votre formule')}
               description={t('Restez gratuitement avec des publicités, ou passez à Premium pour une expérience sans publicité.')}
             />
+            <Referral token={token} />
             <PricingPanel
               plans={plans}
               checkoutAvailable={checkoutAvailable}

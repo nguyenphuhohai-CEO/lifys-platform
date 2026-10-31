@@ -1,5 +1,10 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
+try {
+  const ref = new URLSearchParams(window.location.search).get('ref');
+  if (ref && /^user-[0-9a-f-]{12}$/.test(ref)) localStorage.setItem('lifys-ref', ref);
+} catch { /* stockage indisponible */ }
+
 export class ApiError extends Error {
   constructor(message, status, details) {
     super(message);
@@ -44,7 +49,9 @@ export const api = {
     return apiRequest('/api/health');
   },
   register(payload) {
-    return apiRequest('/api/auth/register', { method: 'POST', body: payload });
+    let ref;
+    try { ref = localStorage.getItem('lifys-ref') || undefined; } catch { /* stockage indisponible */ }
+    return apiRequest('/api/auth/register', { method: 'POST', body: { ...payload, ref } });
   },
   login(payload) {
     return apiRequest('/api/auth/login', { method: 'POST', body: payload });
@@ -188,6 +195,9 @@ export const api = {
   },
   getAdminStats(token) {
     return apiRequest('/api/admin/stats', { token });
+  },
+  getReferral(token) {
+    return apiRequest('/api/referral', { token });
   },
   getEvents(token) {
     return apiRequest('/api/events', { token });

@@ -241,6 +241,10 @@ export function createApp(config) {
         termsVersion: TERMS_VERSION,
       });
 
+      if (typeof req.body.ref === 'string') {
+        database.applyReferral(created.userId, req.body.ref);
+      }
+
       if (config.requireEmailVerification) {
         try {
           await sendVerificationEmail(created.userId, email, req.body.lang);
@@ -300,6 +304,10 @@ export function createApp(config) {
 
   const familyToken = (profileId) => crypto.createHmac('sha256', config.jwtSecret).update(`family:${profileId}`).digest('hex').slice(0, 32);
   const escapeHtml = (value) => `${value ?? ''}`.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+  app.get('/api/referral', requireAuth, (req, res) => {
+    res.json(database.referralStats(req.auth.userId));
+  });
 
   app.get('/api/family/link', requireAuth, requireVerified, (req, res) => {
     const profile = database.getProfileByUserId(req.auth.userId);

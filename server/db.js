@@ -18,6 +18,9 @@ function now() {
   return new Date().toISOString();
 }
 
+const REFERRAL_DAYS = 7;
+const REFERRAL_MAX = 10;
+
 function createPublicId(prefix) {
   return `${prefix}-${crypto.randomUUID().slice(0, 12)}`;
 }
@@ -431,7 +434,7 @@ export function createDatabase(databaseFile, options = {}) {
   }
   db.exec('UPDATE users SET email_verified_at = created_at WHERE is_demo = 1 AND email_verified_at IS NULL');
   const lateUserColumns = new Set(db.prepare('PRAGMA table_info(users)').all().map((column) => column.name));
-  for (const [column, definition] of [['selfie_status', "TEXT NOT NULL DEFAULT 'none'"], ['selfie_file', 'TEXT'], ['reminders_off', 'INTEGER NOT NULL DEFAULT 0'], ['last_reminder_at', 'TEXT']]) {
+  for (const [column, definition] of [['selfie_status', "TEXT NOT NULL DEFAULT 'none'"], ['selfie_file', 'TEXT'], ['reminders_off', 'INTEGER NOT NULL DEFAULT 0'], ['last_reminder_at', 'TEXT'], ['referred_by', 'TEXT']]) {
     if (!lateUserColumns.has(column)) db.exec(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
   }
   const lateProfileColumns = new Set(db.prepare('PRAGMA table_info(profiles)').all().map((column) => column.name));
@@ -713,6 +716,39 @@ export function createDatabase(databaseFile, options = {}) {
       userId: userResult.lastInsertRowid,
       profile: getProfileByUserId(userResult.lastInsertRowid),
     };
+  }
+
+  function grantPremiumDays(email, days) {
+    const rows = db.prepare('SELECT plan, plan_until FROM users WHERE email = ?').all(email);
+    if (rows.some((row) => row.plan === 'premium' && !row.plan_until)) {
+      return false;
+    }
+    const base = rows.reduce((max, row) => Math.max(max, row.plan_until ? new Date(row.plan_until).getTime() : 0), Date.now());
+    const until = new Date(Math.max(base, Date.now()) + days * 24 * 3600 * 1000).toISOString();
+    db.prepare("UPDATE users SET plan = 'premium', plan_until = ? WHERE email = ?").run(until, email);
+    return true;
+  }
+
+  function referralStats(userId) {
+    const me = db.prepare('SELECT public_id FROM users WHERE id = ?').get(userId);
+    const rewarded = db.prepare('SELECT COUNT(DISTINCT email) AS n FROM users WHERE referred_by = ?').get(me.public_id).n;
+    return { code: me.public_id, rewarded, max: REFERRAL_MAX, days: REFERRAL_DAYS };
+  }
+
+  // Parrainage : 7 jours Premium pour le parrain et le filleul, 10 filleuls maximum par parrain.
+  function applyReferral(newUserId, code) {
+    const referrer = db.prepare('SELECT id, email, public_id FROM users WHERE public_id = ? AND is_demo = 0 AND status = ?').get(`${code ?? ''}`.slice(0, 40), 'active');
+    const newcomer = db.prepare('SELECT email FROM users WHERE id = ?').get(newUserId);
+    if (!referrer || !newcomer || referrer.email === newcomer.email) {
+      return false;
+    }
+    if (referralStats(referrer.id).rewarded >= REFERRAL_MAX) {
+      return false;
+    }
+    db.prepare('UPDATE users SET referred_by = ? WHERE id = ?').run(referrer.public_id, newUserId);
+    grantPremiumDays(newcomer.email, REFERRAL_DAYS);
+    grantPremiumDays(referrer.email, REFERRAL_DAYS);
+    return true;
   }
 
   // Un compte = un e-mail et un mot de passe ; chaque site en tient un profil distinct.
@@ -1447,6 +1483,8 @@ export function createDatabase(databaseFile, options = {}) {
     getProfileByPublicId,
     updateUserProfile,
     listDiscoveryProfiles,
+    applyReferral,
+    referralStats,
     boostProfile,
     submitSelfie,
     listPendingSelfies,

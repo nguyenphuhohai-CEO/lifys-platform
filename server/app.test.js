@@ -899,3 +899,23 @@ test('admin stats require admin and return per-site data', async () => {
     await server.close();
   }
 });
+
+test('referral grants premium days to both accounts, once per newcomer', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false' });
+  try {
+    const host = await registerUser(server.baseUrl, 'host@example.com', { mode: 'amical' });
+    const info = await request(server.baseUrl, '/api/referral', { headers: host.auth });
+    assert.equal(info.status, 200);
+    const res = await request(server.baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'guest@example.com', password: 'password123', name: 'Guest', mode: 'amical', acceptTerms: true, ref: info.body.code }),
+    });
+    assert.equal(res.status, 201);
+    const rows = server.database.db.prepare("SELECT email, plan FROM users WHERE email IN ('host@example.com','guest@example.com')").all();
+    assert.ok(rows.every((row) => row.plan === 'premium'));
+    const after = await request(server.baseUrl, '/api/referral', { headers: host.auth });
+    assert.equal(after.body.rewarded, 1);
+  } finally {
+    await server.close();
+  }
+});

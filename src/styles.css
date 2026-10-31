@@ -1393,3 +1393,8 @@ textarea:focus-visible {
 
 .admin-stats table { width: 100%; border-collapse: collapse; }
 .admin-stats th, .admin-stats td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); }
+
+.referral-card { margin: 0 0 16px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-md); display: grid; gap: 8px; }
+.referral-card h3 { margin: 0; }
+.referral-row { display: flex; gap: 8px; }
+.referral-row input { flex: 1; min-width: 0; }
