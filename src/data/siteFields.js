@@ -27,6 +27,7 @@ export const SITE_FIELDS = {
     { id: 'discretion', type: 'select', label: 'Discrétion', options: ['Très discret(e)', 'Normale', 'Aucune'] },
     { id: 'meetPlace', type: 'select', label: 'Première rencontre', options: ['Lieu public d’abord', 'Peu importe'] },
     { id: 'consent', type: 'bool', label: 'Je m’engage au respect et au consentement mutuel' },
+    { id: 'blurPhoto', type: 'bool', label: 'Masquer ma photo jusqu’au match' },
     { id: 'tonight', type: 'bool', label: 'Disponible ce soir (actif 12 h)' },
     { id: 'promptQ', type: 'select', label: 'Question de profil', options: ['Mon ambiance idéale','Mes limites claires','Ma soirée parfaite'] },
     { id: 'promptA', type: 'longtext', label: 'Ma réponse' },

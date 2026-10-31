@@ -734,5 +734,6 @@ export const ROWS = [
   ['E-mail de votre proche', 'Your contact’s e-mail', 'Correo de tu allegado', 'E-mail người thân'],
   ['Lieu, heure, prénom de la personne rencontrée…', 'Place, time, first name of the person you meet…', 'Lugar, hora, nombre de la persona…', 'Địa điểm, giờ, tên người bạn gặp…'],
   ['Envoyer l’alerte', 'Send the alert', 'Enviar la alerta', 'Gửi cảnh báo'],
+  ['Masquer ma photo jusqu’au match', 'Hide my photo until we match', 'Ocultar mi foto hasta el match', 'Ẩn ảnh của tôi cho đến khi ghép đôi'],
 ];
 

@@ -850,3 +850,23 @@ test('safety alert emails a trusted contact', async () => {
     await server.close();
   }
 });
+
+test('blurPhoto hides avatar in discovery until match', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false' });
+  try {
+    const a = await registerUser(server.baseUrl, 'ba@example.com', { mode: 'sans-lendemain' });
+    const b = await registerUser(server.baseUrl, 'bb@example.com', { mode: 'sans-lendemain' });
+    const put = (u, details) => request(server.baseUrl, '/api/profile', {
+      method: 'PUT', headers: u.auth,
+      body: JSON.stringify({ name: 'N', age: 30, city: 'Paris', bio: 'Bio', interests: ['x'], mode: 'sans-lendemain', avatar: 'https://example.com/a.jpg', details }),
+    });
+    await put(a, {});
+    await put(b, { blurPhoto: true });
+    const discovery = await request(server.baseUrl, '/api/discovery', { headers: a.auth });
+    const other = discovery.body.profiles.find((p) => p.details?.blurPhoto);
+    assert.ok(other);
+    assert.equal(other.avatar, '');
+  } finally {
+    await server.close();
+  }
+});

@@ -793,6 +793,15 @@ export function createDatabase(databaseFile, options = {}) {
     return getProfileByUserId(userId);
   }
 
+  // La photo d'un profil « flouté » reste masquée tant qu'il n'y a pas de match.
+  function serializeForViewer(viewerId, row) {
+    const profile = serializePublicProfile(row);
+    if (profile.details.blurPhoto && !statements.findMatchByPairKey.get(pairKey(viewerId, row.user_id))) {
+      return { ...profile, avatar: '', photos: [], photoHidden: true };
+    }
+    return profile;
+  }
+
   function listDiscoveryProfiles(userId, filters = {}) {
     const hiddenUserIds = new Set(statements.hiddenTargetIds.all(userId, userId).map((row) => row.id));
     const activeMode = `${filters.activeMode ?? 'all'}`;
@@ -809,7 +818,7 @@ export function createDatabase(databaseFile, options = {}) {
 
     return statements.listProfilesExcludingUser.all({ user_id: userId, include_unverified: requireEmailVerification ? 0 : 1 })
       .filter((row) => !hiddenUserIds.has(row.user_id))
-      .map(serializePublicProfile)
+      .map((row) => serializeForViewer(userId, row))
       .filter((profile) => !siteMode || profile.mode === siteMode)
       .filter((profile) => activeMode === 'all' || profile.mode === activeMode)
       .filter((profile) => !city || profile.city.toLowerCase().includes(city))
