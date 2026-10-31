@@ -735,5 +735,8 @@ export const ROWS = [
   ['Lieu, heure, prénom de la personne rencontrée…', 'Place, time, first name of the person you meet…', 'Lugar, hora, nombre de la persona…', 'Địa điểm, giờ, tên người bạn gặp…'],
   ['Envoyer l’alerte', 'Send the alert', 'Enviar la alerta', 'Gửi cảnh báo'],
   ['Masquer ma photo jusqu’au match', 'Hide my photo until we match', 'Ocultar mi foto hasta el match', 'Ẩn ảnh của tôi cho đến khi ghép đôi'],
+  ['Rendez-vous proposé', 'Meeting proposed', 'Cita propuesta', 'Đề xuất cuộc hẹn'],
+  ['Date du rendez-vous', 'Meeting date', 'Fecha de la cita', 'Ngày hẹn'],
+  ['Proposer un rendez-vous', 'Propose a meeting', 'Proponer una cita', 'Đề xuất cuộc hẹn'],
 ];
 

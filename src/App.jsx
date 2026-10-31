@@ -615,6 +615,16 @@ function App({ site, dedicated = false }) {
     }
   };
 
+  const [meetingAt, setMeetingAt] = useState('');
+  const proposeMeeting = () => {
+    if (!meetingAt) {
+      return;
+    }
+    const when = new Date(meetingAt).toLocaleString(lang === 'en' ? 'en-GB' : lang === 'es' ? 'es-ES' : lang === 'vi' ? 'vi-VN' : 'fr-FR', { dateStyle: 'full', timeStyle: 'short' });
+    handleSendMessage(`📅 ${t('Rendez-vous proposé')} : ${when}\n${createVideoRoomLink()}`);
+    setMeetingAt('');
+  };
+
   const handleSendMessage = async (override) => {
     const text = (typeof override === 'string' ? override : draftMessage).trim();
     if (!text || !selectedConversationData) {
@@ -1309,6 +1319,12 @@ function App({ site, dedicated = false }) {
 
                   <div className="composer">
                     <button type="button" className="secondary-button" title={t('Lancer un appel vidéo')} aria-label={t('Lancer un appel vidéo')} disabled={messageSending} onClick={() => handleSendMessage(createVideoRoomLink())}>📹</button>
+                    {site === 'professionnel' ? (
+                      <span className="meeting-picker">
+                        <input type="datetime-local" aria-label={t('Date du rendez-vous')} value={meetingAt} onChange={(event) => setMeetingAt(event.target.value)} />
+                        <button type="button" className="secondary-button" title={t('Proposer un rendez-vous')} aria-label={t('Proposer un rendez-vous')} disabled={messageSending || !meetingAt} onClick={proposeMeeting}>📅</button>
+                      </span>
+                    ) : null}
                     <input
                       type="text"
                       placeholder={t('Écrire un message…')}

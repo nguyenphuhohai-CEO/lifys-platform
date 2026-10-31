@@ -1385,3 +1385,6 @@ textarea:focus-visible {
 
 .safety-alert { display: grid; gap: 8px; margin: 16px 0; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-md); }
 .safety-alert h3 { margin: 0; }
+
+.meeting-picker { display: flex; gap: 4px; align-items: center; }
+.meeting-picker input { max-width: 190px; }
