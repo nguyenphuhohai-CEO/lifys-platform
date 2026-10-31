@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useI18n } from '../i18n';
 import AdminSelfies from './AdminSelfies';
+import AdminStats from './AdminStats';
 
 const KIND_LABEL = { profile: 'Profil', post: 'Publication', event: 'Sortie' };
 
@@ -47,6 +48,7 @@ export default function AdminPanel({ token, onError }) {
 
   return (
     <>
+    <AdminStats token={token} onError={onError} />
     <AdminSelfies token={token} onError={onError} />
     <section className="content-panel admin-panel">
       <div className="checklist-head">

@@ -186,6 +186,9 @@ export const api = {
   getFamilyLink(token) {
     return apiRequest('/api/family/link', { token });
   },
+  getAdminStats(token) {
+    return apiRequest('/api/admin/stats', { token });
+  },
   getEvents(token) {
     return apiRequest('/api/events', { token });
   },

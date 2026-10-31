@@ -884,3 +884,18 @@ test('family share link is signed and minimal', async () => {
     await server.close();
   }
 });
+
+test('admin stats require admin and return per-site data', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false', ADMIN_EMAILS: 'boss@example.com' });
+  try {
+    const user = await registerUser(server.baseUrl, 'plain@example.com', { mode: 'amical' });
+    const denied = await request(server.baseUrl, '/api/admin/stats', { headers: user.auth });
+    assert.equal(denied.status, 403);
+    const admin = await registerUser(server.baseUrl, 'boss@example.com', { mode: 'amical' });
+    const ok = await request(server.baseUrl, '/api/admin/stats', { headers: admin.auth });
+    assert.equal(ok.status, 200);
+    assert.ok(Array.isArray(ok.body.sites));
+  } finally {
+    await server.close();
+  }
+});

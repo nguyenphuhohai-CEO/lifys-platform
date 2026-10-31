@@ -799,6 +799,34 @@ export function createApp(config) {
     }
   });
 
+  app.get('/api/admin/stats', requireAuth, requireAdmin, (_req, res) => {
+    const db = database.db;
+    const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+    const sites = db.prepare(`
+      SELECT p.mode AS site,
+        COUNT(*) AS profiles,
+        SUM(CASE WHEN p.created_at >= ? THEN 1 ELSE 0 END) AS newThisWeek,
+        SUM(CASE WHEN u.plan = 'premium' THEN 1 ELSE 0 END) AS premium
+      FROM profiles p JOIN users u ON u.id = p.user_id
+      WHERE u.status = 'active' GROUP BY p.mode`).all(since);
+    const matches = db.prepare(`
+      SELECT p.mode AS site, COUNT(*) AS matches,
+        SUM(CASE WHEN (SELECT COUNT(DISTINCT m.sender_user_id) FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.match_id = mt.id) >= 2 THEN 1 ELSE 0 END) AS replied
+      FROM matches mt JOIN profiles p ON p.user_id = mt.user_one_id GROUP BY p.mode`).all();
+    const bySite = new Map(sites.map((row) => [row.site, { ...row, matches: 0, replied: 0 }]));
+    for (const row of matches) {
+      const entry = bySite.get(row.site) ?? { site: row.site, profiles: 0, newThisWeek: 0, premium: 0 };
+      bySite.set(row.site, { ...entry, matches: row.matches, replied: row.replied ?? 0 });
+    }
+    res.json({
+      sites: [...bySite.values()].map((row) => ({
+        ...row,
+        matchRate: row.profiles ? Math.round((row.matches / row.profiles) * 100) : 0,
+        replyRate: row.matches ? Math.round((row.replied / row.matches) * 100) : 0,
+      })),
+    });
+  });
+
   app.get('/api/admin/selfies', requireAuth, requireAdmin, (_req, res) => {
     res.json({ selfies: database.listPendingSelfies().map(({ userId, ...selfie }) => selfie) });
   });

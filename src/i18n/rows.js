@@ -742,5 +742,11 @@ export const ROWS = [
   ['Partagez-le avec votre famille. Aucune photo ni coordonnée n’y figure.', 'Share it with your family. It shows no photo or contact details.', 'Compártelo con tu familia. No muestra fotos ni datos de contacto.', 'Hãy chia sẻ với gia đình. Không có ảnh hay thông tin liên hệ.'],
   ['Lien de partage', 'Sharing link', 'Enlace para compartir', 'Liên kết chia sẻ'],
   ['Partager mon profil à ma famille', 'Share my profile with my family', 'Compartir mi perfil con mi familia', 'Chia sẻ hồ sơ với gia đình'],
+  ['Statistiques', 'Statistics', 'Estadísticas', 'Thống kê'],
+  ['Site', 'Site', 'Sitio', 'Trang'],
+  ['Nouveaux (7 j)', 'New (7 d)', 'Nuevos (7 d)', 'Mới (7 ngày)'],
+  ['Taux de match', 'Match rate', 'Tasa de match', 'Tỷ lệ ghép đôi'],
+  ['Taux de réponse', 'Reply rate', 'Tasa de respuesta', 'Tỷ lệ phản hồi'],
+  ['Impossible de charger les statistiques.', 'Could not load statistics.', 'No se pudieron cargar las estadísticas.', 'Không thể tải thống kê.'],
 ];
 
