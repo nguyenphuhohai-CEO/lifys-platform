@@ -976,8 +976,27 @@ export function createApp(config) {
     res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: ${config.appUrl}/sitemap.xml\n`);
   });
 
+  const SEO_CITIES = {
+    paris: 'Paris', lyon: 'Lyon', marseille: 'Marseille', toulouse: 'Toulouse', nice: 'Nice', nantes: 'Nantes',
+    montpellier: 'Montpellier', strasbourg: 'Strasbourg', bordeaux: 'Bordeaux', lille: 'Lille', rennes: 'Rennes',
+    grenoble: 'Grenoble', dijon: 'Dijon', angers: 'Angers', toulon: 'Toulon', reims: 'Reims', tours: 'Tours',
+    rouen: 'Rouen', caen: 'Caen', metz: 'Metz', nancy: 'Nancy', brest: 'Brest', annecy: 'Annecy', avignon: 'Avignon',
+  };
+
+  app.get('/rencontres/:city', (req, res, next) => {
+    const city = SEO_CITIES[`${req.params.city}`.toLowerCase()];
+    if (!city) {
+      return next();
+    }
+    const base = config.appUrl;
+    const links = Object.values(SITE_BRANDS).map((brand) => `<li><a href="${brand.path}">${escapeHtml(brand.name)}</a></li>`).join('');
+    const title = `Rencontres à ${city} : amitié, amour, mariage, pro · Lifys`;
+    const description = `Faites des rencontres à ${city} sur Lifys : cinq sites distincts pour l’amitié, l’amour, le sans-lendemain, le mariage et le réseau professionnel. Profils modérés, inscription gratuite.`;
+    return res.type('text/html').send(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><meta name="description" content="${escapeHtml(description)}"><link rel="canonical" href="${base}/rencontres/${req.params.city.toLowerCase()}"></head><body><main style="font-family:sans-serif;margin:3rem auto;max-width:36rem;line-height:1.6"><h1>Rencontres à ${escapeHtml(city)}</h1><p>${escapeHtml(description)}</p><ul>${links}</ul><p><a href="/">Créer mon compte gratuitement</a></p><p style="color:#666;font-size:.85rem">18 ans minimum. Les profils sont modérés ; aucune vérification d’identité officielle n’est effectuée.</p></main></body></html>`);
+  });
+
   app.get('/sitemap.xml', (_req, res) => {
-    const paths = ['/', ...Object.values(SITE_BRANDS).map((brand) => brand.path), '/a-propos', '/aide', '/securite', '/contact', '/cgu', '/confidentialite'];
+    const paths = ['/', ...Object.values(SITE_BRANDS).map((brand) => brand.path), ...Object.keys(SEO_CITIES).map((slug) => `/rencontres/${slug}`), '/a-propos', '/aide', '/securite', '/contact', '/cgu', '/confidentialite'];
     res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${paths.map((p) => `  <url><loc>${config.appUrl}${p}</loc></url>`).join('\n')}\n</urlset>\n`);
   });
 

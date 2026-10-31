@@ -945,3 +945,16 @@ test('push subscription requires configured VAPID keys', async () => {
     await on.close();
   }
 });
+
+test('city landing pages are served and listed in the sitemap', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false' });
+  try {
+    const page = await fetch(server.baseUrl + '/rencontres/lyon');
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /Rencontres à Lyon/);
+    const map = await (await fetch(server.baseUrl + '/sitemap.xml')).text();
+    assert.match(map, /\/rencontres\/paris/);
+  } finally {
+    await server.close();
+  }
+});
