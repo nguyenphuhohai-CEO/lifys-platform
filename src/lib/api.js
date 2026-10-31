@@ -183,6 +183,9 @@ export const api = {
   sendSafetyAlert(token, body) {
     return apiRequest('/api/safety/alert', { method: 'POST', token, body });
   },
+  getFamilyLink(token) {
+    return apiRequest('/api/family/link', { token });
+  },
   getEvents(token) {
     return apiRequest('/api/events', { token });
   },

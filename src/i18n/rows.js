@@ -738,5 +738,9 @@ export const ROWS = [
   ['Rendez-vous proposé', 'Meeting proposed', 'Cita propuesta', 'Đề xuất cuộc hẹn'],
   ['Date du rendez-vous', 'Meeting date', 'Fecha de la cita', 'Ngày hẹn'],
   ['Proposer un rendez-vous', 'Propose a meeting', 'Proponer una cita', 'Đề xuất cuộc hẹn'],
+  ['Lien copié', 'Link copied', 'Enlace copiado', 'Đã sao chép liên kết'],
+  ['Partagez-le avec votre famille. Aucune photo ni coordonnée n’y figure.', 'Share it with your family. It shows no photo or contact details.', 'Compártelo con tu familia. No muestra fotos ni datos de contacto.', 'Hãy chia sẻ với gia đình. Không có ảnh hay thông tin liên hệ.'],
+  ['Lien de partage', 'Sharing link', 'Enlace para compartir', 'Liên kết chia sẻ'],
+  ['Partager mon profil à ma famille', 'Share my profile with my family', 'Compartir mi perfil con mi familia', 'Chia sẻ hồ sơ với gia đình'],
 ];
 

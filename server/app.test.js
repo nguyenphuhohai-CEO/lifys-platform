@@ -870,3 +870,17 @@ test('blurPhoto hides avatar in discovery until match', async () => {
     await server.close();
   }
 });
+test('family share link is signed and minimal', async () => {
+  const server = await startTestServer({ SEED_DEMO_DATA: 'false' });
+  try {
+    const u = await registerUser(server.baseUrl, 'fm@example.com', { mode: 'mariage' });
+    const link = await request(server.baseUrl, '/api/family/link', { headers: u.auth });
+    assert.equal(link.status, 200);
+    const page = await fetch(server.baseUrl + link.body.path);
+    assert.equal(page.status, 200);
+    const bad = await fetch(server.baseUrl + link.body.path.slice(0, -2) + '00');
+    assert.equal(bad.status, 404);
+  } finally {
+    await server.close();
+  }
+});

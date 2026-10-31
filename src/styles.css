@@ -1388,3 +1388,5 @@ textarea:focus-visible {
 
 .meeting-picker { display: flex; gap: 4px; align-items: center; }
 .meeting-picker input { max-width: 190px; }
+
+.family-share { margin: 0 0 12px; }

@@ -298,6 +298,32 @@ export function createApp(config) {
     return res.type('text/html').send('<!doctype html><meta charset="utf-8"><title>Lifys</title><p style="font-family:sans-serif;margin:3rem auto;max-width:30rem">Vous ne recevrez plus de rappels par e-mail. / You will no longer receive reminder e-mails.</p>');
   });
 
+  const familyToken = (profileId) => crypto.createHmac('sha256', config.jwtSecret).update(`family:${profileId}`).digest('hex').slice(0, 32);
+  const escapeHtml = (value) => `${value ?? ''}`.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+  app.get('/api/family/link', requireAuth, requireVerified, (req, res) => {
+    const profile = database.getProfileByUserId(req.auth.userId);
+    if (!profile || profile.mode !== 'mariage') {
+      return res.status(403).json({ message: 'Réservé au site Mariage.' });
+    }
+    return res.json({ path: `/famille/${profile.id}/${familyToken(profile.id)}` });
+  });
+
+  app.get('/famille/:id/:token', (req, res) => {
+    const profile = database.getProfileByPublicId(req.params.id);
+    const given = Buffer.from(`${req.params.token}`);
+    const expected = Buffer.from(familyToken(req.params.id));
+    if (!profile || profile.mode !== 'mariage' || given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
+      return res.status(404).type('text/plain').send('Lien invalide.');
+    }
+    const details = Object.entries(profile.details ?? {})
+      .filter(([, value]) => value !== '' && value !== false && !(Array.isArray(value) && !value.length))
+      .map(([key, value]) => `<li><strong>${escapeHtml(key)}</strong> : ${escapeHtml(Array.isArray(value) ? value.join(', ') : value === true ? 'oui' : value)}</li>`)
+      .join('');
+    res.set('X-Robots-Tag', 'noindex');
+    return res.type('text/html').send(`<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lifys · Profil partagé</title><main style="font-family:sans-serif;margin:3rem auto;max-width:34rem;line-height:1.5"><h1>${escapeHtml(profile.name)}, ${escapeHtml(profile.age)} ans</h1><p>${escapeHtml(profile.city)}</p><p>${escapeHtml(profile.bio)}</p><ul>${details}</ul><p style="color:#666;font-size:.85rem">Profil partagé par son propriétaire via Lifys. Aucune photo ni coordonnée n’est affichée.</p></main>`);
+  });
+
   app.get('/api/auth/providers', (_req, res) => {
     res.json({ providers: oauth.providers() });
   });

@@ -359,6 +359,29 @@ export function TonightPanel({ token, t, locale, profile, onProfile, onError, sh
   );
 }
 
+function FamilyShare({ token, t, onError, showToast }) {
+  const share = async () => {
+    try {
+      const { path } = await api.getFamilyLink(token);
+      const url = `${window.location.origin}${path}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        showToast({ type: 'success', title: t('Lien copié'), message: t('Partagez-le avec votre famille. Aucune photo ni coordonnée n’y figure.') });
+      } catch {
+        window.prompt(t('Lien de partage'), url);
+      }
+    } catch (error) {
+      onError(error, t('Action impossible.'));
+    }
+  };
+
+  return (
+    <div className="family-share">
+      <button type="button" className="secondary-button" onClick={share}>👨‍👩‍👧 {t('Partager mon profil à ma famille')}</button>
+    </div>
+  );
+}
+
 export function SelectionPanel({ token, t, onError, showToast }) {
   const [minScore, setMinScore] = useState(60);
   const load = useCallback(() => api.getDiscovery(token, { activeMode: 'all', minScore }), [token, minScore]);
@@ -367,6 +390,7 @@ export function SelectionPanel({ token, t, onError, showToast }) {
   return (
     <section className="content-panel">
       <Header eyebrow={t('Sélection')} title={t('Votre sélection compatible')} description={t('Les profils les plus proches de vos valeurs, de votre projet de famille et de votre région.')} />
+      <FamilyShare token={token} t={t} onError={onError} showToast={showToast} />
       <label className="score-filter">
         <span>{t('Compatibilité minimale')}</span>
         <select value={minScore} onChange={(event) => setMinScore(Number(event.target.value))}>
