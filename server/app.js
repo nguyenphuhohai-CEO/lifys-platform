@@ -761,6 +761,10 @@ export function createApp(config) {
     res.json(database.listLikesReceived(req.auth.userId));
   }));
 
+  app.get('/api/friends-of-friends', requireAuth, requireVerified, community((req, res) => {
+    res.json({ profiles: database.listFriendsOfFriends(req.auth.userId).slice(0, 30) });
+  }));
+
   app.get('/api/matches', requireAuth, (req, res) => {
     res.json({ matches: database.listMatchesForUser(req.auth.userId) });
   });

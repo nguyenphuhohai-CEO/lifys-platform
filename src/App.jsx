@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Avatar from './components/Avatar';
-import { EventsPanel, FeedPanel, LikesPanel, SelectionPanel, TonightPanel } from './components/Community';
+import { EventsPanel, FeedPanel, FriendsOfFriendsPanel, LikesPanel, SelectionPanel, TonightPanel } from './components/Community';
 import { GalleryManager, PhotoStrip } from './components/Gallery';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
 import SwipeDeck from './components/SwipeDeck';
@@ -1203,6 +1203,9 @@ function App({ site, dedicated = false }) {
 
         {view === 'community' && site === 'amical' && (
           <EventsPanel token={token} t={t} locale={lang} defaultCity={profile.city} onError={handleApiError} showToast={showToast} />
+        )}
+        {view === 'community' && site === 'amical' && (
+          <FriendsOfFriendsPanel token={token} t={t} onError={handleApiError} showToast={showToast} />
         )}
         {view === 'community' && site === 'professionnel' && (
           <FeedPanel token={token} t={t} locale={lang} onError={handleApiError} showToast={showToast} />

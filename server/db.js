@@ -487,6 +487,10 @@ export function createDatabase(databaseFile, options = {}) {
         )
       ORDER BY users.is_demo DESC, profiles.updated_at DESC
     `),
+    matchPartnerIds: db.prepare(`
+      SELECT CASE WHEN user_one_id = ? THEN user_two_id ELSE user_one_id END AS id
+      FROM matches WHERE user_one_id = ? OR user_two_id = ?
+    `),
     insertVerification: db.prepare(`INSERT OR REPLACE INTO email_verifications (token_hash, user_id, expires_at) VALUES (?, ?, ?)`),
     deleteVerificationsForUser: db.prepare(`DELETE FROM email_verifications WHERE user_id = ?`),
     findVerification: db.prepare(`SELECT * FROM email_verifications WHERE token_hash = ?`),
@@ -904,6 +908,49 @@ export function createDatabase(databaseFile, options = {}) {
       .filter((profile) => !minScore || (profile.compatibility?.score ?? 0) >= minScore)
       .filter((profile) => !maxKm || (profile.distanceKm !== null && profile.distanceKm <= maxKm))
       .sort((left, right) => Number(right.boosted) - Number(left.boosted) || (right.compatibility?.score ?? 0) - (left.compatibility?.score ?? 0));
+  }
+
+  // Amis d'amis (degré 2) et amis des amis des amis (degré 3), via les matchs existants.
+  function listFriendsOfFriends(userId, maxDegree = 3) {
+    const partners = (id) => statements.matchPartnerIds.all(id, id, id).map((row) => row.id);
+    const degrees = new Map([[userId, 0]]);
+    const via = new Map();
+    let frontier = [userId];
+
+    for (let degree = 1; degree <= maxDegree; degree += 1) {
+      const next = [];
+      for (const id of frontier) {
+        for (const friend of partners(id)) {
+          if (!degrees.has(friend)) {
+            degrees.set(friend, degree);
+            via.set(friend, new Set());
+            next.push(friend);
+          }
+          if (degrees.get(friend) === degree && degree > 1) {
+            via.get(friend).add(id);
+          }
+        }
+      }
+      frontier = next;
+    }
+
+    const hidden = new Set(statements.hiddenTargetIds.all(userId, userId).map((row) => row.id));
+    const siteMode = statements.findProfileByUserId.get(userId)?.mode ?? null;
+    const currentProfile = getProfileByUserId(userId);
+    const rows = new Map(statements.listProfilesExcludingUser.all({ user_id: userId, include_unverified: requireEmailVerification ? 0 : 1 }).map((row) => [row.user_id, row]));
+
+    return [...degrees.entries()]
+      .filter(([id, degree]) => degree >= 2 && rows.has(id) && !hidden.has(id) && (!siteMode || rows.get(id).mode === siteMode))
+      .map(([id, degree]) => {
+        const profile = serializeForViewer(userId, rows.get(id));
+        return {
+          ...profile,
+          degree,
+          via: [...via.get(id)].map((friendId) => statements.findProfileByUserId.get(friendId)?.name).filter(Boolean).slice(0, 3),
+          compatibility: currentProfile ? computeCompatibility(currentProfile, profile) : undefined,
+        };
+      })
+      .sort((a, b) => a.degree - b.degree || (b.compatibility?.score ?? 0) - (a.compatibility?.score ?? 0));
   }
 
   function getOrCreateMatch(userId, targetUserId, currentProfile, targetProfile) {
@@ -1510,6 +1557,7 @@ export function createDatabase(databaseFile, options = {}) {
     getProfileByPublicId,
     updateUserProfile,
     listDiscoveryProfiles,
+    listFriendsOfFriends,
     applyReferral,
     savePushSubscription,
     removePushSubscription,

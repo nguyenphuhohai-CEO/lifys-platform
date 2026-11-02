@@ -229,6 +229,9 @@ export const api = {
   deletePost(token, id) {
     return apiRequest(`/api/posts/${id}`, { method: 'DELETE', token });
   },
+  getFriendsOfFriends(token) {
+    return apiRequest('/api/friends-of-friends', { token });
+  },
   getLikesReceived(token) {
     return apiRequest('/api/likes/received', { token });
   },

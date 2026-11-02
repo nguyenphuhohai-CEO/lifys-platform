@@ -787,5 +787,14 @@ export const ROWS = [
   ['Recevez une notification quand on vous écrit, même site fermé.', 'Get a notification when someone writes to you, even when the site is closed.', 'Recibe una notificación cuando te escriban, incluso con el sitio cerrado.', 'Nhận thông báo khi có người nhắn tin, kể cả khi đã đóng trang.'],
   ['Activer', 'Enable', 'Activar', 'Bật'],
   ['Désactiver', 'Disable', 'Desactivar', 'Tắt'],
+  ['Impossible de charger les amis d’amis.','Unable to load friends of friends.','No se pudieron cargar los amigos de amigos.','Không thể tải bạn của bạn bè.'],
+  ['Amis d’amis','Friends of friends','Amigos de amigos','Bạn của bạn bè'],
+  ['Les amis de vos amis','Your friends’ friends','Los amigos de tus amigos','Bạn của bạn bè của bạn'],
+  ['Des personnes liées à vos amis, jusqu’au troisième degré.','People connected to your friends, up to the third degree.','Personas conectadas con tus amigos, hasta el tercer grado.','Những người liên kết với bạn bè của bạn, tới cấp ba.'],
+  ['Pas encore d’amis d’amis','No friends of friends yet','Aún no hay amigos de amigos','Chưa có bạn của bạn bè'],
+  ['Faites quelques matchs : leurs amis apparaîtront ici.','Make a few matches: their friends will show up here.','Haz algunos matches: sus amigos aparecerán aquí.','Hãy kết nối vài người: bạn của họ sẽ hiện ở đây.'],
+  ['Ami d’un ami','Friend of a friend','Amigo de un amigo','Bạn của một người bạn'],
+  ['Ami d’un ami d’un ami','Friend of a friend of a friend','Amigo de un amigo de un amigo','Bạn của bạn của một người bạn'],
+  ['Via {names}','Via {names}','Vía {names}','Qua {names}'],
 ];
 

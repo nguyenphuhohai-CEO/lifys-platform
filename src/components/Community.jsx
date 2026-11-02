@@ -214,6 +214,46 @@ export function FeedPanel({ token, t, locale, onError, showToast }) {
   );
 }
 
+export function FriendsOfFriendsPanel({ token, t, onError, showToast }) {
+  const load = useCallback(() => api.getFriendsOfFriends(token), [token]);
+  const [data] = useLoader(load, onError, t('Impossible de charger les amis d’amis.'));
+  const [sent, setSent] = useState([]);
+
+  const like = async (person) => {
+    try {
+      await api.likeProfile(token, person.id);
+      setSent((current) => [...current, person.id]);
+      showToast({ type: 'success', title: t('Like envoyé'), message: person.name });
+    } catch (error) {
+      onError(error, t('Impossible d’envoyer le like.'));
+    }
+  };
+
+  return (
+    <section className="content-panel">
+      <Header eyebrow={t('Amis d’amis')} title={t('Les amis de vos amis')} description={t('Des personnes liées à vos amis, jusqu’au troisième degré.')} />
+      {!data ? null : data.profiles.length === 0 ? (
+        <div className="empty-state"><h3>{t('Pas encore d’amis d’amis')}</h3><p>{t('Faites quelques matchs : leurs amis apparaîtront ici.')}</p></div>
+      ) : (
+        <div className="discover-grid">
+          {data.profiles.map((person) => (
+            <article key={person.id} className="profile-card">
+              <Avatar className="profile-avatar" src={person.avatar} alt={person.name} fallback={person.name} />
+              <div className="profile-card-body">
+                <h3>{person.name}, {person.age ?? '18+'}</h3>
+                <p className="city-line">📍 {person.city}</p>
+                <p><span className="badge">{person.degree === 2 ? t('Ami d’un ami') : t('Ami d’un ami d’un ami')}</span></p>
+                {person.via.length > 0 ? <p className="muted">{t('Via {names}', { names: person.via.join(', ') })}</p> : null}
+                <button type="button" className="secondary-button" disabled={sent.includes(person.id)} onClick={() => like(person)}>{sent.includes(person.id) ? t('Like envoyé') : t('Liker')}</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function LikesPanel({ token, t, onError, onUpgrade, onDiscover }) {
   const load = useCallback(() => api.getLikesReceived(token), [token]);
   const [data] = useLoader(load, onError, t('Impossible de charger les likes reçus.'));

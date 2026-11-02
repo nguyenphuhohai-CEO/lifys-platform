@@ -958,3 +958,21 @@ test('city landing pages are served and listed in the sitemap', async () => {
     await server.close();
   }
 });
+
+test('amis d’amis : degrés 2 et 3 via les matchs', async () => {
+  const server = await startTestServer();
+  try {
+    const names = ['a', 'b', 'c', 'd'];
+    for (const n of names) {
+      await registerUser(server.baseUrl, n + '-fof@example.com', { mode: 'amical' });
+    }
+    const ids = names.map((n) => server.database.getUserByEmail(n + '-fof@example.com', 'amical').id);
+    const link = (x, y) => server.database.db.prepare("INSERT INTO matches (public_id, pair_key, user_one_id, user_two_id, reason, created_at) VALUES (?, ?, ?, ?, 'x', ?)").run('match-' + x + y, x + '-' + y, x, y, new Date().toISOString());
+    link(ids[0], ids[1]); link(ids[1], ids[2]); link(ids[2], ids[3]);
+    const result = server.database.listFriendsOfFriends(ids[0]);
+    assert.deepEqual(result.map((p) => p.degree), [2, 3]);
+    assert.equal(result[0].via.length, 1);
+  } finally {
+    await server.close();
+  }
+});
