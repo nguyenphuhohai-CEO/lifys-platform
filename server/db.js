@@ -755,8 +755,22 @@ export function createDatabase(databaseFile, options = {}) {
   const FAMILY_RELATIONS = ['grandparent', 'parent', 'uncle', 'sibling', 'cousin', 'child'];
   const FAMILY_LIMIT = 40;
 
+  // L'arbre appartient au compte : il est partagé entre les 5 sites.
+  function listAccountUserIds(userId) {
+    return db.prepare('SELECT id FROM users WHERE email = (SELECT email FROM users WHERE id = ?)').all(userId).map((row) => row.id);
+  }
+
   function listFamilyMembers(userId) {
-    return db.prepare('SELECT public_id AS id, relation, name, note FROM family_members WHERE user_id = ? ORDER BY id').all(userId);
+    return db.prepare(`SELECT public_id AS id, relation, name, note FROM family_members WHERE user_id IN (${listAccountUserIds(userId).join(',') || '0'}) ORDER BY id`).all();
+  }
+
+  function listNetwork(userId) {
+    const friends = listAccountUserIds(userId).flatMap((id) => listMatchesForUser(id));
+    return {
+      family: listFamilyMembers(userId),
+      friends: friends.map(({ id, name, city, mode }) => ({ id, name, city, site: mode })),
+      friendsOfFriends: listFriendsOfFriends(userId).slice(0, 20).map(({ id, name, city, degree, via }) => ({ id, name, city, degree, via })),
+    };
   }
 
   function listFamilyMembersByProfile(profilePublicId) {
@@ -771,7 +785,7 @@ export function createDatabase(databaseFile, options = {}) {
     if (!relation || !name) {
       return { error: 'Lien familial et prénom requis.' };
     }
-    if (db.prepare('SELECT COUNT(*) AS n FROM family_members WHERE user_id = ?').get(userId).n >= FAMILY_LIMIT) {
+    if (listFamilyMembers(userId).length >= FAMILY_LIMIT) {
       return { error: `Maximum ${FAMILY_LIMIT} membres.` };
     }
     const id = createPublicId('fam');
@@ -780,7 +794,7 @@ export function createDatabase(databaseFile, options = {}) {
   }
 
   function removeFamilyMember(userId, publicId) {
-    return db.prepare('DELETE FROM family_members WHERE user_id = ? AND public_id = ?').run(userId, publicId).changes > 0;
+    return db.prepare(`DELETE FROM family_members WHERE public_id = ? AND user_id IN (${listAccountUserIds(userId).join(',') || '0'})`).run(publicId).changes > 0;
   }
 
   function getConversationRecipientId(conversationPublicId, senderId) {
@@ -1603,6 +1617,7 @@ export function createDatabase(databaseFile, options = {}) {
     removePushSubscription,
     listPushSubscriptions,
     listFamilyMembers,
+    listNetwork,
     listFamilyMembersByProfile,
     addFamilyMember,
     removeFamilyMember,

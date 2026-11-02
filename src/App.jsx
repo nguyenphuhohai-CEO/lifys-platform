@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Avatar from './components/Avatar';
+import NetworkTree from './components/NetworkTree';
 import { EventsPanel, FeedPanel, FriendsOfFriendsPanel, LikesPanel, SelectionPanel, TonightPanel } from './components/Community';
 import { GalleryManager, PhotoStrip } from './components/Gallery';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
@@ -40,6 +41,7 @@ const NAV_ITEMS = [
   { id: 'discover', label: 'Découvrir' },
   { id: 'matches', label: 'Matchs' },
   { id: 'community', label: 'Communauté' },
+  { id: 'tree', label: 'Mon arbre' },
   { id: 'messages', label: 'Messages' },
   { id: 'pricing', label: 'Offres' },
   { id: 'profile', label: 'Profil' },
@@ -1355,6 +1357,8 @@ function App({ site, dedicated = false }) {
         )}
 
         {view === 'admin' && currentUser.isAdmin ? <Suspense fallback={null}><AdminPanel token={token} onError={handleApiError} /></Suspense> : null}
+
+        {view === 'tree' && <NetworkTree token={token} t={t} onError={handleApiError} />}
 
         {view === 'pricing' && (
           <section className="content-panel">

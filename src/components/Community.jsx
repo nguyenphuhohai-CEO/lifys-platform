@@ -408,7 +408,7 @@ const FAMILY_GROUPS = [
   ['child', 'Enfants'],
 ];
 
-function FamilyTree({ token, t, onError }) {
+export function FamilyTree({ token, t, onError }) {
   const load = useCallback(() => api.getFamilyTree(token), [token]);
   const [data, refresh] = useLoader(load, onError, t('Impossible de charger l’arbre généalogique.'));
   const [relation, setRelation] = useState('parent');

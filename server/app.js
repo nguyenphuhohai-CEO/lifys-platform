@@ -346,13 +346,15 @@ export function createApp(config) {
     return res.json({ path: `/famille/${profile.id}/${familyToken(profile.id)}` });
   });
 
-  const requireMariage = (req, res, next) => (req.auth.profile?.mode === 'mariage' ? next() : res.status(403).json({ message: 'Réservé au site Mariage.' }));
+  app.get('/api/network', requireAuth, (req, res) => {
+    res.json(database.listNetwork(req.auth.userId));
+  });
 
-  app.get('/api/family/tree', requireAuth, requireMariage, (req, res) => {
+  app.get('/api/family/tree', requireAuth, (req, res) => {
     res.json({ members: database.listFamilyMembers(req.auth.userId) });
   });
 
-  app.post('/api/family/tree', requireAuth, requireMariage, (req, res) => {
+  app.post('/api/family/tree', requireAuth, (req, res) => {
     const result = database.addFamilyMember(req.auth.userId, req.body);
     if (result.error) {
       return res.status(400).json({ message: result.error });
@@ -360,7 +362,7 @@ export function createApp(config) {
     return res.status(201).json(result.member);
   });
 
-  app.delete('/api/family/tree/:id', requireAuth, requireMariage, (req, res) => {
+  app.delete('/api/family/tree/:id', requireAuth, (req, res) => {
     if (!database.removeFamilyMember(req.auth.userId, req.params.id)) {
       return res.status(404).json({ message: 'Membre introuvable.' });
     }

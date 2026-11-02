@@ -809,5 +809,14 @@ export const ROWS = [
   ['Lien familial','Relationship','Parentesco','Quan hệ'],
   ['Note (facultatif)','Note (optional)','Nota (opcional)','Ghi chú (tuỳ chọn)'],
   ['Ajouter','Add','Añadir','Thêm'],
+  ['Mon arbre','My tree','Mi árbol','Cây của tôi'],
+  ['Mon arbre : famille et amis','My tree: family and friends','Mi árbol: familia y amigos','Cây của tôi: gia đình và bạn bè'],
+  ['Votre famille et vos amis sur l’ensemble de Lifys, jusqu’au troisième degré.','Your family and friends across all of Lifys, up to the third degree.','Tu familia y amigos en todo Lifys, hasta el tercer grado.','Gia đình và bạn bè của bạn trên toàn Lifys, tới cấp ba.'],
+  ['Amis d’amis d’amis','Friends of friends of friends','Amigos de amigos de amigos','Bạn của bạn của bạn bè'],
+  ['Love','Love','Love','Love'],
+  ['Éphémère','Ephemeral','Efímero','Thoáng qua'],
+  ['Pro','Pro','Pro','Pro'],
+  ['Impossible de charger l’arbre.','Unable to load the tree.','No se pudo cargar el árbol.','Không thể tải cây.'],
+  ['Faites des matchs : vos amis apparaîtront ici.','Make some matches: your friends will show up here.','Haz matches: tus amigos aparecerán aquí.','Hãy kết nối: bạn bè của bạn sẽ hiện ở đây.'],
 ];
 

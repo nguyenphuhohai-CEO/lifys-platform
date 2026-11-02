@@ -977,12 +977,13 @@ test('amis d’amis : degrés 2 et 3 via les matchs', async () => {
   }
 });
 
-test('arbre généalogique : réservé à Mariage, ajout, page famille, suppression', async () => {
+test('arbre généalogique : ajout, réseau, page famille, suppression', async () => {
   const server = await startTestServer();
   try {
     const other = await registerUser(server.baseUrl, 'tree-amis@example.com', { mode: 'amical' });
-    const denied = await request(server.baseUrl, '/api/family/tree', { headers: other.auth });
-    assert.equal(denied.status, 403);
+    const mine = await request(server.baseUrl, '/api/network', { headers: other.auth });
+    assert.equal(mine.status, 200);
+    assert.deepEqual(mine.body.family, []);
 
     const user = await registerUser(server.baseUrl, 'tree-mariage@example.com', { mode: 'mariage' });
     const headers = user.auth;

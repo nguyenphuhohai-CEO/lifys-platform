@@ -229,6 +229,9 @@ export const api = {
   deletePost(token, id) {
     return apiRequest(`/api/posts/${id}`, { method: 'DELETE', token });
   },
+  getNetwork(token) {
+    return apiRequest('/api/network', { token });
+  },
   getFamilyTree(token) {
     return apiRequest('/api/family/tree', { token });
   },
