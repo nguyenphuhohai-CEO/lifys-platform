@@ -399,6 +399,83 @@ export function TonightPanel({ token, t, locale, profile, onProfile, onError, sh
   );
 }
 
+const FAMILY_GROUPS = [
+  ['grandparent', 'Grands-parents'],
+  ['parent', 'Parents'],
+  ['uncle', 'Oncles et tantes'],
+  ['sibling', 'Frères et sœurs'],
+  ['cousin', 'Cousins'],
+  ['child', 'Enfants'],
+];
+
+function FamilyTree({ token, t, onError }) {
+  const load = useCallback(() => api.getFamilyTree(token), [token]);
+  const [data, refresh] = useLoader(load, onError, t('Impossible de charger l’arbre généalogique.'));
+  const [relation, setRelation] = useState('parent');
+  const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+
+  const add = async (event) => {
+    event.preventDefault();
+    try {
+      await api.addFamilyMember(token, { relation, name, note });
+      setName('');
+      setNote('');
+      refresh();
+    } catch (error) {
+      onError(error, t('Action impossible.'));
+    }
+  };
+
+  const remove = async (id) => {
+    try {
+      await api.removeFamilyMember(token, id);
+      refresh();
+    } catch (error) {
+      onError(error, t('Action impossible.'));
+    }
+  };
+
+  const members = data?.members ?? [];
+
+  return (
+    <div className="family-tree">
+      <h3>🌳 {t('Mon arbre généalogique')}</h3>
+      <p className="muted">{t('Indiquez uniquement des prénoms. Cet arbre apparaît sur le lien partagé avec votre famille.')}</p>
+      <div className="tree-rows">
+        {FAMILY_GROUPS.map(([key, label]) => {
+          const people = members.filter((member) => member.relation === key);
+          if (!people.length) {
+            return null;
+          }
+          return (
+            <div key={key} className="tree-row">
+              <span className="tree-label">{t(label)}</span>
+              <div className="tree-people">
+                {people.map((person) => (
+                  <span key={person.id} className="tree-node" title={person.note}>
+                    {person.name}
+                    <button type="button" aria-label={t('Retirer')} onClick={() => remove(person.id)}>×</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        <div className="tree-row tree-me"><span className="tree-label">{t('Vous')}</span><div className="tree-people"><span className="tree-node tree-self">⭐ {t('Vous')}</span></div></div>
+      </div>
+      <form className="tree-form" onSubmit={add}>
+        <select value={relation} onChange={(event) => setRelation(event.target.value)} aria-label={t('Lien familial')}>
+          {FAMILY_GROUPS.map(([key, label]) => <option key={key} value={key}>{t(label)}</option>)}
+        </select>
+        <input value={name} maxLength={60} onChange={(event) => setName(event.target.value)} placeholder={t('Prénom')} required />
+        <input value={note} maxLength={120} onChange={(event) => setNote(event.target.value)} placeholder={t('Note (facultatif)')} />
+        <button type="submit" className="secondary-button">{t('Ajouter')}</button>
+      </form>
+    </div>
+  );
+}
+
 function FamilyShare({ token, t, onError, showToast }) {
   const share = async () => {
     try {
@@ -431,6 +508,7 @@ export function SelectionPanel({ token, t, onError, showToast }) {
     <section className="content-panel">
       <Header eyebrow={t('Sélection')} title={t('Votre sélection compatible')} description={t('Les profils les plus proches de vos valeurs, de votre projet de famille et de votre région.')} />
       <FamilyShare token={token} t={t} onError={onError} showToast={showToast} />
+      <FamilyTree token={token} t={t} onError={onError} />
       <label className="score-filter">
         <span>{t('Compatibilité minimale')}</span>
         <select value={minScore} onChange={(event) => setMinScore(Number(event.target.value))}>

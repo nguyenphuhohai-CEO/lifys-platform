@@ -445,6 +445,15 @@ export function createDatabase(databaseFile, options = {}) {
     auth TEXT NOT NULL,
     created_at TEXT NOT NULL
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS family_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_id TEXT NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    relation TEXT NOT NULL,
+    name TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  )`);
   const lateProfileColumns = new Set(db.prepare('PRAGMA table_info(profiles)').all().map((column) => column.name));
   for (const column of ['boost_until', 'last_boost_at']) {
     if (!lateProfileColumns.has(column)) db.exec(`ALTER TABLE profiles ADD COLUMN ${column} TEXT`);
@@ -741,6 +750,37 @@ export function createDatabase(databaseFile, options = {}) {
 
   function listPushSubscriptions(userId) {
     return db.prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId);
+  }
+
+  const FAMILY_RELATIONS = ['grandparent', 'parent', 'uncle', 'sibling', 'cousin', 'child'];
+  const FAMILY_LIMIT = 40;
+
+  function listFamilyMembers(userId) {
+    return db.prepare('SELECT public_id AS id, relation, name, note FROM family_members WHERE user_id = ? ORDER BY id').all(userId);
+  }
+
+  function listFamilyMembersByProfile(profilePublicId) {
+    const row = statements.findProfileByPublicId.get(profilePublicId);
+    return row ? listFamilyMembers(row.user_id) : [];
+  }
+
+  function addFamilyMember(userId, input) {
+    const relation = FAMILY_RELATIONS.includes(input?.relation) ? input.relation : null;
+    const name = `${input?.name ?? ''}`.replace(/\s+/g, ' ').trim().slice(0, 60);
+    const note = `${input?.note ?? ''}`.replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (!relation || !name) {
+      return { error: 'Lien familial et prénom requis.' };
+    }
+    if (db.prepare('SELECT COUNT(*) AS n FROM family_members WHERE user_id = ?').get(userId).n >= FAMILY_LIMIT) {
+      return { error: `Maximum ${FAMILY_LIMIT} membres.` };
+    }
+    const id = createPublicId('fam');
+    db.prepare('INSERT INTO family_members (public_id, user_id, relation, name, note, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, userId, relation, name, note, now());
+    return { member: { id, relation, name, note } };
+  }
+
+  function removeFamilyMember(userId, publicId) {
+    return db.prepare('DELETE FROM family_members WHERE user_id = ? AND public_id = ?').run(userId, publicId).changes > 0;
   }
 
   function getConversationRecipientId(conversationPublicId, senderId) {
@@ -1562,6 +1602,10 @@ export function createDatabase(databaseFile, options = {}) {
     savePushSubscription,
     removePushSubscription,
     listPushSubscriptions,
+    listFamilyMembers,
+    listFamilyMembersByProfile,
+    addFamilyMember,
+    removeFamilyMember,
     getConversationRecipientId,
     referralStats,
     boostProfile,

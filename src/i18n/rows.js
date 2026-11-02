@@ -796,5 +796,18 @@ export const ROWS = [
   ['Ami d’un ami','Friend of a friend','Amigo de un amigo','Bạn của một người bạn'],
   ['Ami d’un ami d’un ami','Friend of a friend of a friend','Amigo de un amigo de un amigo','Bạn của bạn của một người bạn'],
   ['Via {names}','Via {names}','Vía {names}','Qua {names}'],
+  ['Impossible de charger l’arbre généalogique.','Unable to load the family tree.','No se pudo cargar el árbol genealógico.','Không thể tải cây gia phả.'],
+  ['Mon arbre généalogique','My family tree','Mi árbol genealógico','Cây gia phả của tôi'],
+  ['Indiquez uniquement des prénoms. Cet arbre apparaît sur le lien partagé avec votre famille.','Enter first names only. This tree appears on the link shared with your family.','Indica solo nombres de pila. Este árbol aparece en el enlace compartido con tu familia.','Chỉ nhập tên riêng. Cây này hiển thị trên liên kết chia sẻ với gia đình bạn.'],
+  ['Grands-parents','Grandparents','Abuelos','Ông bà'],
+  ['Parents','Parents','Padres','Cha mẹ'],
+  ['Oncles et tantes','Uncles and aunts','Tíos','Cô dì chú bác'],
+  ['Frères et sœurs','Siblings','Hermanos','Anh chị em'],
+  ['Cousins','Cousins','Primos','Anh chị em họ'],
+  ['Vous','You','Tú','Bạn'],
+  ['Retirer','Remove','Quitar','Gỡ'],
+  ['Lien familial','Relationship','Parentesco','Quan hệ'],
+  ['Note (facultatif)','Note (optional)','Nota (opcional)','Ghi chú (tuỳ chọn)'],
+  ['Ajouter','Add','Añadir','Thêm'],
 ];
 

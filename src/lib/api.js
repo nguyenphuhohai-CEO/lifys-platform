@@ -229,6 +229,15 @@ export const api = {
   deletePost(token, id) {
     return apiRequest(`/api/posts/${id}`, { method: 'DELETE', token });
   },
+  getFamilyTree(token) {
+    return apiRequest('/api/family/tree', { token });
+  },
+  addFamilyMember(token, member) {
+    return apiRequest('/api/family/tree', { method: 'POST', token, body: member });
+  },
+  removeFamilyMember(token, id) {
+    return apiRequest(`/api/family/tree/${id}`, { method: 'DELETE', token });
+  },
   getFriendsOfFriends(token) {
     return apiRequest('/api/friends-of-friends', { token });
   },

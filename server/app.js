@@ -346,6 +346,27 @@ export function createApp(config) {
     return res.json({ path: `/famille/${profile.id}/${familyToken(profile.id)}` });
   });
 
+  const requireMariage = (req, res, next) => (req.auth.profile?.mode === 'mariage' ? next() : res.status(403).json({ message: 'Réservé au site Mariage.' }));
+
+  app.get('/api/family/tree', requireAuth, requireMariage, (req, res) => {
+    res.json({ members: database.listFamilyMembers(req.auth.userId) });
+  });
+
+  app.post('/api/family/tree', requireAuth, requireMariage, (req, res) => {
+    const result = database.addFamilyMember(req.auth.userId, req.body);
+    if (result.error) {
+      return res.status(400).json({ message: result.error });
+    }
+    return res.status(201).json(result.member);
+  });
+
+  app.delete('/api/family/tree/:id', requireAuth, requireMariage, (req, res) => {
+    if (!database.removeFamilyMember(req.auth.userId, req.params.id)) {
+      return res.status(404).json({ message: 'Membre introuvable.' });
+    }
+    return res.json({ ok: true });
+  });
+
   app.get('/famille/:id/:token', (req, res) => {
     const profile = database.getProfileByPublicId(req.params.id);
     const given = Buffer.from(`${req.params.token}`);
@@ -357,8 +378,15 @@ export function createApp(config) {
       .filter(([, value]) => value !== '' && value !== false && !(Array.isArray(value) && !value.length))
       .map(([key, value]) => `<li><strong>${escapeHtml(key)}</strong> : ${escapeHtml(Array.isArray(value) ? value.join(', ') : value === true ? 'oui' : value)}</li>`)
       .join('');
+    const familyLabels = { grandparent: 'Grands-parents', parent: 'Parents', uncle: 'Oncles et tantes', sibling: 'Frères et sœurs', cousin: 'Cousins', child: 'Enfants' };
+    const members = database.listFamilyMembersByProfile(profile.id);
+    const tree = Object.entries(familyLabels)
+      .map(([relation, label]) => ({ label, people: members.filter((member) => member.relation === relation) }))
+      .filter((group) => group.people.length)
+      .map((group) => `<h2 style="font-size:1rem">${group.label}</h2><ul>${group.people.map((p) => `<li>${escapeHtml(p.name)}${p.note ? ` — ${escapeHtml(p.note)}` : ''}</li>`).join('')}</ul>`)
+      .join('');
     res.set('X-Robots-Tag', 'noindex');
-    return res.type('text/html').send(`<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lifys · Profil partagé</title><main style="font-family:sans-serif;margin:3rem auto;max-width:34rem;line-height:1.5"><h1>${escapeHtml(profile.name)}, ${escapeHtml(profile.age)} ans</h1><p>${escapeHtml(profile.city)}</p><p>${escapeHtml(profile.bio)}</p><ul>${details}</ul><p style="color:#666;font-size:.85rem">Profil partagé par son propriétaire via Lifys. Aucune photo ni coordonnée n’est affichée.</p></main>`);
+    return res.type('text/html').send(`<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lifys · Profil partagé</title><main style="font-family:sans-serif;margin:3rem auto;max-width:34rem;line-height:1.5"><h1>${escapeHtml(profile.name)}, ${escapeHtml(profile.age)} ans</h1><p>${escapeHtml(profile.city)}</p><p>${escapeHtml(profile.bio)}</p><ul>${details}</ul>${tree}<p style="color:#666;font-size:.85rem">Profil partagé par son propriétaire via Lifys. Aucune photo ni coordonnée n’est affichée.</p></main>`);
   });
 
   app.get('/api/auth/providers', (_req, res) => {

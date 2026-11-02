@@ -976,3 +976,31 @@ test('amis d’amis : degrés 2 et 3 via les matchs', async () => {
     await server.close();
   }
 });
+
+test('arbre généalogique : réservé à Mariage, ajout, page famille, suppression', async () => {
+  const server = await startTestServer();
+  try {
+    const other = await registerUser(server.baseUrl, 'tree-amis@example.com', { mode: 'amical' });
+    const denied = await request(server.baseUrl, '/api/family/tree', { headers: other.auth });
+    assert.equal(denied.status, 403);
+
+    const user = await registerUser(server.baseUrl, 'tree-mariage@example.com', { mode: 'mariage' });
+    const headers = user.auth;
+    const bad = await request(server.baseUrl, '/api/family/tree', { method: 'POST', headers, body: JSON.stringify({ relation: 'ami', name: 'X' }) });
+    assert.equal(bad.status, 400);
+    const added = await request(server.baseUrl, '/api/family/tree', { method: 'POST', headers, body: JSON.stringify({ relation: 'parent', name: '<b>Marie</b>', note: 'Lyon' }) });
+    assert.equal(added.status, 201);
+
+    const link = await request(server.baseUrl, '/api/family/link', { headers: user.auth });
+    const page = await fetch(server.baseUrl + link.body.path);
+    const html = await page.text();
+    assert.match(html, /Parents/);
+    assert.match(html, /&lt;b&gt;Marie/);
+
+    const removed = await request(server.baseUrl, '/api/family/tree/' + added.body.id, { method: 'DELETE', headers: user.auth });
+    assert.equal(removed.status, 200);
+    assert.equal((await request(server.baseUrl, '/api/family/tree', { headers: user.auth })).body.members.length, 0);
+  } finally {
+    await server.close();
+  }
+});
