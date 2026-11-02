@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '../lib/api';
+import { ReportInline } from './Community';
 
 const SITE_LABELS = { amical: 'Amis', amoureux: 'Love', 'sans-lendemain': 'Éphémère', mariage: 'Mariage', professionnel: 'Pro' };
 const EMOTICONS = [[':)', '😊'], [':-)', '😊'], [':D', '😄'], [';)', '😉'], [':p', '😛'], [':P', '😛'], [':(', '😞'], [':o', '😮'], ['(L)', '❤️'], ['(y)', '👍'], ['(n)', '👎'], ['(h)', '😎'], ['(k)', '😘'], ['(*)', '⭐']];
@@ -10,7 +11,7 @@ function withEmoticons(text) {
   return EMOTICONS.reduce((out, [code, emoji]) => out.split(code).join(emoji), text);
 }
 
-export default function Lobby({ token, t, onError }) {
+export default function Lobby({ token, t, onError, showToast }) {
   const [messages, setMessages] = useState([]);
   const [online, setOnline] = useState([]);
   const [text, setText] = useState('');
@@ -55,6 +56,16 @@ export default function Lobby({ token, t, onError }) {
     }
   };
 
+  const block = async (message) => {
+    try {
+      await api.blockLobbyAuthor(token, message.id);
+      setMessages((current) => current.filter((item) => item.name !== message.name || item.mine));
+      showToast?.({ type: 'success', title: t('Personne bloquée'), message: message.name });
+    } catch (error) {
+      onError(error, t('Action impossible.'));
+    }
+  };
+
   const submit = (event) => {
     event.preventDefault();
     if (text.trim()) send({ body: text });
@@ -82,7 +93,12 @@ export default function Lobby({ token, t, onError }) {
             {messages.map((message) => (
               message.kind === 'nudge'
                 ? <p key={message.id} className="msn-system">{message.mine ? t('Vous avez envoyé un wizz !') : t('{name} a envoyé un wizz !', { name: message.name })}</p>
-                : <p key={message.id} className={message.mine ? 'msn-line msn-mine' : 'msn-line'}><strong>{message.name}</strong> <small>({t(SITE_LABELS[message.site] ?? message.site)})</small> : {withEmoticons(message.body)}</p>
+                : <p key={message.id} className={message.mine ? 'msn-line msn-mine' : 'msn-line'}><strong>{message.name}</strong> <small>({t(SITE_LABELS[message.site] ?? message.site)})</small> : {withEmoticons(message.body)}{message.mine ? null : (
+                  <span className="msn-actions">
+                    <ReportInline token={token} target={{ lobbyId: message.id }} t={t} onError={onError} showToast={showToast ?? (() => {})} />
+                    <button type="button" className="link-button" onClick={() => block(message)}>{t('Bloquer')}</button>
+                  </span>
+                )}</p>
             ))}
           </div>
           <div className="msn-emojis">

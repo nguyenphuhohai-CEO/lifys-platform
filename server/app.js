@@ -364,6 +364,13 @@ export function createApp(config) {
     return res.status(201).json(result);
   });
 
+  app.post('/api/lobby/:id/block', requireAuth, (req, res) => {
+    if (!database.blockLobbyAuthor(req.auth.userId, req.params.id)) {
+      return res.status(404).json({ message: 'Message introuvable.' });
+    }
+    return res.status(201).json({ blocked: true });
+  });
+
   app.get('/api/network', requireAuth, (req, res) => {
     res.json(database.listNetwork(req.auth.userId));
   });
@@ -862,8 +869,8 @@ export function createApp(config) {
   app.post('/api/reports', requireAuth, (req, res, next) => {
     try {
       const reason = `${req.body.reason ?? ''}`;
-      const kind = req.body.postId ? 'post' : req.body.eventId ? 'event' : 'profile';
-      const ref = req.body.postId ?? req.body.eventId ?? req.body.profileId;
+      const kind = req.body.postId ? 'post' : req.body.eventId ? 'event' : req.body.lobbyId ? 'lobby' : 'profile';
+      const ref = req.body.postId ?? req.body.eventId ?? req.body.lobbyId ?? req.body.profileId;
       if (!ref || !REPORT_REASONS.has(reason)) {
         throw createHttpError(400, 'Cible et motif valides requis.');
       }

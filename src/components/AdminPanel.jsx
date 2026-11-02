@@ -4,7 +4,7 @@ import { useI18n } from '../i18n';
 import AdminSelfies from './AdminSelfies';
 import AdminStats from './AdminStats';
 
-const KIND_LABEL = { profile: 'Profil', post: 'Publication', event: 'Sortie' };
+const KIND_LABEL = { profile: 'Profil', post: 'Publication', event: 'Sortie', lobby: 'Salon' };
 
 // File d'attente de modération, réservée aux adresses listées dans ADMIN_EMAILS.
 export default function AdminPanel({ token, onError }) {
@@ -43,7 +43,7 @@ export default function AdminPanel({ token, onError }) {
     }
   };
 
-  const kinds = ['all', 'profile', 'post', 'event'];
+  const kinds = ['all', 'profile', 'post', 'event', 'lobby'];
   const visible = (reports ?? []).filter((report) => filter === 'all' || (report.content.kind ?? 'profile') === filter);
 
   return (

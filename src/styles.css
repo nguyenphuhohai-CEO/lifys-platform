@@ -1434,3 +1434,6 @@ textarea:focus-visible {
 @keyframes msn-shake{0%,100%{transform:translateX(0)}15%{transform:translateX(-10px)}30%{transform:translateX(10px)}45%{transform:translateX(-8px)}60%{transform:translateX(8px)}75%{transform:translateX(-4px)}}
 @media (prefers-reduced-motion:reduce){.msn-shake{animation:none}}
 @media (max-width:640px){.msn-window{grid-template-columns:1fr}.msn-contacts{max-height:120px;border-right:0;border-bottom:1px solid #9bc2e6}}
+
+.msn-actions{margin-left:.6rem;font-size:.75rem;opacity:.6;display:inline-flex;gap:.5rem}
+.msn-line:hover .msn-actions{opacity:1}

@@ -821,10 +821,20 @@ export function createDatabase(databaseFile, options = {}) {
       : db.prepare('SELECT * FROM (SELECT id, user_id, name, site, kind, body, created_at FROM lobby_messages ORDER BY id DESC LIMIT 50) ORDER BY id').all();
     const blocked = new Set(db.prepare('SELECT blocked_user_id AS id FROM blocks WHERE user_id = ? UNION SELECT user_id AS id FROM blocks WHERE blocked_user_id = ?').all(userId, userId).map((row) => row.id));
     const cutoff = Date.now() - LOBBY_ONLINE_MS;
+    const flagged = new Set(db.prepare("SELECT content_ref FROM reports WHERE content_kind = 'lobby' AND status = 'open' GROUP BY content_ref HAVING COUNT(DISTINCT reporter_user_id) >= ?").all(CONTENT_HIDE_THRESHOLD).map((row) => row.content_ref));
     return {
-      messages: rows.filter((row) => !blocked.has(row.user_id)).map((row) => ({ id: row.id, mine: row.user_id === userId, name: row.name, site: row.site, kind: row.kind, body: row.body, at: row.created_at })),
+      messages: rows.filter((row) => !blocked.has(row.user_id) && !flagged.has(String(row.id))).map((row) => ({ id: row.id, mine: row.user_id === userId, name: row.name, site: row.site, kind: row.kind, body: row.body, at: row.created_at })),
       online: [...lobbyPresence.entries()].filter(([id, entry]) => entry.at >= cutoff && !blocked.has(id)).map(([id, entry]) => ({ name: entry.name, site: entry.site, me: id === userId })),
     };
+  }
+
+  function blockLobbyAuthor(userId, messageId) {
+    const row = db.prepare('SELECT user_id FROM lobby_messages WHERE id = ?').get(Number(messageId) || 0);
+    if (!row || row.user_id === userId) {
+      return false;
+    }
+    statements.insertBlock.run(userId, row.user_id, now());
+    return true;
   }
 
   function postLobby(userId, input) {
@@ -1276,7 +1286,9 @@ export function createDatabase(databaseFile, options = {}) {
   function reportContent(userId, kind, ref, { reason, details }) {
     const row = kind === 'post'
       ? db.prepare('SELECT user_id AS owner, content AS excerpt FROM posts WHERE public_id = ?').get(ref)
-      : db.prepare('SELECT host_user_id AS owner, title AS excerpt FROM events WHERE public_id = ?').get(ref);
+      : kind === 'lobby'
+        ? db.prepare("SELECT user_id AS owner, CASE WHEN kind = 'nudge' THEN '(wizz)' ELSE body END AS excerpt FROM lobby_messages WHERE id = ?").get(Number(ref) || 0)
+        : db.prepare('SELECT host_user_id AS owner, title AS excerpt FROM events WHERE public_id = ?').get(ref);
     if (!row || row.owner === userId) {
       return null;
     }
@@ -1356,6 +1368,8 @@ export function createDatabase(databaseFile, options = {}) {
     if (action === 'remove' && report.content_kind !== 'profile') {
       if (report.content_kind === 'post') {
         db.prepare('DELETE FROM posts WHERE public_id = ?').run(report.content_ref);
+      } else if (report.content_kind === 'lobby') {
+        db.prepare('DELETE FROM lobby_messages WHERE id = ?').run(Number(report.content_ref) || 0);
       } else {
         db.prepare('DELETE FROM events WHERE public_id = ?').run(report.content_ref);
       }
@@ -1661,6 +1675,7 @@ export function createDatabase(databaseFile, options = {}) {
     listPushSubscriptions,
     listFamilyMembers,
     listLobby,
+    blockLobbyAuthor,
     postLobby,
     listNetwork,
     listFamilyMembersByProfile,

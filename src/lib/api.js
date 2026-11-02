@@ -229,6 +229,9 @@ export const api = {
   deletePost(token, id) {
     return apiRequest(`/api/posts/${id}`, { method: 'DELETE', token });
   },
+  blockLobbyAuthor(token, id) {
+    return apiRequest(`/api/lobby/${id}/block`, { method: 'POST', token });
+  },
   getLobby(token, after = 0) {
     return apiRequest(`/api/lobby?after=${after}`, { token });
   },

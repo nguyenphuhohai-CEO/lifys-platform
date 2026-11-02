@@ -829,5 +829,6 @@ export const ROWS = [
   ['Message','Message','Mensaje','Tin nhắn'],
   ['Impossible de charger le salon.','Unable to load the lounge.','No se pudo cargar el salón.','Không thể tải phòng chat.'],
   ['Message non envoyé.','Message not sent.','Mensaje no enviado.','Tin nhắn chưa được gửi.'],
+  ['Personne bloquée','User blocked','Persona bloqueada','Đã chặn người dùng'],
 ];
 

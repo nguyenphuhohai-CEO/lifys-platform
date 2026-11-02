@@ -1034,3 +1034,30 @@ test('salon général : envoi, wizz, lecture incrémentale, blocage', async () =
     await server.close();
   }
 });
+
+test('salon : signalement masque à 3, modération supprime, blocage par message', async () => {
+  const server = await startTestServer({ ADMIN_EMAILS: 'lobby-admin@example.com' });
+  try {
+    const author = await registerUser(server.baseUrl, 'lobby-author@example.com', { mode: 'amical' });
+    const msg = await request(server.baseUrl, '/api/lobby', { method: 'POST', headers: author.auth, body: JSON.stringify({ body: 'contenu abusif' }) });
+    const readers = [];
+    for (const n of [1, 2, 3, 4]) {
+      readers.push(await registerUser(server.baseUrl, 'lobby-r' + n + '@example.com', { mode: 'amical' }));
+    }
+    const own = await request(server.baseUrl, '/api/reports', { method: 'POST', headers: author.auth, body: JSON.stringify({ lobbyId: msg.body.id, reason: 'spam' }) });
+    assert.equal(own.status, 404);
+
+    for (const r of readers.slice(0, 2)) {
+      assert.equal((await request(server.baseUrl, '/api/reports', { method: 'POST', headers: r.auth, body: JSON.stringify({ lobbyId: msg.body.id, reason: 'harcelement' }) })).status, 201);
+    }
+    assert.equal((await request(server.baseUrl, '/api/lobby', { headers: readers[3].auth })).body.messages.length, 1);
+    assert.equal((await request(server.baseUrl, '/api/reports', { method: 'POST', headers: readers[2].auth, body: JSON.stringify({ lobbyId: msg.body.id, reason: 'spam' }) })).status, 201);
+    assert.equal((await request(server.baseUrl, '/api/lobby', { headers: readers[3].auth })).body.messages.length, 0);
+
+    const blocked = await request(server.baseUrl, '/api/lobby/' + msg.body.id + '/block', { method: 'POST', headers: readers[3].auth });
+    assert.equal(blocked.status, 201);
+    assert.equal((await request(server.baseUrl, '/api/lobby/9999/block', { method: 'POST', headers: readers[3].auth })).status, 404);
+  } finally {
+    await server.close();
+  }
+});

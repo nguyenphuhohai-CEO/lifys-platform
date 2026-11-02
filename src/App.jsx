@@ -1360,7 +1360,7 @@ function App({ site, dedicated = false }) {
 
         {view === 'admin' && currentUser.isAdmin ? <Suspense fallback={null}><AdminPanel token={token} onError={handleApiError} /></Suspense> : null}
 
-        {view === 'lobby' && <Lobby token={token} t={t} onError={handleApiError} />}
+        {view === 'lobby' && <Lobby token={token} t={t} onError={handleApiError} showToast={showToast} />}
         {view === 'tree' && <NetworkTree token={token} t={t} onError={handleApiError} />}
 
         {view === 'pricing' && (
