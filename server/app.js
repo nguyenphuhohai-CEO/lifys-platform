@@ -346,6 +346,24 @@ export function createApp(config) {
     return res.json({ path: `/famille/${profile.id}/${familyToken(profile.id)}` });
   });
 
+  const lobbyLimiter = createRateLimiter({
+    windowMs: 10 * 1000,
+    max: config.nodeEnv === 'test' ? 1000 : 6,
+    message: 'Doucement ! Attendez quelques secondes avant de réécrire.',
+  });
+
+  app.get('/api/lobby', requireAuth, requireVerified, (req, res) => {
+    res.json(database.listLobby(req.auth.userId, Number(req.query.after) || 0));
+  });
+
+  app.post('/api/lobby', requireAuth, requireVerified, lobbyLimiter, (req, res) => {
+    const result = database.postLobby(req.auth.userId, req.body);
+    if (result.error) {
+      return res.status(400).json({ message: result.error });
+    }
+    return res.status(201).json(result);
+  });
+
   app.get('/api/network', requireAuth, (req, res) => {
     res.json(database.listNetwork(req.auth.userId));
   });

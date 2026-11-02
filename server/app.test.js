@@ -1005,3 +1005,32 @@ test('arbre généalogique : ajout, réseau, page famille, suppression', async (
     await server.close();
   }
 });
+
+test('salon général : envoi, wizz, lecture incrémentale, blocage', async () => {
+  const server = await startTestServer();
+  try {
+    const a = await registerUser(server.baseUrl, 'lobby-a@example.com', { mode: 'amical' });
+    const b = await registerUser(server.baseUrl, 'lobby-b@example.com', { mode: 'amoureux' });
+    const sent = await request(server.baseUrl, '/api/lobby', { method: 'POST', headers: a.auth, body: JSON.stringify({ body: '  Salut   tout le monde  ' }) });
+    assert.equal(sent.status, 201);
+    assert.equal((await request(server.baseUrl, '/api/lobby', { method: 'POST', headers: a.auth, body: JSON.stringify({ body: '   ' }) })).status, 400);
+    await request(server.baseUrl, '/api/lobby', { method: 'POST', headers: a.auth, body: JSON.stringify({ kind: 'nudge' }) });
+
+    const seen = await request(server.baseUrl, '/api/lobby', { headers: b.auth });
+    assert.equal(seen.body.messages.length, 2);
+    assert.equal(seen.body.messages[0].body, 'Salut tout le monde');
+    assert.equal(seen.body.messages[0].mine, false);
+    assert.equal(seen.body.online.length, 2);
+
+    const after = await request(server.baseUrl, '/api/lobby?after=' + sent.body.id, { headers: b.auth });
+    assert.equal(after.body.messages.length, 1);
+    assert.equal(after.body.messages[0].kind, 'nudge');
+
+    const aId = server.database.getUserByEmail('lobby-a@example.com', 'amical').id;
+    const bId = server.database.getUserByEmail('lobby-b@example.com', 'amoureux').id;
+    server.database.db.prepare('INSERT INTO blocks (user_id, blocked_user_id, created_at) VALUES (?, ?, ?)').run(bId, aId, new Date().toISOString());
+    assert.equal((await request(server.baseUrl, '/api/lobby', { headers: b.auth })).body.messages.length, 0);
+  } finally {
+    await server.close();
+  }
+});

@@ -229,6 +229,12 @@ export const api = {
   deletePost(token, id) {
     return apiRequest(`/api/posts/${id}`, { method: 'DELETE', token });
   },
+  getLobby(token, after = 0) {
+    return apiRequest(`/api/lobby?after=${after}`, { token });
+  },
+  postLobby(token, message) {
+    return apiRequest('/api/lobby', { method: 'POST', token, body: message });
+  },
   getNetwork(token) {
     return apiRequest('/api/network', { token });
   },

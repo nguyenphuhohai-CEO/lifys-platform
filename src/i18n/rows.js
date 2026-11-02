@@ -818,5 +818,16 @@ export const ROWS = [
   ['Pro','Pro','Pro','Pro'],
   ['Impossible de charger l’arbre.','Unable to load the tree.','No se pudo cargar el árbol.','Không thể tải cây.'],
   ['Faites des matchs : vos amis apparaîtront ici.','Make some matches: your friends will show up here.','Haz matches: tus amigos aparecerán aquí.','Hãy kết nối: bạn bè của bạn sẽ hiện ở đây.'],
+  ['Salon','Lounge','Salón','Phòng chat'],
+  ['Salon Lifys','Lifys lounge','Salón Lifys','Phòng chat Lifys'],
+  ['Un chat commun à tous les sites, comme au temps de MSN. Restez courtois : soyez respectueux, 18 ans minimum.','A chat shared by all sites, like the MSN days. Be respectful, 18+ only.','Un chat común a todos los sitios, como en los tiempos de MSN. Sé respetuoso, solo mayores de 18.','Phòng chat chung cho mọi trang, như thời MSN. Hãy lịch sự, chỉ từ 18 tuổi.'],
+  ['En ligne','Online','En línea','Trực tuyến'],
+  ['Personne n’a encore écrit. Lancez la conversation !','Nobody has written yet. Start the conversation!','Nadie ha escrito aún. ¡Inicia la conversación!','Chưa ai viết. Hãy bắt đầu cuộc trò chuyện!'],
+  ['Vous avez envoyé un wizz !','You sent a nudge!','¡Enviaste un zumbido!','Bạn đã gửi một wizz!'],
+  ['{name} a envoyé un wizz !','{name} sent a nudge!','¡{name} envió un zumbido!','{name} đã gửi một wizz!'],
+  ['Wizz','Nudge','Zumbido','Wizz'],
+  ['Message','Message','Mensaje','Tin nhắn'],
+  ['Impossible de charger le salon.','Unable to load the lounge.','No se pudo cargar el salón.','Không thể tải phòng chat.'],
+  ['Message non envoyé.','Message not sent.','Mensaje no enviado.','Tin nhắn chưa được gửi.'],
 ];
 

@@ -1413,3 +1413,24 @@ textarea:focus-visible {
 .tree-self{background:#6c4cff;color:#fff}
 .tree-form{display:flex;gap:.5rem;flex-wrap:wrap}
 .tree-form input,.tree-form select{padding:.45rem;border-radius:8px;border:1px solid #ccc;min-width:0}
+
+.msn-window{display:grid;grid-template-columns:200px 1fr;border:2px solid #4a90d9;border-radius:8px;overflow:hidden;background:#fff;color:#1b2a3a}
+.msn-contacts{background:linear-gradient(#e6f1fb,#cfe3f7);padding:.7rem;border-right:1px solid #9bc2e6;max-height:420px;overflow:auto}
+.msn-contacts h3{font-size:.9rem;margin:0 0 .5rem}
+.msn-contacts ul{list-style:none;margin:0;padding:0;display:grid;gap:.3rem}
+.msn-dot{display:inline-block;width:.6rem;height:.6rem;margin-right:.4rem;border-radius:50%;background:#3bb54a}
+.msn-chat{display:flex;flex-direction:column;min-width:0}
+.msn-log{height:320px;overflow:auto;padding:.7rem;background:#fff}
+.msn-line{margin:.25rem 0;word-break:break-word}
+.msn-line strong{color:#c0392b}
+.msn-mine strong{color:#1a5fb4}
+.msn-system{margin:.3rem 0;color:#888;font-style:italic}
+.msn-emojis{display:flex;gap:.2rem;flex-wrap:wrap;padding:.3rem .5rem;background:#eef5fc;border-top:1px solid #cfe3f7}
+.msn-emojis button{border:0;background:none;cursor:pointer;font-size:1.2rem}
+.msn-emojis .msn-wizz{margin-left:auto;font-size:.85rem}
+.msn-form{display:flex;gap:.5rem;padding:.5rem;border-top:1px solid #cfe3f7}
+.msn-form input{flex:1;min-width:0;padding:.5rem;border:1px solid #9bc2e6;border-radius:6px}
+.msn-shake{animation:msn-shake .8s}
+@keyframes msn-shake{0%,100%{transform:translateX(0)}15%{transform:translateX(-10px)}30%{transform:translateX(10px)}45%{transform:translateX(-8px)}60%{transform:translateX(8px)}75%{transform:translateX(-4px)}}
+@media (prefers-reduced-motion:reduce){.msn-shake{animation:none}}
+@media (max-width:640px){.msn-window{grid-template-columns:1fr}.msn-contacts{max-height:120px;border-right:0;border-bottom:1px solid #9bc2e6}}

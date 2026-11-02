@@ -454,6 +454,15 @@ export function createDatabase(databaseFile, options = {}) {
     note TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS lobby_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    site TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'text',
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`);
   const lateProfileColumns = new Set(db.prepare('PRAGMA table_info(profiles)').all().map((column) => column.name));
   for (const column of ['boost_until', 'last_boost_at']) {
     if (!lateProfileColumns.has(column)) db.exec(`ALTER TABLE profiles ADD COLUMN ${column} TEXT`);
@@ -795,6 +804,40 @@ export function createDatabase(databaseFile, options = {}) {
 
   function removeFamilyMember(userId, publicId) {
     return db.prepare(`DELETE FROM family_members WHERE public_id = ? AND user_id IN (${listAccountUserIds(userId).join(',') || '0'})`).run(publicId).changes > 0;
+  }
+
+  const lobbyPresence = new Map();
+  const LOBBY_KEEP = 500;
+  const LOBBY_ONLINE_MS = 60 * 1000;
+
+  function lobbyTouch(userId, profile) {
+    lobbyPresence.set(userId, { name: profile.name, site: profile.mode, at: Date.now() });
+  }
+
+  function listLobby(userId, afterId = 0) {
+    lobbyTouch(userId, getProfileByUserId(userId) ?? { name: '?', mode: '' });
+    const rows = afterId
+      ? db.prepare('SELECT id, user_id, name, site, kind, body, created_at FROM lobby_messages WHERE id > ? ORDER BY id LIMIT 100').all(afterId)
+      : db.prepare('SELECT * FROM (SELECT id, user_id, name, site, kind, body, created_at FROM lobby_messages ORDER BY id DESC LIMIT 50) ORDER BY id').all();
+    const blocked = new Set(db.prepare('SELECT blocked_user_id AS id FROM blocks WHERE user_id = ? UNION SELECT user_id AS id FROM blocks WHERE blocked_user_id = ?').all(userId, userId).map((row) => row.id));
+    const cutoff = Date.now() - LOBBY_ONLINE_MS;
+    return {
+      messages: rows.filter((row) => !blocked.has(row.user_id)).map((row) => ({ id: row.id, mine: row.user_id === userId, name: row.name, site: row.site, kind: row.kind, body: row.body, at: row.created_at })),
+      online: [...lobbyPresence.entries()].filter(([id, entry]) => entry.at >= cutoff && !blocked.has(id)).map(([id, entry]) => ({ name: entry.name, site: entry.site, me: id === userId })),
+    };
+  }
+
+  function postLobby(userId, input) {
+    const profile = getProfileByUserId(userId);
+    const kind = input?.kind === 'nudge' ? 'nudge' : 'text';
+    const body = kind === 'nudge' ? '' : `${input?.body ?? ''}`.replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (!profile || (kind === 'text' && !body)) {
+      return { error: 'Message vide.' };
+    }
+    lobbyTouch(userId, profile);
+    const info = db.prepare('INSERT INTO lobby_messages (user_id, name, site, kind, body, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(userId, profile.name, profile.mode, kind, body, now());
+    db.prepare('DELETE FROM lobby_messages WHERE id <= ?').run(Number(info.lastInsertRowid) - LOBBY_KEEP);
+    return { id: Number(info.lastInsertRowid) };
   }
 
   function getConversationRecipientId(conversationPublicId, senderId) {
@@ -1617,6 +1660,8 @@ export function createDatabase(databaseFile, options = {}) {
     removePushSubscription,
     listPushSubscriptions,
     listFamilyMembers,
+    listLobby,
+    postLobby,
     listNetwork,
     listFamilyMembersByProfile,
     addFamilyMember,
