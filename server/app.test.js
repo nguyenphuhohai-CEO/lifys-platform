@@ -972,6 +972,12 @@ test('amis d’amis : degrés 2 et 3 via les matchs', async () => {
     const result = server.database.listFriendsOfFriends(ids[0]);
     assert.deepEqual(result.map((p) => p.degree), [2, 3]);
     assert.equal(result[0].via.length, 1);
+    const pid = (n) => server.database.getProfileByUserId(ids[n]).id;
+    const level1 = server.database.listFriendsOf(ids[0], pid(1));
+    assert.deepEqual(level1.map((p) => p.id), [pid(2)]);
+    assert.equal(level1[0].hasMore, true);
+    assert.deepEqual(server.database.listFriendsOf(ids[0], pid(2)).map((p) => p.id).sort(), [pid(1), pid(3)].sort());
+    assert.equal(server.database.listFriendsOf(ids[0], pid(0)), null);
   } finally {
     await server.close();
   }
@@ -1089,6 +1095,22 @@ test('arbre généalogique : liens parent/enfant/conjoint/fratrie', async () => 
     await request(server.baseUrl, '/api/family/tree/' + mother.id, { method: 'DELETE', headers: user.auth });
     const after = (await request(server.baseUrl, '/api/family/tree', { headers: user.auth })).body;
     assert.ok(!after.links.some((l) => l.from === mother.id || l.to === mother.id));
+  } finally {
+    await server.close();
+  }
+});
+
+test('arbre : dépliage des amis d’amis, limité au réseau', async () => {
+  const server = await startTestServer();
+  try {
+    const me = await registerUser(server.baseUrl, 'unfold-me@example.com', { mode: 'amical' });
+    const stranger = await registerUser(server.baseUrl, 'unfold-stranger@example.com', { mode: 'amical' });
+    const profile = (await request(server.baseUrl, '/api/profile', { headers: stranger.auth })).body;
+    const id = profile.profile?.id ?? profile.id;
+    const res = await request(server.baseUrl, '/api/network/friends/' + id, { headers: me.auth });
+    assert.equal(res.status, 404);
+    const ghost = await request(server.baseUrl, '/api/network/friends/inconnu', { headers: me.auth });
+    assert.equal(ghost.status, 404);
   } finally {
     await server.close();
   }

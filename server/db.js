@@ -1118,6 +1118,50 @@ export function createDatabase(databaseFile, options = {}) {
       .sort((a, b) => a.degree - b.degree || (b.compatibility?.score ?? 0) - (a.compatibility?.score ?? 0));
   }
 
+  // Amis d'une personne du réseau (dépliage de l'arbre) : uniquement si elle est atteignable depuis le compte.
+  function listFriendsOf(userId, profilePublicId, maxDepth = 8) {
+    const target = statements.findProfileByPublicId.get(profilePublicId);
+    if (!target) {
+      return null;
+    }
+    const mine = new Set(listAccountUserIds(userId));
+    const partners = (id) => statements.matchPartnerIds.all(id, id, id).map((row) => row.id);
+    const seen = new Set(mine);
+    let frontier = [...mine];
+    let reachable = false;
+    for (let depth = 0; depth < maxDepth && frontier.length && !reachable; depth += 1) {
+      const next = [];
+      for (const id of frontier) {
+        for (const friend of partners(id)) {
+          if (friend === target.user_id) {
+            reachable = true;
+          }
+          if (!seen.has(friend)) {
+            seen.add(friend);
+            next.push(friend);
+          }
+        }
+      }
+      frontier = next;
+    }
+    if (!reachable || mine.has(target.user_id)) {
+      return null;
+    }
+    const people = new Map();
+    for (const accountId of listAccountUserIds(target.user_id)) {
+      for (const friendId of partners(accountId)) {
+        if (mine.has(friendId) || people.has(friendId)) {
+          continue;
+        }
+        const row = statements.findProfileByUserId.get(friendId);
+        if (row && row.status !== 'banned') {
+          people.set(friendId, { id: row.public_id, name: row.name, city: row.city, site: row.mode, hasMore: partners(friendId).some((p) => !mine.has(p) && p !== accountId) });
+        }
+      }
+    }
+    return [...people.values()];
+  }
+
   function getOrCreateMatch(userId, targetUserId, currentProfile, targetProfile) {
     const key = pairKey(userId, targetUserId);
     const reciprocal = Boolean(statements.hasReciprocalLike.get(targetUserId, userId));
@@ -1727,6 +1771,7 @@ export function createDatabase(databaseFile, options = {}) {
     updateUserProfile,
     listDiscoveryProfiles,
     listFriendsOfFriends,
+    listFriendsOf,
     applyReferral,
     savePushSubscription,
     removePushSubscription,

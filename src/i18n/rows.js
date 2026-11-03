@@ -836,5 +836,10 @@ export const ROWS = [
   ['Conjoint(e) de','Partner of','Pareja de','Vợ/chồng của'],
   ['Frère ou sœur de','Sibling of','Hermano/a de','Anh chị em của'],
   ['Arbre généalogique','Family tree','Árbol genealógico','Cây gia phả'],
+  ['Ami','Friend','Amigo/a','Bạn'],
+  ['Ami d’ami','Friend of a friend','Amigo de un amigo','Bạn của bạn'],
+  ['Ami d’ami d’ami','Friend of a friend of a friend','Amigo de un amigo de un amigo','Bạn của bạn của bạn'],
+  ['Aucun autre ami à afficher.','No other friends to show.','No hay más amigos que mostrar.','Không còn bạn bè nào để hiển thị.'],
+  ['Dépliez chaque ami pour voir ses propres amis, et ainsi de suite.','Expand each friend to see their own friends, and so on.','Despliega cada amigo para ver sus propios amigos, y así sucesivamente.','Mở từng người bạn để xem bạn bè của họ, và cứ thế tiếp tục.'],
 ];
 

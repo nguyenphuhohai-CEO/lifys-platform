@@ -371,6 +371,14 @@ export function createApp(config) {
     return res.status(201).json({ blocked: true });
   });
 
+  app.get('/api/network/friends/:profileId', requireAuth, (req, res) => {
+    const friends = database.listFriendsOf(req.auth.userId, req.params.profileId);
+    if (!friends) {
+      return res.status(404).json({ error: 'Personne introuvable dans votre réseau.' });
+    }
+    return res.json({ friends });
+  });
+
   app.get('/api/network', requireAuth, (req, res) => {
     res.json(database.listNetwork(req.auth.userId));
   });

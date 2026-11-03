@@ -241,6 +241,9 @@ export const api = {
   getNetwork(token) {
     return apiRequest('/api/network', { token });
   },
+  getFriendsOf(token, profileId) {
+    return apiRequest(`/api/network/friends/${encodeURIComponent(profileId)}`, { token });
+  },
   getFamilyTree(token) {
     return apiRequest('/api/family/tree', { token });
   },

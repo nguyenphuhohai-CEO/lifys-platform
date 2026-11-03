@@ -1453,3 +1453,12 @@ textarea:focus-visible {
 .tree-svg-remove circle{fill:#c0392b}
 .tree-svg-remove text{fill:#fff;font-size:14px}
 .tree-anchor{align-self:center}
+
+.ftree-root{margin:0 0 .4rem}
+.ftree-list{list-style:none;margin:0;padding-left:1.2rem;border-left:2px solid #c9b6ff}
+.ftree-root + .ftree-list{padding-left:.6rem}
+.ftree-item{margin:.25rem 0}
+.ftree-node{background:#f1ecff;border:1px solid #c9b6ff;border-radius:999px;padding:.3rem .8rem;cursor:pointer;font:inherit;color:inherit}
+.ftree-node:hover{border-color:#e0559a}
+.ftree-caret{display:inline-block;width:1rem;color:#6c4cff}
+.ftree-empty{margin:.2rem 0 .2rem 1.2rem}
