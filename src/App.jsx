@@ -3,7 +3,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import Avatar from './components/Avatar';
 import NetworkTree from './components/NetworkTree';
 import Lobby from './components/Lobby';
-import { EventsPanel, FeedPanel, FriendsOfFriendsPanel, LikesPanel, SelectionPanel, TonightPanel } from './components/Community';
+import { EventsPanel, FeedPanel, FriendSuggestions, FriendsOfFriendsPanel, LikesPanel, SelectionPanel, TonightPanel } from './components/Community';
 import { GalleryManager, PhotoStrip } from './components/Gallery';
 import { DetailChips, SiteFieldsForm } from './components/SiteFields';
 import SwipeDeck from './components/SwipeDeck';
@@ -1260,6 +1260,7 @@ function App({ site, dedicated = false }) {
                 ))}
               </div>
             )}
+            <FriendSuggestions token={token} t={t} onError={handleApiError} showToast={showToast} />
           </section>
         )}
 

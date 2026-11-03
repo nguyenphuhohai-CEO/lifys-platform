@@ -255,6 +255,48 @@ export function FriendsOfFriendsPanel({ token, t, onError, showToast }) {
   );
 }
 
+export function FriendSuggestions({ token, t, onError, showToast }) {
+  const load = useCallback(() => api.getFriendsOfFriends(token), [token]);
+  const [data] = useLoader(load, onError, t('Impossible de charger les amis d’amis.'));
+  const [added, setAdded] = useState([]);
+  const people = (data?.profiles ?? []).slice(0, 12);
+  if (!people.length) {
+    return null;
+  }
+
+  const add = async (person) => {
+    try {
+      const response = await api.likeProfile(token, person.id);
+      setAdded((current) => [...current, person.id]);
+      showToast({ type: 'success', title: response?.matched ? t('Nouvel ami !') : t('Demande envoyée'), message: person.name });
+    } catch (error) {
+      onError(error, t('Impossible d’envoyer le like.'));
+    }
+  };
+
+  return (
+    <div className="friend-suggestions">
+      <h3>🤝 {t('Amis que vous pouvez ajouter')}</h3>
+      <p className="muted">{t('Des amis de vos amis : ajoutez-les à votre liste d’amis.')}</p>
+      <div className="matches-list">
+        {people.map((person) => (
+          <article key={person.id} className="match-item">
+            <Avatar className="match-avatar" src={person.avatar} alt={person.name} fallback={person.name} />
+            <div className="match-copy">
+              <h3>{person.name}</h3>
+              <p>{person.city} · {person.degree === 2 ? t('Ami d’un ami') : t('Ami d’un ami d’un ami')}</p>
+              {person.via?.length ? <small>{t('Via {names}', { names: person.via.join(', ') })}</small> : null}
+            </div>
+            <button type="button" className="secondary-button" disabled={added.includes(person.id)} onClick={() => add(person)}>
+              {added.includes(person.id) ? t('Demande envoyée') : t('Ajouter à mes amis')}
+            </button>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function LikesPanel({ token, t, onError, onUpgrade, onDiscover }) {
   const load = useCallback(() => api.getLikesReceived(token), [token]);
   const [data] = useLoader(load, onError, t('Impossible de charger les likes reçus.'));

@@ -841,5 +841,10 @@ export const ROWS = [
   ['Ami d’ami d’ami','Friend of a friend of a friend','Amigo de un amigo de un amigo','Bạn của bạn của bạn'],
   ['Aucun autre ami à afficher.','No other friends to show.','No hay más amigos que mostrar.','Không còn bạn bè nào để hiển thị.'],
   ['Dépliez chaque ami pour voir ses propres amis, et ainsi de suite.','Expand each friend to see their own friends, and so on.','Despliega cada amigo para ver sus propios amigos, y así sucesivamente.','Mở từng người bạn để xem bạn bè của họ, và cứ thế tiếp tục.'],
+  ['Amis que vous pouvez ajouter','Friends you can add','Amigos que puedes añadir','Bạn bè bạn có thể thêm'],
+  ['Des amis de vos amis : ajoutez-les à votre liste d’amis.','Friends of your friends: add them to your friend list.','Amigos de tus amigos: añádelos a tu lista de amigos.','Bạn của bạn bè: hãy thêm họ vào danh sách bạn bè.'],
+  ['Ajouter à mes amis','Add to my friends','Añadir a mis amigos','Thêm vào bạn bè'],
+  ['Demande envoyée','Request sent','Solicitud enviada','Đã gửi yêu cầu'],
+  ['Nouvel ami !','New friend!','¡Nuevo amigo!','Bạn mới!'],
 ];
 
