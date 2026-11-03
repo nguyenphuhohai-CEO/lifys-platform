@@ -1462,3 +1462,5 @@ textarea:focus-visible {
 .ftree-node:hover{border-color:#e0559a}
 .ftree-caret{display:inline-block;width:1rem;color:#6c4cff}
 .ftree-empty{margin:.2rem 0 .2rem 1.2rem}
+
+.social-add{margin-top:.6rem;max-width:100%}

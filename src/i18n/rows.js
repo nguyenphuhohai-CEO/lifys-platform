@@ -674,8 +674,6 @@ export const ROWS = [
   ['Continuer avec Facebook', 'Continue with Facebook', 'Continuar con Facebook', 'Tiếp tục với Facebook'],
   ['En continuant, vous confirmez avoir 18 ans et acceptez les CGU.', 'By continuing, you confirm you are 18+ and accept the Terms.', 'Al continuar, confirmas tener 18 años y aceptas los Términos.', 'Khi tiếp tục, bạn xác nhận đủ 18 tuổi và đồng ý Điều khoản.'],
   ['Connexion sociale impossible. Réessayez ou utilisez votre e-mail.', 'Social sign-in failed. Try again or use your e-mail.', 'No se pudo iniciar sesión. Inténtalo de nuevo o usa tu correo.', 'Đăng nhập mạng xã hội thất bại. Hãy thử lại hoặc dùng e-mail.'],
-  ['R?seaux sociaux', 'Social networks', 'Redes sociales', 'M?ng x? h?i'],
-  ['Liens publics visibles sur votre profil. Collez l?adresse compl?te (https://?) de votre page.', 'Public links shown on your profile. Paste the full address (https://?) of your page.', 'Enlaces p?blicos visibles en tu perfil. Pega la direcci?n completa (https://?) de tu p?gina.', 'Li?n k?t c?ng khai hi?n th? tr?n h? s?. D?n ??a ch? ??y ?? (https://?) c?a trang b?n.'],
   ['Se souvenir de mon e-mail sur cet appareil', 'Remember my email on this device', 'Recordar mi correo en este dispositivo', 'Ghi nh? email tr?n thi?t b? n?y'],
   ['Cookies et mesure d’audience', 'Cookies and audience measurement', 'Cookies y medición de audiencia', 'Cookie và đo lường lượng truy cập'],
   ['Avec votre accord, nous mesurons aussi l’audience du site (pages vues, anonymisées) pour l’améliorer.', 'With your consent, we also measure site audience (anonymized page views) to improve it.', 'Con tu consentimiento, también medimos la audiencia del sitio (páginas vistas anonimizadas) para mejorarlo.', 'Khi bạn đồng ý, chúng tôi cũng đo lường lượng truy cập (lượt xem ẩn danh) để cải thiện trang.'],
@@ -846,5 +844,8 @@ export const ROWS = [
   ['Ajouter à mes amis','Add to my friends','Añadir a mis amigos','Thêm vào bạn bè'],
   ['Demande envoyée','Request sent','Solicitud enviada','Đã gửi yêu cầu'],
   ['Nouvel ami !','New friend!','¡Nuevo amigo!','Bạn mới!'],
+  ['Réseaux sociaux','Social networks','Redes sociales','Mạng xã hội'],
+  ['Liens publics visibles sur votre profil. Collez l’adresse complète (https://…) de votre page.','Public links shown on your profile. Paste the full address (https://…) of your page.','Enlaces públicos visibles en tu perfil. Pega la dirección completa (https://…) de tu página.','Liên kết công khai hiển thị trên hồ sơ. Dán địa chỉ đầy đủ (https://…) của trang bạn.'],
+  ['Ajouter un réseau social','Add a social network','Añadir una red social','Thêm mạng xã hội'],
 ];
 

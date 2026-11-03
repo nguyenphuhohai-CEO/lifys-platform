@@ -1,8 +1,11 @@
+import { useState } from 'react';
+
 import { SITE_FIELDS, socialKey, socialNetworksFor } from '../data/siteFields';
 
 export function SiteFieldsForm({ site, details, onChange, t }) {
   const fields = SITE_FIELDS[site] ?? [];
   const networks = socialNetworksFor(site);
+  const [extra, setExtra] = useState([]);
   if (!fields.length) return null;
 
   const set = (id, value) => onChange({ ...details, [id]: value });
@@ -43,16 +46,22 @@ export function SiteFieldsForm({ site, details, onChange, t }) {
           );
         })}
       </div>
-      <h4>{t('R?seaux sociaux')}</h4>
-      <p className="muted small">{t('Liens publics visibles sur votre profil. Collez l?adresse compl?te (https://?) de votre page.')}</p>
+      <h4>{t('Réseaux sociaux')}</h4>
+      <p className="muted small">{t('Liens publics visibles sur votre profil. Collez l’adresse complète (https://…) de votre page.')}</p>
       <div className="site-fields-grid">
-        {networks.map((network) => (
+        {networks.filter((network) => details?.[socialKey(network.id)] || extra.includes(network.id)).map((network) => (
           <label key={network.id}>
             <span>{network.icon} {network.label}</span>
-            <input type="url" maxLength="200" value={details?.[socialKey(network.id)] ?? ''} onChange={(event) => set(socialKey(network.id), event.target.value)} placeholder={`https://${network.hosts[0]}/?`} />
+            <input type="url" maxLength="200" value={details?.[socialKey(network.id)] ?? ''} onChange={(event) => set(socialKey(network.id), event.target.value)} placeholder={`https://${network.hosts[0]}/…`} />
           </label>
         ))}
       </div>
+      <select className="social-add" value="" aria-label={t('Ajouter un réseau social')} onChange={(event) => event.target.value && setExtra([...extra, event.target.value])}>
+        <option value="">+ {t('Ajouter un réseau social')}</option>
+        {networks.filter((network) => !details?.[socialKey(network.id)] && !extra.includes(network.id)).map((network) => (
+          <option key={network.id} value={network.id}>{network.icon} {network.label}</option>
+        ))}
+      </select>
     </fieldset>
   );
 }
