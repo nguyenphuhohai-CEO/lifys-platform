@@ -76,7 +76,7 @@ export default function Lobby({ token, t, onError, showToast }) {
       <header className="panel-header">
         <p className="eyebrow">{t('Salon')}</p>
         <h2>{t('Salon Lifys')}</h2>
-        <p className="muted">{t('Un chat commun à tous les sites, comme au temps de MSN. Restez courtois : soyez respectueux, 18 ans minimum.')}</p>
+        <p className="muted">{t('Restez courtois : soyez respectueux, 18 ans minimum.')}</p>
       </header>
       <div className="msn-window">
         <aside className="msn-contacts">
