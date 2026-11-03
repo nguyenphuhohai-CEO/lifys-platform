@@ -1,11 +1,39 @@
 import { createServer } from 'node:http';
 
 import { createApp } from './app.js';
+import { startBackupSchedule } from './backup.js';
 import { getConfig } from './config.js';
+import { startReminderSchedule } from './reminders.js';
 
 const config = getConfig();
-const { app } = createApp(config);
+const { app, database, mailer } = createApp(config);
 
-createServer(app).listen(config.port, () => {
+mailer.verify().then(
+  (configured) => console.log(configured ? 'SMTP: connexion OK' : 'SMTP: non configuré (e-mails affichés dans la console)'),
+  (error) => console.error('SMTP: connexion impossible —', error.message),
+);
+
+const backups = startBackupSchedule(database.db, {
+  directory: config.backup.dir,
+  keep: config.backup.keep,
+  intervalHours: config.backup.intervalHours,
+});
+
+const reminders = startReminderSchedule({ db: database.db, mailer, config }, config.reminders.intervalHours);
+
+const server = createServer(app).listen(config.port, () => {
   console.log(`Lifys server listening on http://0.0.0.0:${config.port}`);
 });
+
+function shutdown() {
+  backups.stop();
+  reminders.stop();
+  server.close(() => {
+    database.db.close();
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10000).unref();
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

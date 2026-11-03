@@ -1,0 +1,163 @@
+# Un déploiement 100 % indépendant par site (base, disque et secrets séparés).
+# Domaines suggérés : amis.lifys.com, love.lifys.com, ephemere.lifys.com, mariage.lifys.com, pro.lifys.com
+services:
+  - type: web
+    name: lifys-amis
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: lifys-amis-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SITE_ONLY
+        value: amical
+      - key: DATABASE_FILE
+        value: /data/lifys.sqlite
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APP_URL
+        sync: false # ex. https://amis.lifys.com
+      - key: SMTP_URL
+        sync: false
+      - key: MAIL_FROM
+        value: Lifys Amis <no-reply@lifys.com>
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PREMIUM_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+  - type: web
+    name: lifys-love
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: lifys-love-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SITE_ONLY
+        value: amoureux
+      - key: DATABASE_FILE
+        value: /data/lifys.sqlite
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APP_URL
+        sync: false # ex. https://love.lifys.com
+      - key: SMTP_URL
+        sync: false
+      - key: MAIL_FROM
+        value: Lifys Love <no-reply@lifys.com>
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PREMIUM_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+  - type: web
+    name: lifys-ephemere
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: lifys-ephemere-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SITE_ONLY
+        value: sans-lendemain
+      - key: DATABASE_FILE
+        value: /data/lifys.sqlite
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APP_URL
+        sync: false # ex. https://ephemere.lifys.com
+      - key: SMTP_URL
+        sync: false
+      - key: MAIL_FROM
+        value: Lifys Ephemere <no-reply@lifys.com>
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PREMIUM_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+  - type: web
+    name: lifys-mariage
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: lifys-mariage-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SITE_ONLY
+        value: mariage
+      - key: DATABASE_FILE
+        value: /data/lifys.sqlite
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APP_URL
+        sync: false # ex. https://mariage.lifys.com
+      - key: SMTP_URL
+        sync: false
+      - key: MAIL_FROM
+        value: Lifys Mariage <no-reply@lifys.com>
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PREMIUM_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+  - type: web
+    name: lifys-pro
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: lifys-pro-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SITE_ONLY
+        value: professionnel
+      - key: DATABASE_FILE
+        value: /data/lifys.sqlite
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APP_URL
+        sync: false # ex. https://pro.lifys.com
+      - key: SMTP_URL
+        sync: false
+      - key: MAIL_FROM
+        value: Lifys Pro <no-reply@lifys.com>
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PREMIUM_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
