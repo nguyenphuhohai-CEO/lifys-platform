@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import Avatar from './Avatar';
 import { PhotoStrip } from './Gallery';
+import FamilyGraph from './FamilyGraph';
 import { DetailChips } from './SiteFields';
 import { api } from '../lib/api';
 
@@ -399,26 +400,25 @@ export function TonightPanel({ token, t, locale, profile, onProfile, onError, sh
   );
 }
 
-const FAMILY_GROUPS = [
-  ['grandparent', 'Grands-parents'],
-  ['parent', 'Parents'],
-  ['uncle', 'Oncles et tantes'],
-  ['sibling', 'Frères et sœurs'],
-  ['cousin', 'Cousins'],
-  ['child', 'Enfants'],
+const FAMILY_LINK_OPTIONS = [
+  ['child', 'Enfant de'],
+  ['parent', 'Parent de'],
+  ['partner', 'Conjoint(e) de'],
+  ['sibling', 'Frère ou sœur de'],
 ];
 
 export function FamilyTree({ token, t, onError }) {
   const load = useCallback(() => api.getFamilyTree(token), [token]);
   const [data, refresh] = useLoader(load, onError, t('Impossible de charger l’arbre généalogique.'));
-  const [relation, setRelation] = useState('parent');
+  const [link, setLink] = useState('child');
+  const [selected, setSelected] = useState('me');
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
 
   const add = async (event) => {
     event.preventDefault();
     try {
-      await api.addFamilyMember(token, { relation, name, note });
+      await api.addFamilyMember(token, { link, anchor: selected, name, note });
       setName('');
       setNote('');
       refresh();
@@ -430,6 +430,7 @@ export function FamilyTree({ token, t, onError }) {
   const remove = async (id) => {
     try {
       await api.removeFamilyMember(token, id);
+      if (selected === id) setSelected('me');
       refresh();
     } catch (error) {
       onError(error, t('Action impossible.'));
@@ -437,37 +438,18 @@ export function FamilyTree({ token, t, onError }) {
   };
 
   const members = data?.members ?? [];
+  const selectedName = selected === 'me' ? t('Vous') : members.find((member) => member.id === selected)?.name ?? t('Vous');
 
   return (
     <div className="family-tree">
       <h3>🌳 {t('Mon arbre généalogique')}</h3>
-      <p className="muted">{t('Indiquez uniquement des prénoms. Cet arbre apparaît sur le lien partagé avec votre famille.')}</p>
-      <div className="tree-rows">
-        {FAMILY_GROUPS.map(([key, label]) => {
-          const people = members.filter((member) => member.relation === key);
-          if (!people.length) {
-            return null;
-          }
-          return (
-            <div key={key} className="tree-row">
-              <span className="tree-label">{t(label)}</span>
-              <div className="tree-people">
-                {people.map((person) => (
-                  <span key={person.id} className="tree-node" title={person.note}>
-                    {person.name}
-                    <button type="button" aria-label={t('Retirer')} onClick={() => remove(person.id)}>×</button>
-                  </span>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-        <div className="tree-row tree-me"><span className="tree-label">{t('Vous')}</span><div className="tree-people"><span className="tree-node tree-self">⭐ {t('Vous')}</span></div></div>
-      </div>
+      <p className="muted">{t('Cliquez sur une personne pour la choisir, puis ajoutez ses parents, enfants, conjoint ou fratrie. Indiquez uniquement des prénoms.')}</p>
+      <FamilyGraph members={members} links={data?.links ?? []} selected={selected} onSelect={setSelected} onRemove={remove} t={t} />
       <form className="tree-form" onSubmit={add}>
-        <select value={relation} onChange={(event) => setRelation(event.target.value)} aria-label={t('Lien familial')}>
-          {FAMILY_GROUPS.map(([key, label]) => <option key={key} value={key}>{t(label)}</option>)}
+        <select value={link} onChange={(event) => setLink(event.target.value)} aria-label={t('Lien familial')}>
+          {FAMILY_LINK_OPTIONS.map(([key, label]) => <option key={key} value={key}>{t(label)}</option>)}
         </select>
+        <strong className="tree-anchor">{selectedName}</strong>
         <input value={name} maxLength={60} onChange={(event) => setName(event.target.value)} placeholder={t('Prénom')} required />
         <input value={note} maxLength={120} onChange={(event) => setNote(event.target.value)} placeholder={t('Note (facultatif)')} />
         <button type="submit" className="secondary-button">{t('Ajouter')}</button>

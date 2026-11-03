@@ -376,7 +376,7 @@ export function createApp(config) {
   });
 
   app.get('/api/family/tree', requireAuth, (req, res) => {
-    res.json({ members: database.listFamilyMembers(req.auth.userId) });
+    res.json({ members: database.listFamilyMembers(req.auth.userId), links: database.listFamilyLinks(req.auth.userId) });
   });
 
   app.post('/api/family/tree', requireAuth, (req, res) => {
@@ -405,10 +405,10 @@ export function createApp(config) {
       .filter(([, value]) => value !== '' && value !== false && !(Array.isArray(value) && !value.length))
       .map(([key, value]) => `<li><strong>${escapeHtml(key)}</strong> : ${escapeHtml(Array.isArray(value) ? value.join(', ') : value === true ? 'oui' : value)}</li>`)
       .join('');
-    const familyLabels = { grandparent: 'Grands-parents', parent: 'Parents', uncle: 'Oncles et tantes', sibling: 'Frères et sœurs', cousin: 'Cousins', child: 'Enfants' };
+    const generationLabels = { '-4': 'Ancêtres', '-3': 'Arrière-grands-parents', '-2': 'Grands-parents', '-1': 'Parents', 0: 'Fratrie et conjoints', 1: 'Enfants', 2: 'Petits-enfants', 3: 'Arrière-petits-enfants', 4: 'Descendants' };
     const members = database.listFamilyMembersByProfile(profile.id);
-    const tree = Object.entries(familyLabels)
-      .map(([relation, label]) => ({ label, people: members.filter((member) => member.relation === relation) }))
+    const tree = Object.entries(generationLabels)
+      .map(([generation, label]) => ({ label, people: members.filter((member) => member.generation === Number(generation)) }))
       .filter((group) => group.people.length)
       .map((group) => `<h2 style="font-size:1rem">${group.label}</h2><ul>${group.people.map((p) => `<li>${escapeHtml(p.name)}${p.note ? ` — ${escapeHtml(p.note)}` : ''}</li>`).join('')}</ul>`)
       .join('');

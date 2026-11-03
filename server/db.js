@@ -463,6 +463,25 @@ export function createDatabase(databaseFile, options = {}) {
     body TEXT NOT NULL,
     created_at TEXT NOT NULL
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS family_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    from_id TEXT NOT NULL,
+    to_id TEXT NOT NULL,
+    kind TEXT NOT NULL
+  )`);
+  if (!db.prepare('PRAGMA table_info(family_members)').all().some((column) => column.name === 'generation')) {
+    db.exec('ALTER TABLE family_members ADD COLUMN generation INTEGER');
+    const legacyGeneration = { grandparent: -2, parent: -1, uncle: -1, sibling: 0, cousin: 0, child: 1 };
+    for (const row of db.prepare('SELECT public_id, user_id, relation FROM family_members').all()) {
+      db.prepare('UPDATE family_members SET generation = ? WHERE public_id = ?').run(legacyGeneration[row.relation] ?? 0, row.public_id);
+      if (row.relation === 'parent') {
+        db.prepare("INSERT INTO family_links (user_id, from_id, to_id, kind) VALUES (?, ?, 'me', 'parent')").run(row.user_id, row.public_id);
+      } else if (row.relation === 'child') {
+        db.prepare("INSERT INTO family_links (user_id, from_id, to_id, kind) VALUES (?, 'me', ?, 'parent')").run(row.user_id, row.public_id);
+      }
+    }
+  }
   const lateProfileColumns = new Set(db.prepare('PRAGMA table_info(profiles)').all().map((column) => column.name));
   for (const column of ['boost_until', 'last_boost_at']) {
     if (!lateProfileColumns.has(column)) db.exec(`ALTER TABLE profiles ADD COLUMN ${column} TEXT`);
@@ -761,7 +780,8 @@ export function createDatabase(databaseFile, options = {}) {
     return db.prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId);
   }
 
-  const FAMILY_RELATIONS = ['grandparent', 'parent', 'uncle', 'sibling', 'cousin', 'child'];
+  const FAMILY_LINKS = ['parent', 'child', 'partner', 'sibling'];
+  const FAMILY_MAX_GENERATION = 4;
   const FAMILY_LIMIT = 40;
 
   // L'arbre appartient au compte : il est partagé entre les 5 sites.
@@ -769,14 +789,23 @@ export function createDatabase(databaseFile, options = {}) {
     return db.prepare('SELECT id FROM users WHERE email = (SELECT email FROM users WHERE id = ?)').all(userId).map((row) => row.id);
   }
 
+  function accountIdList(userId) {
+    return listAccountUserIds(userId).join(',') || '0';
+  }
+
   function listFamilyMembers(userId) {
-    return db.prepare(`SELECT public_id AS id, relation, name, note FROM family_members WHERE user_id IN (${listAccountUserIds(userId).join(',') || '0'}) ORDER BY id`).all();
+    return db.prepare(`SELECT public_id AS id, relation, name, note, COALESCE(generation, 0) AS generation FROM family_members WHERE user_id IN (${accountIdList(userId)}) ORDER BY id`).all();
+  }
+
+  function listFamilyLinks(userId) {
+    return db.prepare(`SELECT from_id AS "from", to_id AS "to", kind FROM family_links WHERE user_id IN (${accountIdList(userId)}) ORDER BY id`).all();
   }
 
   function listNetwork(userId) {
     const friends = listAccountUserIds(userId).flatMap((id) => listMatchesForUser(id));
     return {
       family: listFamilyMembers(userId),
+      familyLinks: listFamilyLinks(userId),
       friends: friends.map(({ id, name, city, mode }) => ({ id, name, city, site: mode })),
       friendsOfFriends: listFriendsOfFriends(userId).slice(0, 20).map(({ id, name, city, degree, via }) => ({ id, name, city, degree, via })),
     };
@@ -788,22 +817,51 @@ export function createDatabase(databaseFile, options = {}) {
   }
 
   function addFamilyMember(userId, input) {
-    const relation = FAMILY_RELATIONS.includes(input?.relation) ? input.relation : null;
+    const relation = FAMILY_LINKS.includes(input?.link) ? input.link : null;
     const name = `${input?.name ?? ''}`.replace(/\s+/g, ' ').trim().slice(0, 60);
     const note = `${input?.note ?? ''}`.replace(/\s+/g, ' ').trim().slice(0, 120);
     if (!relation || !name) {
       return { error: 'Lien familial et prénom requis.' };
     }
-    if (listFamilyMembers(userId).length >= FAMILY_LIMIT) {
+    const members = listFamilyMembers(userId);
+    if (members.length >= FAMILY_LIMIT) {
       return { error: `Maximum ${FAMILY_LIMIT} membres.` };
     }
+    const anchor = `${input?.anchor ?? 'me'}`;
+    const anchorMember = anchor === 'me' ? { id: 'me', generation: 0 } : members.find((member) => member.id === anchor);
+    if (!anchorMember) {
+      return { error: 'Membre de référence introuvable.' };
+    }
+    const generation = anchorMember.generation + (relation === 'child' ? 1 : relation === 'parent' ? -1 : 0);
+    if (Math.abs(generation) > FAMILY_MAX_GENERATION) {
+      return { error: 'Arbre trop étendu.' };
+    }
+
     const id = createPublicId('fam');
-    db.prepare('INSERT INTO family_members (public_id, user_id, relation, name, note, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, userId, relation, name, note, now());
-    return { member: { id, relation, name, note } };
+    const addLink = db.prepare('INSERT INTO family_links (user_id, from_id, to_id, kind) VALUES (?, ?, ?, ?)');
+    db.transaction(() => {
+      db.prepare('INSERT INTO family_members (public_id, user_id, relation, name, note, created_at, generation) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, userId, relation, name, note, now(), generation);
+      if (relation === 'child') {
+        addLink.run(userId, anchorMember.id, id, 'parent');
+      } else if (relation === 'parent') {
+        addLink.run(userId, id, anchorMember.id, 'parent');
+      } else if (relation === 'partner') {
+        addLink.run(userId, anchorMember.id, id, 'partner');
+      } else {
+        for (const link of listFamilyLinks(userId).filter((item) => item.kind === 'parent' && item.to === anchorMember.id)) {
+          addLink.run(userId, link.from, id, 'parent');
+        }
+      }
+    })();
+    return { member: { id, relation, name, note, generation } };
   }
 
   function removeFamilyMember(userId, publicId) {
-    return db.prepare(`DELETE FROM family_members WHERE public_id = ? AND user_id IN (${listAccountUserIds(userId).join(',') || '0'})`).run(publicId).changes > 0;
+    const removed = db.prepare(`DELETE FROM family_members WHERE public_id = ? AND user_id IN (${accountIdList(userId)})`).run(publicId).changes > 0;
+    if (removed) {
+      db.prepare(`DELETE FROM family_links WHERE (from_id = ? OR to_id = ?) AND user_id IN (${accountIdList(userId)})`).run(publicId, publicId);
+    }
+    return removed;
   }
 
   const lobbyPresence = new Map();
@@ -1674,6 +1732,7 @@ export function createDatabase(databaseFile, options = {}) {
     removePushSubscription,
     listPushSubscriptions,
     listFamilyMembers,
+    listFamilyLinks,
     listLobby,
     blockLobbyAuthor,
     postLobby,

@@ -1437,3 +1437,19 @@ textarea:focus-visible {
 
 .msn-actions{margin-left:.6rem;font-size:.75rem;opacity:.6;display:inline-flex;gap:.5rem}
 .msn-line:hover .msn-actions{opacity:1}
+
+.tree-graph-scroll{overflow:auto;padding:.5rem 0}
+.tree-graph{display:block;margin:0 auto;max-width:none}
+.tree-line{stroke:#8a74e8;stroke-width:2;fill:none}
+.tree-partner{stroke:#e0559a;stroke-width:3}
+.tree-svg-node{cursor:pointer;outline:none}
+.tree-svg-node rect{fill:#f1ecff;stroke:#c9b6ff;stroke-width:1.5}
+.tree-svg-node text{font-size:13px;fill:#2a1a5e;pointer-events:none}
+.tree-svg-self rect{fill:#6c4cff;stroke:#4a2fd0}
+.tree-svg-self text{fill:#fff}
+.tree-svg-selected rect,.tree-svg-node:focus rect{stroke:#e0559a;stroke-width:3}
+.tree-svg-remove{opacity:0;cursor:pointer}
+.tree-svg-node:hover .tree-svg-remove,.tree-svg-node:focus .tree-svg-remove{opacity:1}
+.tree-svg-remove circle{fill:#c0392b}
+.tree-svg-remove text{fill:#fff;font-size:14px}
+.tree-anchor{align-self:center}

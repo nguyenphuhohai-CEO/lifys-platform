@@ -830,5 +830,11 @@ export const ROWS = [
   ['Impossible de charger le salon.','Unable to load the lounge.','No se pudo cargar el salón.','Không thể tải phòng chat.'],
   ['Message non envoyé.','Message not sent.','Mensaje no enviado.','Tin nhắn chưa được gửi.'],
   ['Personne bloquée','User blocked','Persona bloqueada','Đã chặn người dùng'],
+  ['Cliquez sur une personne pour la choisir, puis ajoutez ses parents, enfants, conjoint ou fratrie. Indiquez uniquement des prénoms.','Click a person to select them, then add their parents, children, partner or siblings. First names only.','Haz clic en una persona para elegirla y añade sus padres, hijos, pareja o hermanos. Solo nombres de pila.','Nhấp vào một người để chọn, rồi thêm cha mẹ, con, vợ/chồng hoặc anh chị em. Chỉ nhập tên riêng.'],
+  ['Enfant de','Child of','Hijo/a de','Con của'],
+  ['Parent de','Parent of','Padre/madre de','Cha mẹ của'],
+  ['Conjoint(e) de','Partner of','Pareja de','Vợ/chồng của'],
+  ['Frère ou sœur de','Sibling of','Hermano/a de','Anh chị em của'],
+  ['Arbre généalogique','Family tree','Árbol genealógico','Cây gia phả'],
 ];
 

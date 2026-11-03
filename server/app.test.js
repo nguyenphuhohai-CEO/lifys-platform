@@ -987,9 +987,9 @@ test('arbre généalogique : ajout, réseau, page famille, suppression', async (
 
     const user = await registerUser(server.baseUrl, 'tree-mariage@example.com', { mode: 'mariage' });
     const headers = user.auth;
-    const bad = await request(server.baseUrl, '/api/family/tree', { method: 'POST', headers, body: JSON.stringify({ relation: 'ami', name: 'X' }) });
+    const bad = await request(server.baseUrl, '/api/family/tree', { method: 'POST', headers, body: JSON.stringify({ link: 'ami', name: 'X' }) });
     assert.equal(bad.status, 400);
-    const added = await request(server.baseUrl, '/api/family/tree', { method: 'POST', headers, body: JSON.stringify({ relation: 'parent', name: '<b>Marie</b>', note: 'Lyon' }) });
+    const added = await request(server.baseUrl, '/api/family/tree', { method: 'POST', headers, body: JSON.stringify({ link: 'parent', name: '<b>Marie</b>', note: 'Lyon' }) });
     assert.equal(added.status, 201);
 
     const link = await request(server.baseUrl, '/api/family/link', { headers: user.auth });
@@ -1057,6 +1057,38 @@ test('salon : signalement masque à 3, modération supprime, blocage par message
     const blocked = await request(server.baseUrl, '/api/lobby/' + msg.body.id + '/block', { method: 'POST', headers: readers[3].auth });
     assert.equal(blocked.status, 201);
     assert.equal((await request(server.baseUrl, '/api/lobby/9999/block', { method: 'POST', headers: readers[3].auth })).status, 404);
+  } finally {
+    await server.close();
+  }
+});
+
+test('arbre généalogique : liens parent/enfant/conjoint/fratrie', async () => {
+  const server = await startTestServer();
+  try {
+    const user = await registerUser(server.baseUrl, 'tree-links@example.com', { mode: 'amical' });
+    const add = async (body) => (await request(server.baseUrl, '/api/family/tree', { method: 'POST', headers: user.auth, body: JSON.stringify(body) })).body;
+    const mother = await add({ link: 'parent', anchor: 'me', name: 'Mère' });
+    const father = await add({ link: 'partner', anchor: mother.id, name: 'Père' });
+    const sister = await add({ link: 'sibling', anchor: 'me', name: 'Soeur' });
+    const grand = await add({ link: 'parent', anchor: mother.id, name: 'Grand-mère' });
+    assert.equal(mother.generation, -1);
+    assert.equal(father.generation, -1);
+    assert.equal(sister.generation, 0);
+    assert.equal(grand.generation, -2);
+
+    const tree = (await request(server.baseUrl, '/api/family/tree', { headers: user.auth })).body;
+    const has = (from, to, kind) => tree.links.some((l) => l.from === from && l.to === to && l.kind === kind);
+    assert.ok(has(mother.id, 'me', 'parent'));
+    assert.ok(has(mother.id, sister.id, 'parent'));
+    assert.ok(has(mother.id, father.id, 'partner'));
+    assert.ok(has(grand.id, mother.id, 'parent'));
+
+    const unknown = await request(server.baseUrl, '/api/family/tree', { method: 'POST', headers: user.auth, body: JSON.stringify({ link: 'child', anchor: 'fam-inconnu', name: 'X' }) });
+    assert.equal(unknown.status, 400);
+
+    await request(server.baseUrl, '/api/family/tree/' + mother.id, { method: 'DELETE', headers: user.auth });
+    const after = (await request(server.baseUrl, '/api/family/tree', { headers: user.auth })).body;
+    assert.ok(!after.links.some((l) => l.from === mother.id || l.to === mother.id));
   } finally {
     await server.close();
   }
